@@ -53,127 +53,154 @@ class PromptBuilder:
         self._context_cache['network'] = context
         return context
     
-    def build_system_prompt(self, include_full_context: bool = False) -> str:
+    def build_system_prompt(self, include_full_context: bool = False, format: str = 'json') -> str:
         """
         Build complete system prompt for Gemini/OpenAI
         
         Args:
             include_full_context: If True, includes full JSON network documentation.
                                  If False, only uses quick_reference from base prompt (saves tokens)
+            format: Output format - 'json' (structured) or 'text' (markdown-style)
         
         Returns:
-            Complete system prompt text ready for LLM API call
+            Complete system prompt ready for LLM API call
         """
         sp = self.base_prompt['system_prompt']
         
-        # Start with identity and role
-        prompt_parts = [
-            sp['identity'],
-            "",
-            "## Primary Mission",
-            sp['primary_role'],
-            ""
-        ]
+        if format == 'json':
+            # Build structured JSON prompt
+            prompt_structure = {
+                "identity": sp['identity'],
+                "primary_role": sp['primary_role'],
+                "lab_environment": {
+                    "overview": sp['lab_environment']['overview'],
+                    "platform": sp['lab_environment']['platform']
+                },
+                "knowledge_domains": sp['knowledge_domains'],
+                "behavioral_guidelines": sp['behavioral_guidelines'],
+                "operational_rules": sp['operational_rules'],
+                "interaction_patterns": sp['interaction_patterns'],
+                "constraints": sp['constraints']
+            }
+            
+            # Add network context
+            if include_full_context:
+                context = self._load_network_context()
+                prompt_structure['lab_environment']['network_documentation'] = context
+            else:
+                prompt_structure['lab_environment']['quick_reference'] = sp['lab_environment']['quick_reference']
+            
+            return json.dumps(prompt_structure, indent=2, ensure_ascii=False)
         
-        # Lab Environment
-        prompt_parts.append("## Lab Environment")
-        prompt_parts.append(sp['lab_environment']['overview'])
-        prompt_parts.append("")
-        
-        if include_full_context:
-            # Include full network documentation
-            context = self._load_network_context()
-            
-            prompt_parts.append("### Complete Network Documentation")
-            prompt_parts.append("")
-            
-            if 'topology' in context:
-                prompt_parts.append("#### Network Topology")
-                prompt_parts.append("```json")
-                prompt_parts.append(json.dumps(context['topology'], indent=2))
-                prompt_parts.append("```")
-                prompt_parts.append("")
-            
-            if 'network_map' in context:
-                prompt_parts.append("#### VMware Network Configuration")
-                prompt_parts.append("```json")
-                prompt_parts.append(json.dumps(context['network_map'], indent=2))
-                prompt_parts.append("```")
-                prompt_parts.append("")
-            
-            if 'devices' in context:
-                prompt_parts.append("#### Device Inventory")
-                prompt_parts.append("```json")
-                prompt_parts.append(json.dumps(context['devices'], indent=2))
-                prompt_parts.append("```")
-                prompt_parts.append("")
         else:
-            # Use compact quick_reference only
-            qr = sp['lab_environment']['quick_reference']
+            # Build text/markdown format (original behavior)
+            prompt_parts = [
+                sp['identity'],
+                "",
+                "## Primary Mission",
+                sp['primary_role'],
+                ""
+            ]
             
-            prompt_parts.append("### Network Quick Reference")
-            prompt_parts.append("")
-            
-            prompt_parts.append("**Network Segments:**")
-            for vmnet, desc in qr['network_segments'].items():
-                prompt_parts.append(f"- {vmnet}: {desc}")
-            prompt_parts.append("")
-            
-            prompt_parts.append("**Key IP Addresses:**")
-            for device, ip in qr['key_ips'].items():
-                prompt_parts.append(f"- {device}: {ip}")
+            # Lab Environment
+            prompt_parts.append("## Lab Environment")
+            prompt_parts.append(sp['lab_environment']['overview'])
             prompt_parts.append("")
             
-            prompt_parts.append("**Traffic Flows:**")
-            for flow_type, flow in qr['traffic_flows'].items():
-                prompt_parts.append(f"- {flow_type}: {flow}")
+            if include_full_context:
+                # Include full network documentation
+                context = self._load_network_context()
+                
+                prompt_parts.append("### Complete Network Documentation")
+                prompt_parts.append("")
+                
+                if 'topology' in context:
+                    prompt_parts.append("#### Network Topology")
+                    prompt_parts.append("```json")
+                    prompt_parts.append(json.dumps(context['topology'], indent=2))
+                    prompt_parts.append("```")
+                    prompt_parts.append("")
+                
+                if 'network_map' in context:
+                    prompt_parts.append("#### VMware Network Configuration")
+                    prompt_parts.append("```json")
+                    prompt_parts.append(json.dumps(context['network_map'], indent=2))
+                    prompt_parts.append("```")
+                    prompt_parts.append("")
+                
+                if 'devices' in context:
+                    prompt_parts.append("#### Device Inventory")
+                    prompt_parts.append("```json")
+                    prompt_parts.append(json.dumps(context['devices'], indent=2))
+                    prompt_parts.append("```")
+                    prompt_parts.append("")
+            else:
+                # Use compact quick_reference only
+                qr = sp['lab_environment']['quick_reference']
+                
+                prompt_parts.append("### Network Quick Reference")
+                prompt_parts.append("")
+                
+                prompt_parts.append("**Network Segments:**")
+                for vmnet, desc in qr['network_segments'].items():
+                    prompt_parts.append(f"- {vmnet}: {desc}")
+                prompt_parts.append("")
+                
+                prompt_parts.append("**Key IP Addresses:**")
+                for device, ip in qr['key_ips'].items():
+                    prompt_parts.append(f"- {device}: {ip}")
+                prompt_parts.append("")
+                
+                prompt_parts.append("**Traffic Flows:**")
+                for flow_type, flow in qr['traffic_flows'].items():
+                    prompt_parts.append(f"- {flow_type}: {flow}")
+                prompt_parts.append("")
+                
+                prompt_parts.append("**Core Security Stack:**")
+                for category, tools in qr['core_stack'].items():
+                    prompt_parts.append(f"- {category}: {tools}")
+                prompt_parts.append("")
+            
+            # Knowledge Domains
+            prompt_parts.append("## Knowledge Domains")
+            for domain, skills in sp['knowledge_domains'].items():
+                prompt_parts.append(f"### {domain.replace('_', ' ').title()}")
+                for skill in skills:
+                    prompt_parts.append(f"- {skill}")
+                prompt_parts.append("")
+            
+            # Behavioral Guidelines
+            prompt_parts.append("## Behavioral Guidelines")
+            prompt_parts.append(f"**Tone:** {sp['behavioral_guidelines']['tone']}")
             prompt_parts.append("")
             
-            prompt_parts.append("**Core Security Stack:**")
-            for category, tools in qr['core_stack'].items():
-                prompt_parts.append(f"- {category}: {tools}")
+            for guideline_type, items in sp['behavioral_guidelines'].items():
+                if guideline_type == 'tone':
+                    continue
+                prompt_parts.append(f"### {guideline_type.replace('_', ' ').title()}")
+                if isinstance(items, list):
+                    for item in items:
+                        prompt_parts.append(f"- {item}")
+                prompt_parts.append("")
+            
+            # Operational Rules
+            prompt_parts.append("## Operational Rules")
+            for rule in sp['operational_rules']:
+                prompt_parts.append(f"- {rule}")
             prompt_parts.append("")
-        
-        # Knowledge Domains
-        prompt_parts.append("## Knowledge Domains")
-        for domain, skills in sp['knowledge_domains'].items():
-            prompt_parts.append(f"### {domain.replace('_', ' ').title()}")
-            for skill in skills:
-                prompt_parts.append(f"- {skill}")
+            
+            # Interaction Patterns
+            prompt_parts.append("## Interaction Patterns")
+            for pattern_type, description in sp['interaction_patterns'].items():
+                prompt_parts.append(f"**{pattern_type.replace('_', ' ').title()}:** {description}")
             prompt_parts.append("")
-        
-        # Behavioral Guidelines
-        prompt_parts.append("## Behavioral Guidelines")
-        prompt_parts.append(f"**Tone:** {sp['behavioral_guidelines']['tone']}")
-        prompt_parts.append("")
-        
-        for guideline_type, items in sp['behavioral_guidelines'].items():
-            if guideline_type == 'tone':
-                continue
-            prompt_parts.append(f"### {guideline_type.replace('_', ' ').title()}")
-            if isinstance(items, list):
-                for item in items:
-                    prompt_parts.append(f"- {item}")
-            prompt_parts.append("")
-        
-        # Operational Rules
-        prompt_parts.append("## Operational Rules")
-        for rule in sp['operational_rules']:
-            prompt_parts.append(f"- {rule}")
-        prompt_parts.append("")
-        
-        # Interaction Patterns
-        prompt_parts.append("## Interaction Patterns")
-        for pattern_type, description in sp['interaction_patterns'].items():
-            prompt_parts.append(f"**{pattern_type.replace('_', ' ').title()}:** {description}")
-        prompt_parts.append("")
-        
-        # Constraints
-        prompt_parts.append("## Constraints")
-        for constraint in sp['constraints']:
-            prompt_parts.append(f"- {constraint}")
-        
-        return "\n".join(prompt_parts)
+            
+            # Constraints
+            prompt_parts.append("## Constraints")
+            for constraint in sp['constraints']:
+                prompt_parts.append(f"- {constraint}")
+            
+            return "\n".join(prompt_parts)
     
     def build_task_prompt(self, task_type: str, **kwargs) -> str:
         """
@@ -217,38 +244,49 @@ class PromptBuilder:
 
 
 # Convenience function for quick usage
-def get_system_prompt(include_full_context: bool = False) -> str:
+def get_system_prompt(include_full_context: bool = False, format: str = 'json') -> str:
     """
     Quick function to get system prompt
     
     Args:
         include_full_context: Include full network JSON docs (True) or quick_reference only (False)
+        format: 'json' for structured JSON or 'text' for markdown-style
     
     Returns:
         System prompt string ready for Gemini/OpenAI
     """
     builder = PromptBuilder()
-    return builder.build_system_prompt(include_full_context=include_full_context)
+    return builder.build_system_prompt(include_full_context=include_full_context, format=format)
 
 
 if __name__ == "__main__":
     # Test usage
     builder = PromptBuilder()
     
-    # Compact version (for most cases)
+    # JSON format (recommended for LLMs)
     print("=" * 80)
-    print("COMPACT SYSTEM PROMPT (quick_reference only)")
+    print("JSON FORMAT (structured, better for LLM parsing)")
     print("=" * 80)
-    compact = builder.build_system_prompt(include_full_context=False)
-    print(f"Length: {len(compact)} chars")
-    print(compact[:500] + "...")
+    json_prompt = builder.build_system_prompt(include_full_context=False, format='json')
+    print(f"Length: {len(json_prompt)} chars")
+    print(json_prompt[:800] + "...")
     
     print("\n\n")
     
-    # Full version (when detailed context needed)
+    # Text format (markdown-style)
     print("=" * 80)
-    print("FULL SYSTEM PROMPT (with complete network docs)")
+    print("TEXT FORMAT (markdown-style)")
     print("=" * 80)
-    full = builder.build_system_prompt(include_full_context=True)
-    print(f"Length: {len(full)} chars")
-    print(full[:500] + "...")
+    text_prompt = builder.build_system_prompt(include_full_context=False, format='text')
+    print(f"Length: {len(text_prompt)} chars")
+    print(text_prompt[:800] + "...")
+    
+    print("\n\n")
+    
+    # Full context JSON
+    print("=" * 80)
+    print("JSON FORMAT WITH FULL CONTEXT")
+    print("=" * 80)
+    full_json = builder.build_system_prompt(include_full_context=True, format='json')
+    print(f"Length: {len(full_json)} chars")
+    print(full_json[:800] + "...")

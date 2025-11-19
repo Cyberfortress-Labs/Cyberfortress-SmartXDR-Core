@@ -16,7 +16,7 @@
       },
       "platform": {
         "hypervisor": "VMware Workstation Pro 25H2",
-        "host_os": "Windows 11 Home SL 24H2",
+        "host_os": "Windows 11 Home SL 25H2",
         "network_type": "VMware Virtual Networks (VMnet)"
       },
       "quick_reference": {
