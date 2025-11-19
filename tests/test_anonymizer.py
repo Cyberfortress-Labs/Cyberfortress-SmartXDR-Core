@@ -231,6 +231,82 @@ def test_mapping_stats():
     print(f"\n[INFO] Mapping database exported to: {export_path}")
 
 
+def test_real_suricata_log():
+    """Test with real Suricata log from production system"""
+    print("\n" + "=" * 80)
+    print("TEST 6: REAL SURICATA LOG ANONYMIZATION")
+    print("=" * 80)
+    
+    # Load real log file
+    log_path = Path(__file__).parent.parent / "logs" / "test-logs" / "suricata-nmap.json"
+    
+    if not log_path.exists():
+        print(f"\n[ERROR] Log file not found: {log_path}")
+        return
+    
+    print(f"\n[INFO] Loading log from: {log_path}")
+    with open(log_path, 'r', encoding='utf-8') as f:
+        raw_log = json.load(f)
+    
+    # Show original sensitive data
+    print("\n[ORIGINAL SENSITIVE DATA]")
+    if '_source' in raw_log:
+        source = raw_log['_source']
+        if 'source' in source:
+            print(f"  Source IP:      {source['source'].get('ip', 'N/A')}")
+        if 'destination' in source:
+            print(f"  Dest IP:        {source['destination'].get('ip', 'N/A')}")
+            print(f"  Dest Domain:    {source['destination'].get('domain', 'N/A')}")
+        if 'observer' in source:
+            print(f"  Observer IPs:   {source['observer'].get('ip', [])}")
+            print(f"  Observer MACs:  {source['observer'].get('mac', [])}")
+    
+    # Anonymize the entire log
+    anonymizer = get_anonymizer()
+    
+    # Custom field list for Elasticsearch Suricata logs
+    fields_to_anonymize = [
+        # Source/Dest IPs
+        '_source.source.ip', '_source.source.address',
+        '_source.destination.ip', '_source.destination.address', 
+        '_source.destination.domain',
+        # Observer data (includes arrays)
+        '_source.observer.ip', '_source.observer.hostname',
+        '_source.observer.mac',
+        # Related IPs
+        '_source.related.ip', '_source.related.hosts',
+        # URL domains
+        '_source.url.domain'
+    ]
+    
+    anonymized_log = anonymizer.anonymize_log_event(raw_log, fields_to_anonymize)
+    
+    # Show anonymized data
+    print("\n[ANONYMIZED SENSITIVE DATA]")
+    if '_source' in anonymized_log:
+        source = anonymized_log['_source']
+        if 'source' in source:
+            print(f"  Source IP:      {source['source'].get('ip', 'N/A')}")
+        if 'destination' in source:
+            print(f"  Dest IP:        {source['destination'].get('ip', 'N/A')}")
+            print(f"  Dest Domain:    {source['destination'].get('domain', 'N/A')}")
+        if 'observer' in source:
+            print(f"  Observer IPs:   {source['observer'].get('ip', [])}")
+            print(f"  Observer MACs:  {source['observer'].get('mac', [])}")
+    
+    # Save anonymized log
+    output_dir = Path(__file__).parent.parent / "logs" / "anonymizer-logs"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    output_path = output_dir / "anonymizer-suricata-nmap.json"
+    with open(output_path, 'w', encoding='utf-8') as f:
+        json.dump(anonymized_log, f, indent=2, ensure_ascii=False)
+    
+    print(f"\n[SUCCESS] Anonymized log saved to: {output_path}")
+    print(f"[INFO] Original size: {log_path.stat().st_size:,} bytes")
+    print(f"[INFO] Anonymized size: {output_path.stat().st_size:,} bytes")
+
+
 if __name__ == "__main__":
     print("\n" + "=" * 80)
     print("SMARTXDR DATA ANONYMIZATION LAYER TEST")
@@ -243,6 +319,7 @@ if __name__ == "__main__":
     test_suricata_alert()
     test_zeek_log()
     test_wazuh_alert()
+    test_real_suricata_log()  # NEW: Test with real log
     test_mapping_stats()
     
     print("\n" + "=" * 80)
@@ -254,6 +331,7 @@ if __name__ == "__main__":
     print("✅ Suricata alert sanitization")
     print("✅ Zeek log sanitization")
     print("✅ Wazuh alert sanitization")
+    print("✅ Real Suricata log from production (Elasticsearch)")
     print("✅ Private mapping database (reversible)")
     print("\n[SECURITY]")
     print("🔒 All sensitive data replaced with tokens before sending to AI")

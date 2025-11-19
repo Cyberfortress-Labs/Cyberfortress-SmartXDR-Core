@@ -255,6 +255,35 @@ class DataAnonymizer:
         
         return url
     
+    # ==================== MAC ADDRESS ANONYMIZATION ====================
+    
+    def _anonymize_mac(self, mac: str) -> str:
+        """
+        Anonymize MAC address
+        Example: 00-0C-29-F7-AA-76 -> MAC-a3f7b2c9
+        
+        Args:
+            mac: MAC address to anonymize
+        
+        Returns:
+            Anonymized MAC token
+        """
+        if mac in self._mapping_db['mac']:
+            self._mapping_db['mac'][mac]['occurrences'] += 1
+            return self._mapping_db['mac'][mac]['token']
+        
+        # Generate token
+        token = f"MAC-{secrets.token_hex(4)}"
+        
+        self._mapping_db['mac'][mac] = {
+            'token': token,
+            'first_seen': datetime.utcnow().isoformat(),
+            'occurrences': 1
+        }
+        self._reverse_mapping[token] = mac
+        
+        return token
+    
     # ==================== EMAIL ANONYMIZATION ====================
     
     def anonymize_email(self, email: str) -> str:
@@ -318,20 +347,46 @@ class DataAnonymizer:
                     
                     # Check if field should be anonymized
                     if any(field in full_key for field in fields_to_anonymize):
-                        if 'ip' in full_key.lower() and isinstance(value, str):
-                            result[key] = self.anonymize_ip(value, method='token')
-                        elif 'user' in full_key.lower() and isinstance(value, str):
-                            result[key] = self.anonymize_username(value, method='token')
-                        elif 'host' in full_key.lower() and isinstance(value, str):
-                            result[key] = self.anonymize_hostname(value, method='token')
-                        elif 'email' in full_key.lower() and isinstance(value, str):
-                            result[key] = self.anonymize_email(value)
-                        elif 'url' in full_key.lower() and isinstance(value, str):
-                            result[key] = self.anonymize_url(value)
-                        elif 'domain' in full_key.lower() and isinstance(value, str):
-                            result[key] = self.anonymize_domain(value)
+                        # Handle string values
+                        if isinstance(value, str):
+                            if 'ip' in full_key.lower():
+                                result[key] = self.anonymize_ip(value, method='token')
+                            elif 'user' in full_key.lower():
+                                result[key] = self.anonymize_username(value, method='token')
+                            elif 'host' in full_key.lower():
+                                result[key] = self.anonymize_hostname(value, method='token')
+                            elif 'email' in full_key.lower():
+                                result[key] = self.anonymize_email(value)
+                            elif 'url' in full_key.lower():
+                                result[key] = self.anonymize_url(value)
+                            elif 'domain' in full_key.lower():
+                                result[key] = self.anonymize_domain(value)
+                            elif 'mac' in full_key.lower():
+                                result[key] = self._anonymize_mac(value)
+                            else:
+                                result[key] = value
+                        # Handle list of sensitive values (e.g., observer.ip: [])
+                        elif isinstance(value, list):
+                            anonymized_list = []
+                            for item in value:
+                                if isinstance(item, str):
+                                    if 'ip' in full_key.lower():
+                                        anonymized_list.append(self.anonymize_ip(item, method='token'))
+                                    elif 'mac' in full_key.lower():
+                                        anonymized_list.append(self._anonymize_mac(item))
+                                    elif 'user' in full_key.lower():
+                                        anonymized_list.append(self.anonymize_username(item, method='token'))
+                                    elif 'host' in full_key.lower():
+                                        anonymized_list.append(self.anonymize_hostname(item, method='token'))
+                                    elif 'domain' in full_key.lower():
+                                        anonymized_list.append(self.anonymize_domain(item))
+                                    else:
+                                        anonymized_list.append(item)
+                                else:
+                                    anonymized_list.append(anonymize_recursive(item, full_key))
+                            result[key] = anonymized_list
                         else:
-                            result[key] = value
+                            result[key] = anonymize_recursive(value, full_key)
                     else:
                         result[key] = anonymize_recursive(value, full_key)
                 return result
