@@ -1,0 +1,102 @@
+{
+  "salt": "0c8aa290624d800bd70230f9333454bc64d90217710d3731c2697fb138c4a4ac",
+  "mapping_db": {
+    "ip": {
+      "192.168.71.100": {
+        "token": "TKN-IP-f8eb8340",
+        "is_private": true,
+        "first_seen": "2025-11-19T08:46:54.153708",
+        "occurrences": 1
+      },
+      "192.168.85.112": {
+        "token": "TKN-IP-dca72164",
+        "is_private": true,
+        "first_seen": "2025-11-19T08:46:54.153708",
+        "occurrences": 1
+      },
+      "192.168.85.115": {
+        "token": "TKN-IP-bcc21bf7",
+        "is_private": true,
+        "first_seen": "2025-11-19T08:46:54.156408",
+        "occurrences": 1
+      },
+      "192.168.95.100": {
+        "token": "TKN-IP-c4ba3d1d",
+        "is_private": true,
+        "first_seen": "2025-11-19T08:46:54.156408",
+        "occurrences": 1
+      }
+    },
+    "user": {
+      "admin": {
+        "token": "USER-f4e40aa9",
+        "first_seen": "2025-11-19T08:46:54.150587"
+      },
+      "root": {
+        "token": "USER-d323c2e7",
+        "first_seen": "2025-11-19T08:46:54.152155"
+      },
+      "wazuh": {
+        "token": "USER-ecc7f6e9",
+        "first_seen": "2025-11-19T08:46:54.152155"
+      },
+      "analyst": {
+        "token": "USER-bb56e1d9",
+        "first_seen": "2025-11-19T08:46:54.152155"
+      },
+      "attacker": {
+        "token": "USER-31e6adf7",
+        "first_seen": "2025-11-19T08:46:54.156408"
+      },
+      "Administrator": {
+        "token": "USER-4fb68ba6",
+        "first_seen": "2025-11-19T08:46:54.156408"
+      }
+    },
+    "hostname": {
+      "DVWA-SERVER": {
+        "token": "HOST-23ce2604",
+        "first_seen": "2025-11-19T08:46:54.152155"
+      },
+      "ELK-STACK": {
+        "token": "HOST-c8e52c54",
+        "first_seen": "2025-11-19T08:46:54.152155"
+      },
+      "WAZUH-01": {
+        "token": "HOST-8c7d1165",
+        "first_seen": "2025-11-19T08:46:54.152155"
+      },
+      "pfSense": {
+        "token": "HOST-8b1a81c1",
+        "first_seen": "2025-11-19T08:46:54.152155"
+      },
+      "dvwa.local": {
+        "token": "HOST-4bbdb6c3",
+        "first_seen": "2025-11-19T08:46:54.153708"
+      }
+    },
+    "domain": {},
+    "url": {},
+    "email": {},
+    "hash": {},
+    "mac": {}
+  },
+  "reverse_mapping": {
+    "USER-f4e40aa9": "admin",
+    "USER-d323c2e7": "root",
+    "USER-ecc7f6e9": "wazuh",
+    "USER-bb56e1d9": "analyst",
+    "HOST-23ce2604": "DVWA-SERVER",
+    "HOST-c8e52c54": "ELK-STACK",
+    "HOST-8c7d1165": "WAZUH-01",
+    "HOST-8b1a81c1": "pfSense",
+    "TKN-IP-f8eb8340": "192.168.71.100",
+    "TKN-IP-dca72164": "192.168.85.112",
+    "HOST-4bbdb6c3": "dvwa.local",
+    "TKN-IP-bcc21bf7": "192.168.85.115",
+    "TKN-IP-c4ba3d1d": "192.168.95.100",
+    "USER-31e6adf7": "attacker",
+    "USER-4fb68ba6": "Administrator"
+  },
+  "exported_at": "2025-11-19T08:46:54.159463"
+}
