@@ -1,0 +1,636 @@
+{
+    "metadata": {
+        "name": "SOC Ecosystem Device Inventory",
+        "version": "1.0",
+        "description": "Comprehensive device inventory and role descriptions for Intelligent SOC Ecosystem",
+        "last_updated": "2025-11-19"
+    },
+    "devices": [
+        {
+            "id": "ext-attacker-01",
+            "name": "External Attacker",
+            "category": "Threat Actor",
+            "zone": "Internet",
+            "ip": "192.168.71.100",
+            "subnet": "192.168.71.0/24",
+            "vmnet": "VMnet 8",
+            "os": "Kali Linux 2022.4",
+            "role": "External Threat Simulation",
+            "description": "Simulates external attacker attempting to breach perimeter defenses. Used for penetration testing and attack simulation scenarios.",
+            "capabilities": [
+                "Network reconnaissance",
+                "Vulnerability scanning",
+                "Exploit delivery",
+                "Web application attacks",
+                "Brute force attacks"
+            ],
+            "attack_vectors": [
+                "Internet-facing services",
+                "Web applications",
+                "SSH/RDP brute force",
+                "Phishing campaigns"
+            ]
+        },
+        {
+            "id": "nat-gateway-01",
+            "name": "NAT Gateway / Linux Router",
+            "category": "Network Infrastructure",
+            "zone": "Internet/WAN",
+            "ip": "192.168.71.5",
+            "primary_ip": "192.168.71.5",
+            "subnet": "192.168.71.0/24",
+            "vmnet": ["VMnet 8", "VMnet 2"],
+            "os": "Linux (Ubuntu/CentOS)",
+            "role": "Internet Gateway/Linux Router",
+            "description": "Linux-based NAT gateway and router providing Internet connectivity and routing between Internet (VMnet 8) and WAN network (VMnet 2). Acts as upstream router for pfSense.",
+            "interfaces": [
+                {
+                    "name": "eth0",
+                    "vmnet": "VMnet 8",
+                    "ip": "192.168.71.5",
+                    "subnet": "192.168.71.0/24",
+                    "type": "nat",
+                    "description": "NAT interface providing Internet connectivity via VMware NAT"
+                },
+                {
+                    "name": "eth1",
+                    "vmnet": "VMnet 2",
+                    "ip": "10.81.85.3",
+                    "subnet": "10.81.85.0/24",
+                    "type": "routing",
+                    "description": "Routing interface connecting to pfSense WAN (10.81.85.2)"
+                }
+            ],
+            "capabilities": [
+                "Network Address Translation (NAT)",
+                "IP forwarding",
+                "Routing between VMnet 8 and VMnet 2",
+                "Internet connectivity",
+                "Gateway for pfSense WAN"
+            ],
+            "services": [
+                "iptables NAT",
+                "IP forwarding",
+                "Routing"
+            ]
+        },
+        {
+            "id": "guest-devices",
+            "name": "Guest Devices",
+            "category": "Endpoints",
+            "zone": "Guest Subnet",
+            "ip": "multiple",
+            "ip_range": "192.168.95.10-192.168.95.200",
+            "subnet": "192.168.95.0/24",
+            "vmnet": "VMnet 10",
+            "os": "Windows 10/11, Linux",
+            "role": "User Endpoints",
+            "description": "Represents multiple user workstations and endpoints in guest network. Used for testing endpoint detection and lateral movement scenarios.",
+            "capabilities": [
+                "Normal user activities",
+                "Application usage",
+                "Network communication",
+                "File sharing"
+            ],
+            "monitoring": [
+                "Wazuh Agent",
+                "Network traffic monitoring via Suricata/Zeek"
+            ]
+        },
+        {
+            "id": "int-attacker-01",
+            "name": "Internal Attacker",
+            "category": "Threat Actor",
+            "zone": "Guest Subnet",
+            "ip": "192.168.95.100",
+            "subnet": "192.168.95.0/24",
+            "vmnet": "VMnet 10",
+            "os": "Kali Linux / Windows",
+            "role": "Insider Threat",
+            "description": "Simulates insider threat or compromised internal endpoint. Used for lateral movement, privilege escalation, and east-west traffic attack scenarios.",
+            "capabilities": [
+                "Lateral movement",
+                "Privilege escalation",
+                "Credential harvesting",
+                "Internal reconnaissance",
+                "Data exfiltration"
+            ],
+            "attack_vectors": [
+                "SMB/RDP lateral movement",
+                "Active Directory attacks",
+                "Internal service exploitation",
+                "Living-off-the-land techniques"
+            ]
+        },
+        {
+            "id": "pfsense-01",
+            "name": "pfSense Firewall/Router",
+            "category": "Security Infrastructure",
+            "zone": "WAN/LAN/Guest/SOC",
+            "ip": "10.81.85.2",
+            "primary_ip": "10.81.85.2",
+            "subnet": "10.81.85.0/24",
+            "vmnet": ["VMnet 2", "VMnet 3", "VMnet 10", "VMnet 5"],
+            "os": "pfSense",
+            "role": "Multi-Interface Firewall & Router",
+            "description": "pfSense firewall and router with 4 interfaces serving as the central gateway for all network segments. Routes and filters traffic between WAN, LAN, Guest, and SOC networks. Feeds LAN traffic into Suricata/Zeek inline inspection pipeline.",
+            "interfaces": [
+                {
+                    "name": "WAN",
+                    "vmnet": "VMnet 2",
+                    "ip": "10.81.85.2",
+                    "subnet": "10.81.85.0/24",
+                    "gateway": "10.81.85.3",
+                    "type": "wan",
+                    "description": "WAN interface connecting to Linux Router (10.81.85.3) for Internet access"
+                },
+                {
+                    "name": "LAN",
+                    "vmnet": "VMnet 3",
+                    "ip": "192.168.85.2",
+                    "subnet": "192.168.85.0/24",
+                    "type": "lan",
+                    "description": "LAN interface routing traffic to Suricata/Zeek inline inspection pipeline"
+                },
+                {
+                    "name": "GUEST",
+                    "vmnet": "VMnet 10",
+                    "ip": "192.168.95.2",
+                    "subnet": "192.168.95.0/24",
+                    "type": "guest",
+                    "description": "Guest network interface for isolated guest devices and attacker simulation"
+                },
+                {
+                    "name": "SOC",
+                    "vmnet": "VMnet 5",
+                    "ip": "192.168.100.2",
+                    "subnet": "192.168.100.0/24",
+                    "type": "soc",
+                    "description": "SOC management network interface for accessing SOC infrastructure"
+                }
+            ],
+            "capabilities": [
+                "Multi-interface routing",
+                "Stateful firewall",
+                "Network segmentation",
+                "Inter-VLAN routing",
+                "NAT/PAT",
+                "Traffic shaping",
+                "VPN termination",
+                "Firewall policy enforcement",
+                "DHCP server",
+                "DNS forwarding"
+            ],
+            "services": [
+                "pfSense Firewall",
+                "Routing daemon",
+                "Firewall rules",
+                "NAT engine"
+            ],
+            "routing_function": "Routes traffic: Internet → Linux Router (10.81.85.3) → pfSense WAN (10.81.85.2) → pfSense LAN (192.168.85.2) → Suricata/Zeek → Internal servers. Also provides Guest and SOC network connectivity."
+        },
+        {
+            "id": "suricata-01",
+            "name": "Suricata Inline IDPS",
+            "category": "Security Monitoring",
+            "zone": "XDR/LAN Subnet",
+            "ip": "192.168.100.171",
+            "management_ip": "192.168.100.171",
+            "subnet": "192.168.85.0/24",
+            "vmnet": ["VMnet 3", "VMnet 4", "VMnet 5"],
+            "os": "Ubuntu Linux",
+            "role": "Inline IDS/IPS",
+            "mode": "Bridge",
+            "description": "Inline intrusion detection and prevention system. Inspects all traffic passing through using signature-based and anomaly-based detection. Can block malicious traffic in real-time.",
+            "interfaces": [
+                {
+                    "name": "ens37",
+                    "vmnet": "VMnet 3",
+                    "subnet": "192.168.85.0/24",
+                    "type": "ingress",
+                    "description": "Receives inbound traffic from pfSense"
+                },
+                {
+                    "name": "ens38",
+                    "vmnet": "VMnet 4",
+                    "subnet": "192.168.41.0/24",
+                    "type": "egress",
+                    "description": "Forwards traffic after inspection"
+                },
+                {
+                    "name": "ens33",
+                    "vmnet": "VMnet 5",
+                    "ip": "192.168.100.171",
+                    "subnet": "192.168.100.0/24",
+                    "type": "management",
+                    "description": "Management interface for SSH, logging, rule updates"
+                }
+            ],
+            "capabilities": [
+                "Signature-based detection",
+                "Protocol analysis",
+                "Inline blocking (IPS mode)",
+                "File extraction",
+                "TLS inspection"
+            ],
+            "detection_methods": [
+                "ET Open Ruleset",
+                "Custom signatures",
+                "Protocol anomaly detection",
+                "File hash matching"
+            ],
+            "log_destinations": [
+                "Elasticsearch (via Filebeat)",
+                "Local EVE JSON logs"
+            ]
+        },
+        {
+            "id": "zeek-01",
+            "name": "Zeek NSM",
+            "category": "Security Monitoring",
+            "zone": "XDR/LAN Subnet",
+            "ip": "192.168.100.172",
+            "management_ip": "192.168.100.172",
+            "subnet": "192.168.85.0/24",
+            "vmnet": ["VMnet 3", "VMnet 4", "VMnet 5"],
+            "os": "Ubuntu Linux",
+            "role": "Network Security Monitoring",
+            "mode": "Passive Monitoring",
+            "description": "Passive network security monitoring platform. Generates rich metadata and logs from network traffic without interfering. Provides deep protocol analysis and behavioral analytics.",
+            "interfaces": [
+                {
+                    "name": "ens37",
+                    "vmnet": "VMnet 3",
+                    "subnet": "192.168.85.0/24",
+                    "type": "ingress",
+                    "description": "Monitors inbound traffic"
+                },
+                {
+                    "name": "ens38",
+                    "vmnet": "VMnet 4",
+                    "subnet": "192.168.41.0/24",
+                    "type": "egress",
+                    "description": "Monitors outbound traffic"
+                },
+                {
+                    "name": "ens33",
+                    "vmnet": "VMnet 5",
+                    "ip": "192.168.100.172",
+                    "subnet": "192.168.100.0/24",
+                    "type": "management",
+                    "description": "Management interface for SSH, log shipping"
+                }
+            ],
+            "capabilities": [
+                "Protocol decoding (HTTP, DNS, SSL, SMB, etc.)",
+                "File extraction and hashing",
+                "Connection logging",
+                "Behavioral analysis",
+                "Custom scripting (Zeek language)"
+            ],
+            "log_types": [
+                "conn.log (connections)",
+                "http.log",
+                "dns.log",
+                "ssl.log",
+                "files.log",
+                "x509.log",
+                "smtp.log",
+                "Custom logs"
+            ],
+            "log_destinations": [
+                "Elasticsearch (via Filebeat)",
+                "Local JSON logs"
+            ]
+        },
+        {
+            "id": "waf-01",
+            "name": "WAF ModSecurity",
+            "category": "Security Infrastructure",
+            "zone": "XDR/LAN Subnet",
+            "ip": "192.168.85.111",
+            "subnet": "192.168.85.0/24",
+            "vmnet": "VMnet 4",
+            "os": "Ubuntu Linux",
+            "role": "Web Application Firewall",
+            "description": "ModSecurity WAF protecting web applications. Inspects HTTP/HTTPS traffic for web-based attacks using OWASP Core Rule Set (CRS).",
+            "capabilities": [
+                "SQL injection prevention",
+                "XSS protection",
+                "CSRF protection",
+                "Request filtering",
+                "Rate limiting"
+            ],
+            "rulesets": [
+                "OWASP CRS 3.x/4.x",
+                "Custom ModSecurity rules"
+            ],
+            "services": [
+                "Nginx + ModSecurity",
+                "Apache + ModSecurity"
+            ],
+            "log_destinations": [
+                "Elasticsearch",
+                "ModSecurity audit logs"
+            ]
+        },
+        {
+            "id": "dvwa-01",
+            "name": "Vulnerable Web Server (DVWA)",
+            "category": "Target/Honeypot",
+            "zone": "XDR/LAN Subnet",
+            "ip": "192.168.85.112",
+            "subnet": "192.168.85.0/24",
+            "vmnet": "VMnet 4",
+            "os": "Ubuntu Linux",
+            "role": "Web Application Target",
+            "description": "Damn Vulnerable Web Application - intentionally vulnerable web app for testing WAF, IDS/IPS, and SIEM detection capabilities.",
+            "vulnerabilities": [
+                "SQL Injection",
+                "XSS (Reflected, Stored)",
+                "Command Injection",
+                "File Upload",
+                "CSRF",
+                "Weak Session Management"
+            ],
+            "services": [
+                "Apache/Nginx",
+                "MySQL",
+                "PHP"
+            ],
+            "purpose": "Attack target for testing detection and response capabilities"
+        },
+        {
+            "id": "win-srv-01",
+            "name": "Windows Server",
+            "category": "Target Infrastructure",
+            "zone": "XDR/LAN Subnet",
+            "ip": "192.168.85.115",
+            "subnet": "192.168.85.0/24",
+            "vmnet": "VMnet 4",
+            "os": "Windows Server 2019/2022",
+            "role": "AD/Target Host",
+            "description": "Windows Server acting as Active Directory Domain Controller and target for Windows-based attacks. Used for testing AD attacks, lateral movement, and endpoint detection.",
+            "services": [
+                "Active Directory Domain Services",
+                "DNS",
+                "File Sharing (SMB)",
+                "RDP"
+            ],
+            "monitoring": [
+                "Wazuh Agent",
+                "Windows Event Forwarding",
+                "Sysmon"
+            ],
+            "attack_scenarios": [
+                "Kerberoasting",
+                "Pass-the-Hash",
+                "Golden Ticket",
+                "DCSync",
+                "Lateral movement via SMB/RDP"
+            ]
+        },
+        {
+            "id": "elastic-01",
+            "name": "SIEM Server (Elastic Stack)",
+            "category": "SOC Infrastructure",
+            "zone": "SOC Subnet",
+            "ip": "192.168.100.128",
+            "subnet": "192.168.100.0/24",
+            "vmnet": "VMnet 5",
+            "os": "Ubuntu Linux",
+            "role": "Central Log Storage & Analytics",
+            "description": "Elastic Stack SIEM platform. Centralized log aggregation, indexing, searching, and visualization for all security events.",
+            "components": [
+                "Elasticsearch",
+                "Kibana",
+                "Logstash",
+                "Elastic Agent"
+            ],
+            "capabilities": [
+                "Log aggregation and indexing",
+                "Real-time search and analysis",
+                "Dashboards and visualizations",
+                "Correlation rules",
+                "Machine learning anomaly detection"
+            ],
+            "data_sources": [
+                "Suricata EVE logs",
+                "Zeek logs",
+                "Wazuh alerts",
+                "Windows Event Logs",
+                "Linux syslogs",
+                "Web server logs",
+                "Firewall logs"
+            ],
+            "services": [
+                "Elasticsearch:9200",
+                "Kibana:5601",
+                "Logstash:5044"
+            ]
+        },
+        {
+            "id": "soar-01",
+            "name": "SOAR Server (IRIS + IntelOwl)",
+            "category": "SOC Infrastructure",
+            "zone": "SOC Subnet",
+            "ip": "192.168.100.148",
+            "subnet": "192.168.100.0/24",
+            "vmnet": "VMnet 5",
+            "os": "Ubuntu Linux",
+            "role": "Incident Response Orchestration",
+            "description": "SOAR platform combining DFIR-IRIS for case management and IntelOwl for threat intelligence enrichment. Orchestrates incident response workflows.",
+            "components": [
+                "DFIR-IRIS",
+                "IntelOwl"
+            ],
+            "capabilities": [
+                "Incident case management",
+                "IOC enrichment",
+                "Automated threat hunting",
+                "Playbook execution",
+                "Evidence collection",
+                "Timeline analysis"
+            ],
+            "integrations": [
+                "MISP (threat intel)",
+                "VirusTotal",
+                "AbuseIPDB",
+                "AlienVault OTX",
+                "Elasticsearch (SIEM)",
+                "n8n (automation)"
+            ],
+            "services": [
+                "IRIS Web UI",
+                "IntelOwl API",
+                "PostgreSQL",
+                "RabbitMQ/Celery"
+            ]
+        },
+        {
+            "id": "wazuh-01",
+            "name": "Wazuh Server",
+            "category": "SOC Infrastructure",
+            "zone": "SOC Subnet",
+            "ip": "192.168.100.138",
+            "subnet": "192.168.100.0/24",
+            "vmnet": "VMnet 5",
+            "os": "Ubuntu Linux",
+            "role": "XDR Endpoint Monitoring",
+            "description": "Wazuh XDR platform for endpoint detection and response. Monitors endpoints, collects logs, detects threats, and performs security configuration assessment.",
+            "components": [
+                "Wazuh Manager",
+                "Wazuh Indexer",
+                "Wazuh Dashboard"
+            ],
+            "capabilities": [
+                "Log collection and analysis",
+                "File integrity monitoring (FIM)",
+                "Rootkit detection",
+                "Vulnerability detection",
+                "Security configuration assessment",
+                "Incident response",
+                "Compliance monitoring (PCI-DSS, HIPAA, GDPR)"
+            ],
+            "monitored_endpoints": [
+                "Windows Server",
+                "Linux servers",
+                "Guest devices"
+            ],
+            "services": [
+                "Wazuh Manager:1514,1515",
+                "Wazuh Dashboard:443",
+                "Wazuh Indexer:9200"
+            ],
+            "log_destinations": [
+                "Elasticsearch (SIEM integration)"
+            ]
+        },
+        {
+            "id": "misp-01",
+            "name": "MISP Server",
+            "category": "Threat Intelligence",
+            "zone": "SOC Subnet",
+            "ip": "192.168.100.130",
+            "subnet": "192.168.100.0/24",
+            "vmnet": "VMnet 5",
+            "os": "Ubuntu Linux",
+            "role": "Threat Intelligence Sharing",
+            "description": "MISP threat intelligence platform. Stores, correlates, and shares indicators of compromise (IOCs) and threat intelligence data.",
+            "components": [
+                "MISP Core",
+                "Redis",
+                "MySQL"
+            ],
+            "capabilities": [
+                "IOC management",
+                "Threat intelligence sharing",
+                "STIX/TAXII support",
+                "Event correlation",
+                "Feed aggregation",
+                "API access for automation"
+            ],
+            "data_types": [
+                "IP addresses",
+                "Domain names",
+                "File hashes (MD5, SHA1, SHA256)",
+                "URLs",
+                "Email addresses",
+                "YARA rules",
+                "Attack patterns (MITRE ATT&CK)"
+            ],
+            "integrations": [
+                "IntelOwl (enrichment)",
+                "n8n (automation)",
+                "External threat feeds"
+            ],
+            "services": [
+                "MISP Web UI:443",
+                "MISP API",
+                "Redis:6379",
+                "MySQL:3306"
+            ]
+        },
+        {
+            "id": "n8n-01",
+            "name": "Middle Server/n8n",
+            "category": "Automation",
+            "zone": "SOC Subnet",
+            "ip": "192.168.100.158",
+            "subnet": "192.168.100.0/24",
+            "vmnet": "VMnet 5",
+            "os": "Ubuntu Linux",
+            "role": "Automation & AI Gateway",
+            "description": "n8n workflow automation platform hosting SmartXDR Core API. Acts as middleware for AI-powered triage, playbook execution, and orchestration between SOC tools.",
+            "components": [
+                "n8n Workflow",
+                "SmartXDR Core API"
+            ],
+            "capabilities": [
+                "Workflow automation",
+                "API integration hub",
+                "AI model orchestration (OpenAI, Gemini)",
+                "Alert enrichment pipeline",
+                "Automated playbook execution",
+                "Multi-tool orchestration"
+            ],
+            "integrations": [
+                "Elasticsearch (alert ingestion)",
+                "IRIS (case creation)",
+                "IntelOwl (IOC enrichment)",
+                "MISP (threat intel lookup)",
+                "VirusTotal API",
+                "OpenAI/Gemini AI APIs"
+            ],
+            "services": [
+                "n8n:5678",
+                "SmartXDR API:5000",
+                "Flask REST API"
+            ],
+            "workflows": [
+                "Alert triage automation",
+                "IOC enrichment pipeline",
+                "Playbook orchestration",
+                "AI-powered severity scoring"
+            ]
+        },
+        {
+            "id": "elastalert-01",
+            "name": "ElastAlert2",
+            "category": "Alert Engine",
+            "zone": "SOC Subnet",
+            "ip": "192.168.100.168",
+            "subnet": "192.168.100.0/24",
+            "vmnet": "VMnet 5",
+            "os": "Ubuntu Linux",
+            "role": "Alert Engine",
+            "description": "ElastAlert2 alerting framework. Queries Elasticsearch for security events matching detection rules and triggers alerts for SOC investigation.",
+            "components": [
+                "ElastAlert2"
+            ],
+            "capabilities": [
+                "Real-time alerting from Elasticsearch",
+                "Complex rule correlation",
+                "Frequency-based detection",
+                "Anomaly detection",
+                "Multi-field aggregation"
+            ],
+            "alert_destinations": [
+                "n8n webhooks (SmartXDR triage)",
+                "Email notifications",
+                "Slack/Teams",
+                "IRIS (auto-case creation)"
+            ],
+            "rule_types": [
+                "Frequency (e.g., brute force)",
+                "Spike (traffic anomalies)",
+                "Flatline (service down)",
+                "Any (signature matches)",
+                "Cardinality (unique value counts)"
+            ],
+            "services": [
+                "ElastAlert2 daemon"
+            ]
+        }
+    ]
+}
