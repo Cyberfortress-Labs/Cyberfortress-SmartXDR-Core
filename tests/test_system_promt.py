@@ -27,12 +27,12 @@ def generate():
     # Build system prompt from base_system.json + network context
     # include_full_context=False: Uses quick_reference only (saves tokens)
     # include_full_context=True: Includes full network JSON docs
-    system_prompt = get_system_prompt(include_full_context=True,  format='json')
+    system_prompt = get_system_prompt(include_full_context=True,  format='text')
     
     print(f"[INFO] System prompt loaded: {len(system_prompt)} characters\n")
     print("=" * 80 + "\n")
     print(system_prompt)
-    Path("system_prompt.json").write_text(system_prompt, encoding='utf-8')
+    Path("result/system_prompt_full.txt").write_text(system_prompt, encoding='utf-8')
 
 if __name__ == "__main__":
     generate()
