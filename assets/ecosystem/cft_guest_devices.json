@@ -1,0 +1,23 @@
+{
+    "id": "guest-devices",
+    "name": "Guest Devices",
+    "category": "Endpoints",
+    "zone": "Guest Subnet",
+    "ip": "multiple",
+    "ip_range": "192.168.95.10-192.168.95.200",
+    "subnet": "192.168.95.0/24",
+    "vmnet": "VMnet 10",
+    "os": "Windows 10/11, Linux",
+    "role": "User Endpoints",
+    "description": "Represents multiple user workstations and endpoints in guest network. Used for testing endpoint detection and lateral movement scenarios.",
+    "capabilities": [
+        "Normal user activities",
+        "Application usage",
+        "Network communication",
+        "File sharing"
+    ],
+    "monitoring": [
+        "Wazuh Agent",
+        "Network traffic monitoring via Suricata/Zeek"
+    ]
+}

@@ -1,0 +1,38 @@
+{
+    "id": "elastalert-01",
+    "name": "ElastAlert2",
+    "category": "Alert Engine",
+    "zone": "SOC Subnet",
+    "ip": "192.168.100.168",
+    "subnet": "192.168.100.0/24",
+    "vmnet": "VMnet 5",
+    "os": "Ubuntu Linux",
+    "role": "Alert Engine",
+    "description": "ElastAlert2 alerting framework. Queries Elasticsearch for security events matching detection rules and triggers alerts for SOC investigation.",
+    "components": [
+        "ElastAlert2"
+    ],
+    "capabilities": [
+        "Real-time alerting from Elasticsearch",
+        "Complex rule correlation",
+        "Frequency-based detection",
+        "Anomaly detection",
+        "Multi-field aggregation"
+    ],
+    "alert_destinations": [
+        "n8n webhooks (SmartXDR triage)",
+        "Email notifications",
+        "Slack/Teams",
+        "IRIS (auto-case creation)"
+    ],
+    "rule_types": [
+        "Frequency (e.g., brute force)",
+        "Spike (traffic anomalies)",
+        "Flatline (service down)",
+        "Any (signature matches)",
+        "Cardinality (unique value counts)"
+    ],
+    "services": [
+        "ElastAlert2 daemon"
+    ]
+}

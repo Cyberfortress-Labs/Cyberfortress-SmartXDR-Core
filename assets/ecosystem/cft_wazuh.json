@@ -1,0 +1,39 @@
+{
+    "id": "wazuh-01",
+    "name": "Wazuh Server",
+    "category": "SOC Infrastructure",
+    "zone": "SOC Subnet",
+    "ip": "192.168.100.138",
+    "subnet": "192.168.100.0/24",
+    "vmnet": "VMnet 5",
+    "os": "Ubuntu Linux",
+    "role": "XDR Endpoint Monitoring",
+    "description": "Wazuh XDR platform for endpoint detection and response. Monitors endpoints, collects logs, detects threats, and performs security configuration assessment.",
+    "components": [
+        "Wazuh Manager",
+        "Wazuh Indexer",
+        "Wazuh Dashboard"
+    ],
+    "capabilities": [
+        "Log collection and analysis",
+        "File integrity monitoring (FIM)",
+        "Rootkit detection",
+        "Vulnerability detection",
+        "Security configuration assessment",
+        "Incident response",
+        "Compliance monitoring (PCI-DSS, HIPAA, GDPR)"
+    ],
+    "monitored_endpoints": [
+        "Windows Server",
+        "Linux servers",
+        "Guest devices"
+    ],
+    "services": [
+        "Wazuh Manager:1514,1515",
+        "Wazuh Dashboard:443",
+        "Wazuh Indexer:9200"
+    ],
+    "log_destinations": [
+        "Elasticsearch (SIEM integration)"
+    ]
+}

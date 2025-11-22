@@ -1,0 +1,43 @@
+{
+    "id": "n8n-01",
+    "name": "Middle Server/n8n",
+    "category": "Automation",
+    "zone": "SOC Subnet",
+    "ip": "192.168.100.158",
+    "subnet": "192.168.100.0/24",
+    "vmnet": "VMnet 5",
+    "os": "Ubuntu Linux",
+    "role": "Automation & AI Gateway",
+    "description": "n8n workflow automation platform hosting SmartXDR Core API. Acts as middleware for AI-powered triage, playbook execution, and orchestration between SOC tools.",
+    "components": [
+        "n8n Workflow",
+        "SmartXDR Core API"
+    ],
+    "capabilities": [
+        "Workflow automation",
+        "API integration hub",
+        "AI model orchestration (OpenAI, Gemini)",
+        "Alert enrichment pipeline",
+        "Automated playbook execution",
+        "Multi-tool orchestration"
+    ],
+    "integrations": [
+        "Elasticsearch (alert ingestion)",
+        "IRIS (case creation)",
+        "IntelOwl (IOC enrichment)",
+        "MISP (threat intel lookup)",
+        "VirusTotal API",
+        "OpenAI/Gemini AI APIs"
+    ],
+    "services": [
+        "n8n:5678",
+        "SmartXDR API:5000",
+        "Flask REST API"
+    ],
+    "workflows": [
+        "Alert triage automation",
+        "IOC enrichment pipeline",
+        "Playbook orchestration",
+        "AI-powered severity scoring"
+    ]
+}

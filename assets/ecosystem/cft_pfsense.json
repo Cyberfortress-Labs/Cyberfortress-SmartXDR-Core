@@ -1,0 +1,67 @@
+{
+    "id": "pfsense-01",
+    "name": "pfSense Firewall/Router",
+    "category": "Security Infrastructure",
+    "zone": "WAN/LAN/Guest/SOC",
+    "ip": "10.81.85.2",
+    "primary_ip": "10.81.85.2",
+    "subnet": "10.81.85.0/24",
+    "vmnet": ["VMnet 2", "VMnet 3", "VMnet 10", "VMnet 5"],
+    "os": "pfSense",
+    "role": "Multi-Interface Firewall & Router",
+    "description": "pfSense firewall and router with 4 interfaces serving as the central gateway for all network segments. Routes and filters traffic between WAN, LAN, Guest, and SOC networks. Feeds LAN traffic into Suricata/Zeek inline inspection pipeline.",
+    "interfaces": [
+        {
+            "name": "WAN",
+            "vmnet": "VMnet 2",
+            "ip": "10.81.85.2",
+            "subnet": "10.81.85.0/24",
+            "gateway": "10.81.85.3",
+            "type": "wan",
+            "description": "WAN interface connecting to Linux Router (10.81.85.3) for Internet access"
+        },
+        {
+            "name": "LAN",
+            "vmnet": "VMnet 3",
+            "ip": "192.168.85.2",
+            "subnet": "192.168.85.0/24",
+            "type": "lan",
+            "description": "LAN interface routing traffic to Suricata/Zeek inline inspection pipeline"
+        },
+        {
+            "name": "GUEST",
+            "vmnet": "VMnet 10",
+            "ip": "192.168.95.2",
+            "subnet": "192.168.95.0/24",
+            "type": "guest",
+            "description": "Guest network interface for isolated guest devices and attacker simulation"
+        },
+        {
+            "name": "SOC",
+            "vmnet": "VMnet 5",
+            "ip": "192.168.100.2",
+            "subnet": "192.168.100.0/24",
+            "type": "soc",
+            "description": "SOC management network interface for accessing SOC infrastructure"
+        }
+    ],
+    "capabilities": [
+        "Multi-interface routing",
+        "Stateful firewall",
+        "Network segmentation",
+        "Inter-VLAN routing",
+        "NAT/PAT",
+        "Traffic shaping",
+        "VPN termination",
+        "Firewall policy enforcement",
+        "DHCP server",
+        "DNS forwarding"
+    ],
+    "services": [
+        "pfSense Firewall",
+        "Routing daemon",
+        "Firewall rules",
+        "NAT engine"
+    ],
+    "routing_function": "Routes traffic: Internet → Linux Router (10.81.85.3) → pfSense WAN (10.81.85.2) → pfSense LAN (192.168.85.2) → Suricata/Zeek → Internal servers. Also provides Guest and SOC network connectivity."
+}

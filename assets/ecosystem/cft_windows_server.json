@@ -1,0 +1,30 @@
+{
+    "id": "win-srv-01",
+    "name": "Windows Server",
+    "category": "Target Infrastructure",
+    "zone": "XDR/LAN Subnet",
+    "ip": "192.168.85.115",
+    "subnet": "192.168.85.0/24",
+    "vmnet": "VMnet 4",
+    "os": "Windows Server 2019/2022",
+    "role": "AD/Target Host",
+    "description": "Windows Server acting as Active Directory Domain Controller and target for Windows-based attacks. Used for testing AD attacks, lateral movement, and endpoint detection.",
+    "services": [
+        "Active Directory Domain Services",
+        "DNS",
+        "File Sharing (SMB)",
+        "RDP"
+    ],
+    "monitoring": [
+        "Wazuh Agent",
+        "Windows Event Forwarding",
+        "Sysmon"
+    ],
+    "attack_scenarios": [
+        "Kerberoasting",
+        "Pass-the-Hash",
+        "Golden Ticket",
+        "DCSync",
+        "Lateral movement via SMB/RDP"
+    ]
+}

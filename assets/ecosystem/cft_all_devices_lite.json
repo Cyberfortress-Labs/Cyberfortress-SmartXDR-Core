@@ -1,0 +1,335 @@
+{
+    "id": "cyberfortress-ecosystem",
+    "name": "Cyberfortress SOC Ecosystem - Complete System Overview",
+    "category": "System Architecture",
+    "zone": "All Zones",
+    "role": "Comprehensive System Documentation",
+    "description": "Complete overview of all devices, network zones, and infrastructure components in the Cyberfortress Intelligent SOC Ecosystem. This document provides a centralized reference for the entire security architecture including threat actors, security monitoring, SOC infrastructure, and network segmentation.",
+    
+    "network_zones": {
+        "Internet": {
+            "description": "External network zone for internet-facing threats",
+            "subnet": "192.168.71.0/24",
+            "vmnet": "VMnet 1",
+            "devices": ["ext-attacker-01", "nat-gateway-01"]
+        },
+        "WAN": {
+            "description": "Wide Area Network zone for perimeter security",
+            "subnet": "10.81.85.0/24",
+            "vmnet": "VMnet 8 (NAT)",
+            "gateway": "10.81.85.2",
+            "devices": ["pfsense-01"]
+        },
+        "Guest Subnet": {
+            "description": "Isolated network for guest devices and internal threats",
+            "subnet": "192.168.95.0/24",
+            "vmnet": "VMnet 4",
+            "gateway": "192.168.95.2",
+            "devices": ["guest-devices", "int-attacker-01"]
+        },
+        "LAN/XDR Subnet": {
+            "description": "Main network for production services, monitoring, and detection",
+            "subnet": "192.168.85.0/24",
+            "vmnet": "VMnet 3",
+            "gateway": "192.168.85.2",
+            "devices": ["suricata-01", "zeek-01", "waf-01", "dvwa-01", "win-srv-01"]
+        },
+        "SOC Subnet": {
+            "description": "Security Operations Center infrastructure for SIEM, SOAR, and threat intelligence",
+            "subnet": "192.168.100.0/24",
+            "vmnet": "VMnet 5",
+            "gateway": "192.168.100.2",
+            "devices": ["elastic-01", "soar-01", "wazuh-01", "misp-01", "n8n-01", "elastalert-01"]
+        }
+    },
+    
+    "all_devices": [
+        {
+            "id": "ext-attacker-01",
+            "name": "External Attacker",
+            "category": "Threat Actor",
+            "zone": "Internet",
+            "ip": "192.168.71.100",
+            "role": "Simulated external threat for red team testing",
+            "purpose": "Simulate external attacks from Internet to test perimeter defenses"
+        },
+        {
+            "id": "nat-gateway-01",
+            "name": "NAT Gateway / Linux Router",
+            "category": "Network Infrastructure",
+            "zone": "Internet/WAN",
+            "ip": "192.168.71.5",
+            "role": "Network routing between Internet and WAN",
+            "purpose": "Route traffic between external network and pfSense firewall"
+        },
+        {
+            "id": "pfsense-01",
+            "name": "pfSense Firewall/Router",
+            "category": "Security Infrastructure",
+            "zone": "Multi-zone (WAN/LAN/Guest/SOC)",
+            "ip": "10.81.85.2 (WAN)",
+            "interfaces": {
+                "WAN": "10.81.85.2 (VMnet8)",
+                "LAN": "192.168.85.2 (VMnet3)",
+                "Guest": "192.168.95.2 (VMnet4)",
+                "SOC": "192.168.100.2 (VMnet5)"
+            },
+            "role": "Central firewall and routing for all network zones",
+            "purpose": "Stateful packet filtering, NAT, routing, and zone segmentation"
+        },
+        {
+            "id": "suricata-01",
+            "name": "Suricata Inline IDPS",
+            "category": "Security Monitoring",
+            "zone": "XDR/LAN Subnet",
+            "ip": "192.168.100.171",
+            "management_ip": "192.168.100.171",
+            "role": "Inline intrusion detection and prevention",
+            "purpose": "Detect and block malicious traffic using signatures and behavioral analysis"
+        },
+        {
+            "id": "zeek-01",
+            "name": "Zeek Network Security Monitor",
+            "category": "Security Monitoring",
+            "zone": "XDR/LAN Subnet",
+            "ip": "192.168.100.172",
+            "management_ip": "192.168.100.172",
+            "role": "Network traffic analysis and protocol monitoring",
+            "purpose": "Generate detailed network logs and detect anomalies"
+        },
+        {
+            "id": "waf-01",
+            "name": "WAF ModSecurity",
+            "category": "Security Infrastructure",
+            "zone": "XDR/LAN Subnet",
+            "ip": "192.168.85.111",
+            "role": "Web Application Firewall",
+            "purpose": "Protect web applications from OWASP Top 10 attacks"
+        },
+        {
+            "id": "dvwa-01",
+            "name": "Damn Vulnerable Web App",
+            "category": "Target/Honeypot",
+            "zone": "XDR/LAN Subnet",
+            "ip": "192.168.85.112",
+            "role": "Intentionally vulnerable web application for testing",
+            "purpose": "Simulate vulnerable web app to test detection capabilities",
+            "vulnerabilities": ["SQL Injection", "XSS", "CSRF", "File Upload", "Command Injection"]
+        },
+        {
+            "id": "win-srv-01",
+            "name": "Windows Server",
+            "category": "Target Infrastructure",
+            "zone": "XDR/LAN Subnet",
+            "ip": "192.168.85.115",
+            "role": "Windows target for endpoint monitoring",
+            "purpose": "Test Windows-specific attacks and EDR capabilities"
+        },
+        {
+            "id": "guest-devices",
+            "name": "Guest Devices",
+            "category": "Endpoints",
+            "zone": "Guest Subnet",
+            "ip_range": "192.168.95.10-192.168.95.200",
+            "role": "Isolated guest network endpoints",
+            "purpose": "Provide isolated network for untrusted devices"
+        },
+        {
+            "id": "int-attacker-01",
+            "name": "Internal Attacker",
+            "category": "Threat Actor",
+            "zone": "Guest Subnet",
+            "ip": "192.168.95.100",
+            "role": "Simulated insider threat",
+            "purpose": "Test lateral movement detection and east-west traffic monitoring"
+        },
+        {
+            "id": "elastic-01",
+            "name": "Elastic Stack SIEM",
+            "category": "SOC Infrastructure",
+            "zone": "SOC Subnet",
+            "ip": "192.168.100.128",
+            "role": "Central SIEM for log aggregation and analysis",
+            "components": ["Elasticsearch", "Kibana", "Logstash"],
+            "purpose": "Collect, index, search, and visualize all security logs",
+            "data_sources": ["Suricata", "Zeek", "Wazuh", "Windows Logs", "Firewall Logs"]
+        },
+        {
+            "id": "wazuh-01",
+            "name": "Wazuh XDR Server",
+            "category": "SOC Infrastructure",
+            "zone": "SOC Subnet",
+            "ip": "192.168.100.138",
+            "role": "Endpoint Detection and Response (XDR)",
+            "components": ["Wazuh Manager", "Wazuh Indexer", "Wazuh Dashboard"],
+            "purpose": "Monitor endpoints, detect threats, and perform security assessments",
+            "monitored_endpoints": ["Windows Server", "Linux servers", "Guest devices"]
+        },
+        {
+            "id": "soar-01",
+            "name": "SOAR Platform",
+            "category": "SOC Infrastructure",
+            "zone": "SOC Subnet",
+            "ip": "192.168.100.148",
+            "role": "Security Orchestration, Automation, and Response",
+            "components": ["DFIR-IRIS", "IntelOwl"],
+            "purpose": "Incident response management and threat intelligence enrichment"
+        },
+        {
+            "id": "misp-01",
+            "name": "MISP Threat Intelligence",
+            "category": "Threat Intelligence",
+            "zone": "SOC Subnet",
+            "ip": "192.168.100.130",
+            "role": "Threat Intelligence Sharing Platform",
+            "purpose": "Store, correlate, and share IOCs and threat intelligence",
+            "data_types": ["IP addresses", "Domains", "File hashes", "YARA rules", "MITRE ATT&CK"]
+        },
+        {
+            "id": "n8n-01",
+            "name": "n8n Automation Server",
+            "category": "Automation",
+            "zone": "SOC Subnet",
+            "ip": "192.168.100.158",
+            "role": "Workflow automation and integration",
+            "purpose": "Automate SOC workflows and integrate different security tools"
+        },
+        {
+            "id": "elastalert-01",
+            "name": "ElastAlert2 Alert Engine",
+            "category": "Alert Engine",
+            "zone": "SOC Subnet",
+            "ip": "192.168.100.168",
+            "role": "Rule-based alerting on SIEM data",
+            "purpose": "Generate alerts based on correlation rules and thresholds"
+        }
+    ],
+    
+    "traffic_flows": {
+        "ingress_flow": {
+            "description": "Traffic from Internet to internal systems",
+            "path": "Internet → NAT Gateway → pfSense (WAN) → pfSense (LAN/Guest) → Suricata IDPS → Internal Systems",
+            "security_layers": ["NAT Gateway", "pfSense Firewall", "Suricata IDPS"]
+        },
+        "east_west_flow": {
+            "description": "Internal lateral traffic between zones",
+            "path": "LAN/Guest → pfSense → Monitoring (Suricata/Zeek) → Destination Zone",
+            "monitoring": ["Suricata", "Zeek", "Wazuh agents"]
+        },
+        "endpoint_monitoring": {
+            "description": "Endpoint security data collection",
+            "path": "Endpoints → Wazuh Agents → Wazuh Server → Elasticsearch SIEM",
+            "data_types": ["File Integrity", "Log data", "Vulnerability scans", "Security configs"]
+        },
+        "log_aggregation": {
+            "description": "Central logging pipeline",
+            "sources": ["Suricata EVE logs", "Zeek logs", "Wazuh alerts", "Windows Events", "Firewall logs"],
+            "pipeline": "Sources → Logstash → Elasticsearch → Kibana Dashboards"
+        },
+        "threat_intelligence": {
+            "description": "Threat intel enrichment workflow",
+            "path": "MISP IOCs → IntelOwl Enrichment → Alerts/SIEM Integration",
+            "automation": "n8n workflows"
+        }
+    },
+    
+    "soc_components_summary": {
+        "description": "Core Security Operations Center infrastructure in 192.168.100.0/24 (SOC Subnet)",
+        "total_devices": 6,
+        "devices": {
+            "elastic-01": {
+                "name": "Elastic Stack SIEM",
+                "ip": "192.168.100.128",
+                "role": "Central log storage and analytics"
+            },
+            "wazuh-01": {
+                "name": "Wazuh XDR",
+                "ip": "192.168.100.138",
+                "role": "Endpoint monitoring and threat detection"
+            },
+            "soar-01": {
+                "name": "SOAR Platform",
+                "ip": "192.168.100.148",
+                "role": "Incident response and orchestration"
+            },
+            "misp-01": {
+                "name": "MISP Threat Intel",
+                "ip": "192.168.100.130",
+                "role": "Threat intelligence sharing"
+            },
+            "n8n-01": {
+                "name": "n8n Automation",
+                "ip": "192.168.100.158",
+                "role": "Workflow automation"
+            },
+            "elastalert-01": {
+                "name": "ElastAlert2",
+                "ip": "192.168.100.168",
+                "role": "Alert generation engine"
+            }
+        }
+    },
+    
+    "security_capabilities": [
+        "Perimeter defense with pfSense firewall and Suricata IDPS",
+        "Network traffic analysis with Zeek NSM",
+        "Web application protection with ModSecurity WAF",
+        "Endpoint detection and response with Wazuh XDR",
+        "Centralized SIEM with Elastic Stack",
+        "Threat intelligence management with MISP",
+        "Incident response orchestration with DFIR-IRIS",
+        "Threat enrichment with IntelOwl",
+        "Automated workflows with n8n",
+        "Rule-based alerting with ElastAlert2",
+        "Network segmentation across 5 zones",
+        "Red team testing with simulated threat actors",
+        "Vulnerability detection with intentional honeypots"
+    ],
+    
+    "ip_address_summary": {
+        "Internet_Zone": {
+            "ext-attacker-01": "192.168.71.100",
+            "nat-gateway-01": "192.168.71.5"
+        },
+        "WAN_Zone": {
+            "pfsense-01_WAN": "10.81.85.2"
+        },
+        "Guest_Subnet": {
+            "int-attacker-01": "192.168.95.100",
+            "guest-devices": "192.168.95.10-200",
+            "pfsense-01_Guest": "192.168.95.2"
+        },
+        "LAN_XDR_Subnet": {
+            "waf-01": "192.168.85.111",
+            "dvwa-01": "192.168.85.112",
+            "win-srv-01": "192.168.85.115",
+            "pfsense-01_LAN": "192.168.85.2"
+        },
+        "SOC_Subnet": {
+            "elastic-01": "192.168.100.128",
+            "misp-01": "192.168.100.130",
+            "wazuh-01": "192.168.100.138",
+            "soar-01": "192.168.100.148",
+            "n8n-01": "192.168.100.158",
+            "elastalert-01": "192.168.100.168",
+            "suricata-01": "192.168.100.171",
+            "zeek-01": "192.168.100.172",
+            "pfsense-01_SOC": "192.168.100.2"
+        }
+    },
+    
+    "architecture_notes": [
+        "All SOC infrastructure resides in isolated 192.168.100.0/24 subnet (VMnet5)",
+        "pfSense acts as central router with 4 interfaces across all zones",
+        "Suricata operates in inline mode for active threat prevention",
+        "Zeek provides passive network monitoring and protocol analysis",
+        "All security logs flow into Elasticsearch for centralized analysis",
+        "Wazuh agents deployed on Windows Server and guest endpoints",
+        "MISP integrates with SOAR for automated threat enrichment",
+        "n8n orchestrates workflows between SOC tools",
+        "ElastAlert2 generates alerts based on SIEM correlation rules",
+        "Guest subnet is isolated for untrusted devices",
+        "DVWA serves as intentional honeypot for detection testing",
+        "Two threat actor VMs simulate external and insider threats"
+    ]
+}

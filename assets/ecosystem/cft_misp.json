@@ -1,0 +1,45 @@
+{
+    "id": "misp-01",
+    "name": "MISP Server",
+    "category": "Threat Intelligence",
+    "zone": "SOC Subnet",
+    "ip": "192.168.100.130",
+    "subnet": "192.168.100.0/24",
+    "vmnet": "VMnet 5",
+    "os": "Ubuntu Linux",
+    "role": "Threat Intelligence Sharing",
+    "description": "MISP threat intelligence platform. Stores, correlates, and shares indicators of compromise (IOCs) and threat intelligence data.",
+    "components": [
+        "MISP Core",
+        "Redis",
+        "MySQL"
+    ],
+    "capabilities": [
+        "IOC management",
+        "Threat intelligence sharing",
+        "STIX/TAXII support",
+        "Event correlation",
+        "Feed aggregation",
+        "API access for automation"
+    ],
+    "data_types": [
+        "IP addresses",
+        "Domain names",
+        "File hashes (MD5, SHA1, SHA256)",
+        "URLs",
+        "Email addresses",
+        "YARA rules",
+        "Attack patterns (MITRE ATT&CK)"
+    ],
+    "integrations": [
+        "IntelOwl (enrichment)",
+        "n8n (automation)",
+        "External threat feeds"
+    ],
+    "services": [
+        "MISP Web UI:443",
+        "MISP API",
+        "Redis:6379",
+        "MySQL:3306"
+    ]
+}

@@ -1,0 +1,38 @@
+{
+    "id": "soar-01",
+    "name": "SOAR Server (IRIS + IntelOwl)",
+    "category": "SOC Infrastructure",
+    "zone": "SOC Subnet",
+    "ip": "192.168.100.148",
+    "subnet": "192.168.100.0/24",
+    "vmnet": "VMnet 5",
+    "os": "Ubuntu Linux",
+    "role": "Incident Response Orchestration",
+    "description": "SOAR platform combining DFIR-IRIS for case management and IntelOwl for threat intelligence enrichment. Orchestrates incident response workflows.",
+    "components": [
+        "DFIR-IRIS",
+        "IntelOwl"
+    ],
+    "capabilities": [
+        "Incident case management",
+        "IOC enrichment",
+        "Automated threat hunting",
+        "Playbook execution",
+        "Evidence collection",
+        "Timeline analysis"
+    ],
+    "integrations": [
+        "MISP (threat intel)",
+        "VirusTotal",
+        "AbuseIPDB",
+        "AlienVault OTX",
+        "Elasticsearch (SIEM)",
+        "n8n (automation)"
+    ],
+    "services": [
+        "IRIS Web UI",
+        "IntelOwl API",
+        "PostgreSQL",
+        "RabbitMQ/Celery"
+    ]
+}

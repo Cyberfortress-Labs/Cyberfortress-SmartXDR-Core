@@ -1,9 +1,10 @@
 {
     "metadata": {
-        "name": "SOC Ecosystem Device Inventory",
+        "name": "SOC Ecosystem Device Inventory - Full Details",
         "version": "1.0",
-        "description": "Comprehensive device inventory and role descriptions for Intelligent SOC Ecosystem",
-        "last_updated": "2025-11-19"
+        "description": "Complete device inventory with full specifications for RAG/LLM indexing. Human-readable summary available in devices.json",
+        "last_updated": "2025-11-22",
+        "purpose": "RAG knowledge base for AI-powered SOC analysis and automation"
     },
     "devices": [
         {

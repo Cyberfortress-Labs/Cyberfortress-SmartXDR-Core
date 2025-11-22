@@ -1,0 +1,55 @@
+{
+    "id": "suricata-01",
+    "name": "Suricata Inline IDPS",
+    "category": "Security Monitoring",
+    "zone": "XDR/LAN Subnet",
+    "ip": "192.168.100.171",
+    "management_ip": "192.168.100.171",
+    "subnet": "192.168.85.0/24",
+    "vmnet": ["VMnet 3", "VMnet 4", "VMnet 5"],
+    "os": "Ubuntu Linux",
+    "role": "Inline IDS/IPS",
+    "mode": "Bridge",
+    "description": "Inline intrusion detection and prevention system. Inspects all traffic passing through using signature-based and anomaly-based detection. Can block malicious traffic in real-time.",
+    "interfaces": [
+        {
+            "name": "ens37",
+            "vmnet": "VMnet 3",
+            "subnet": "192.168.85.0/24",
+            "type": "ingress",
+            "description": "Receives inbound traffic from pfSense"
+        },
+        {
+            "name": "ens38",
+            "vmnet": "VMnet 4",
+            "subnet": "192.168.41.0/24",
+            "type": "egress",
+            "description": "Forwards traffic after inspection"
+        },
+        {
+            "name": "ens33",
+            "vmnet": "VMnet 5",
+            "ip": "192.168.100.171",
+            "subnet": "192.168.100.0/24",
+            "type": "management",
+            "description": "Management interface for SSH, logging, rule updates"
+        }
+    ],
+    "capabilities": [
+        "Signature-based detection",
+        "Protocol analysis",
+        "Inline blocking (IPS mode)",
+        "File extraction",
+        "TLS inspection"
+    ],
+    "detection_methods": [
+        "ET Open Ruleset",
+        "Custom signatures",
+        "Protocol anomaly detection",
+        "File hash matching"
+    ],
+    "log_destinations": [
+        "Elasticsearch (via Filebeat)",
+        "Local EVE JSON logs"
+    ]
+}

@@ -1,0 +1,25 @@
+{
+    "id": "ext-attacker-01",
+    "name": "External Attacker",
+    "category": "Threat Actor",
+    "zone": "Internet",
+    "ip": "192.168.71.100",
+    "subnet": "192.168.71.0/24",
+    "vmnet": "VMnet 8",
+    "os": "Kali Linux 2022.4",
+    "role": "External Threat Simulation",
+    "description": "Simulates external attacker attempting to breach perimeter defenses. Used for penetration testing and attack simulation scenarios.",
+    "capabilities": [
+        "Network reconnaissance",
+        "Vulnerability scanning",
+        "Exploit delivery",
+        "Web application attacks",
+        "Brute force attacks"
+    ],
+    "attack_vectors": [
+        "Internet-facing services",
+        "Web applications",
+        "SSH/RDP brute force",
+        "Phishing campaigns"
+    ]
+}

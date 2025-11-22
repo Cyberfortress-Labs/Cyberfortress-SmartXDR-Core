@@ -1,0 +1,25 @@
+{
+    "id": "int-attacker-01",
+    "name": "Internal Attacker",
+    "category": "Threat Actor",
+    "zone": "Guest Subnet",
+    "ip": "192.168.95.100",
+    "subnet": "192.168.95.0/24",
+    "vmnet": "VMnet 10",
+    "os": "Kali Linux / Windows",
+    "role": "Insider Threat",
+    "description": "Simulates insider threat or compromised internal endpoint. Used for lateral movement, privilege escalation, and east-west traffic attack scenarios.",
+    "capabilities": [
+        "Lateral movement",
+        "Privilege escalation",
+        "Credential harvesting",
+        "Internal reconnaissance",
+        "Data exfiltration"
+    ],
+    "attack_vectors": [
+        "SMB/RDP lateral movement",
+        "Active Directory attacks",
+        "Internal service exploitation",
+        "Living-off-the-land techniques"
+    ]
+}

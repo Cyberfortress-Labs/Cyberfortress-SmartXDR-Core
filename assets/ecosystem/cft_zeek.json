@@ -1,0 +1,59 @@
+{
+    "id": "zeek-01",
+    "name": "Zeek NSM",
+    "category": "Security Monitoring",
+    "zone": "XDR/LAN Subnet",
+    "ip": "192.168.100.172",
+    "management_ip": "192.168.100.172",
+    "subnet": "192.168.85.0/24",
+    "vmnet": ["VMnet 3", "VMnet 4", "VMnet 5"],
+    "os": "Ubuntu Linux",
+    "role": "Network Security Monitoring",
+    "mode": "Passive Monitoring",
+    "description": "Passive network security monitoring platform. Generates rich metadata and logs from network traffic without interfering. Provides deep protocol analysis and behavioral analytics.",
+    "interfaces": [
+        {
+            "name": "ens37",
+            "vmnet": "VMnet 3",
+            "subnet": "192.168.85.0/24",
+            "type": "ingress",
+            "description": "Monitors inbound traffic"
+        },
+        {
+            "name": "ens38",
+            "vmnet": "VMnet 4",
+            "subnet": "192.168.41.0/24",
+            "type": "egress",
+            "description": "Monitors outbound traffic"
+        },
+        {
+            "name": "ens33",
+            "vmnet": "VMnet 5",
+            "ip": "192.168.100.172",
+            "subnet": "192.168.100.0/24",
+            "type": "management",
+            "description": "Management interface for SSH, log shipping"
+        }
+    ],
+    "capabilities": [
+        "Protocol decoding (HTTP, DNS, SSL, SMB, etc.)",
+        "File extraction and hashing",
+        "Connection logging",
+        "Behavioral analysis",
+        "Custom scripting (Zeek language)"
+    ],
+    "log_types": [
+        "conn.log (connections)",
+        "http.log",
+        "dns.log",
+        "ssl.log",
+        "files.log",
+        "x509.log",
+        "smtp.log",
+        "Custom logs"
+    ],
+    "log_destinations": [
+        "Elasticsearch (via Filebeat)",
+        "Local JSON logs"
+    ]
+}

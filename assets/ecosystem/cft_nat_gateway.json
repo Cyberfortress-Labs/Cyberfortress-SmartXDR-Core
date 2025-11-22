@@ -1,0 +1,43 @@
+{
+    "id": "nat-gateway-01",
+    "name": "NAT Gateway / Linux Router",
+    "category": "Network Infrastructure",
+    "zone": "Internet/WAN",
+    "ip": "192.168.71.5",
+    "primary_ip": "192.168.71.5",
+    "subnet": "192.168.71.0/24",
+    "vmnet": ["VMnet 8", "VMnet 2"],
+    "os": "Linux (Ubuntu/CentOS)",
+    "role": "Internet Gateway/Linux Router",
+    "description": "Linux-based NAT gateway and router providing Internet connectivity and routing between Internet (VMnet 8) and WAN network (VMnet 2). Acts as upstream router for pfSense.",
+    "interfaces": [
+        {
+            "name": "eth0",
+            "vmnet": "VMnet 8",
+            "ip": "192.168.71.5",
+            "subnet": "192.168.71.0/24",
+            "type": "nat",
+            "description": "NAT interface providing Internet connectivity via VMware NAT"
+        },
+        {
+            "name": "eth1",
+            "vmnet": "VMnet 2",
+            "ip": "10.81.85.3",
+            "subnet": "10.81.85.0/24",
+            "type": "routing",
+            "description": "Routing interface connecting to pfSense WAN (10.81.85.2)"
+        }
+    ],
+    "capabilities": [
+        "Network Address Translation (NAT)",
+        "IP forwarding",
+        "Routing between VMnet 8 and VMnet 2",
+        "Internet connectivity",
+        "Gateway for pfSense WAN"
+    ],
+    "services": [
+        "iptables NAT",
+        "IP forwarding",
+        "Routing"
+    ]
+}

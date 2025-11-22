@@ -1,0 +1,39 @@
+{
+    "id": "elastic-01",
+    "name": "SIEM Server (Elastic Stack)",
+    "category": "SOC Infrastructure",
+    "zone": "SOC Subnet",
+    "ip": "192.168.100.128",
+    "subnet": "192.168.100.0/24",
+    "vmnet": "VMnet 5",
+    "os": "Ubuntu Linux",
+    "role": "Central Log Storage & Analytics",
+    "description": "Elastic Stack SIEM platform. Centralized log aggregation, indexing, searching, and visualization for all security events.",
+    "components": [
+        "Elasticsearch",
+        "Kibana",
+        "Logstash",
+        "Elastic Agent"
+    ],
+    "capabilities": [
+        "Log aggregation and indexing",
+        "Real-time search and analysis",
+        "Dashboards and visualizations",
+        "Correlation rules",
+        "Machine learning anomaly detection"
+    ],
+    "data_sources": [
+        "Suricata EVE logs",
+        "Zeek logs",
+        "Wazuh alerts",
+        "Windows Event Logs",
+        "Linux syslogs",
+        "Web server logs",
+        "Firewall logs"
+    ],
+    "services": [
+        "Elasticsearch:9200",
+        "Kibana:5601",
+        "Logstash:5044"
+    ]
+}

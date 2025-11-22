@@ -1,0 +1,26 @@
+{
+    "id": "dvwa-01",
+    "name": "Vulnerable Web Server (DVWA)",
+    "category": "Target/Honeypot",
+    "zone": "XDR/LAN Subnet",
+    "ip": "192.168.85.112",
+    "subnet": "192.168.85.0/24",
+    "vmnet": "VMnet 4",
+    "os": "Ubuntu Linux",
+    "role": "Web Application Target",
+    "description": "Damn Vulnerable Web Application - intentionally vulnerable web app for testing WAF, IDS/IPS, and SIEM detection capabilities.",
+    "vulnerabilities": [
+        "SQL Injection",
+        "XSS (Reflected, Stored)",
+        "Command Injection",
+        "File Upload",
+        "CSRF",
+        "Weak Session Management"
+    ],
+    "services": [
+        "Apache/Nginx",
+        "MySQL",
+        "PHP"
+    ],
+    "purpose": "Attack target for testing detection and response capabilities"
+}
