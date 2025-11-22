@@ -4,7 +4,7 @@ Text chunking and semantic processing utilities
 import json
 import os
 from typing import Dict, List, Any
-from config import NETWORK_DIR
+from config import NETWORK_DIR, MITRE_DIR
 
 
 def json_to_natural_text(data: Dict[str, Any], filename: str) -> List[str]:
@@ -139,6 +139,54 @@ These are intentionally installed vulnerabilities for testing detection capabili
             texts.append(attack_text)
     
     return texts
+
+
+def mitre_to_natural_text(technique: Dict[str, Any]) -> str:
+    """Convert MITRE ATT&CK technique to natural language for RAG."""
+    mitre_id = technique.get("mitre_id", "Unknown")
+    name = technique.get("name", "Unknown")
+    description = technique.get("description", "")
+    tactics = technique.get("tactics", [])
+    platforms = technique.get("platforms", [])
+    data_sources = technique.get("data_sources", [])
+    is_subtechnique = technique.get("is_subtechnique", False)
+    
+    # Build natural language text
+    text_parts = []
+    
+    # Header
+    tech_type = "Sub-technique" if is_subtechnique else "Technique"
+    text_parts.append(f"MITRE ATT&CK {tech_type}: {mitre_id} - {name}")
+    text_parts.append("")
+    
+    # Tactics
+    if tactics:
+        text_parts.append(f"Tactics: {', '.join(tactics)}")
+    
+    # Platforms
+    if platforms:
+        text_parts.append(f"Platforms: {', '.join(platforms)}")
+    
+    # Description
+    if description:
+        text_parts.append("")
+        text_parts.append(f"Description: {description}")
+    
+    # Data sources
+    if data_sources:
+        text_parts.append("")
+        text_parts.append("Detection Data Sources:")
+        for ds in data_sources:
+            text_parts.append(f"  - {ds}")
+    
+    # Keywords for search
+    text_parts.append("")
+    keywords = [mitre_id, name]
+    if tactics:
+        keywords.extend(tactics)
+    text_parts.append(f"Keywords: {', '.join(keywords)}")
+    
+    return "\n".join(text_parts)
 
 
 def load_topology_context() -> str:

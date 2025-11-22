@@ -5,8 +5,8 @@ import json
 import os
 import hashlib
 import glob
-from config import ASSETS_DIR, ECOSYSTEM_DIR, NETWORK_DIR
-from chunking import json_to_natural_text, load_topology_context
+from config import ASSETS_DIR, ECOSYSTEM_DIR, NETWORK_DIR, MITRE_DIR
+from chunking import json_to_natural_text, load_topology_context, mitre_to_natural_text
 
 
 def get_file_hash(filepath):
@@ -47,6 +47,13 @@ def ingest_data(collection):
         os.path.join(NETWORK_DIR, "network_map.json")
     ]
     json_files.extend([f for f in network_files if os.path.exists(f)])
+    
+    # Include MITRE ATT&CK data
+    mitre_files = [
+        os.path.join(MITRE_DIR, "mitre_attack_clean.json"),
+        os.path.join(MITRE_DIR, "mitre_techniques_only.json")
+    ]
+    json_files.extend([f for f in mitre_files if os.path.exists(f)])
     
     if not json_files:
         print("⚠️ No JSON files found.")
@@ -153,6 +160,67 @@ Purpose: {net.get('description', 'N/A')}"""
                         "device_name": data.get("name", "Unknown"),
                         "type": "device_detail"
                     })
+            
+            # === MITRE ATT&CK DATA ===
+            elif filename == "mitre_techniques_only.json":
+                # Process techniques only file
+                if isinstance(data, list):
+                    print(f"   -> Processing {len(data)} MITRE techniques...")
+                    for technique in data:
+                        if not technique.get("deprecated", False):
+                            mitre_id = technique.get("mitre_id", "unknown")
+                            chunk_text = mitre_to_natural_text(technique)
+                            ids.append(f"{filename}-{mitre_id}")
+                            documents.append(chunk_text)
+                            metadatas.append({
+                                "source": filename,
+                                "file_hash": current_hash,
+                                "type": "mitre_technique",
+                                "mitre_id": mitre_id,
+                                "is_subtechnique": technique.get("is_subtechnique", False)
+                            })
+            
+            elif filename == "mitre_attack_clean.json":
+                # Process full MITRE data (tactics, groups, software)
+                if isinstance(data, dict):
+                    # Process tactics
+                    if "tactics" in data and isinstance(data["tactics"], list):
+                        for tactic in data["tactics"]:
+                            tactic_id = tactic.get("mitre_id", "unknown")
+                            tactic_text = f"""MITRE ATT&CK Tactic: {tactic_id} - {tactic.get("name", "Unknown")}
+Shortname: {tactic.get("shortname", "N/A")}
+
+Description: {tactic.get("description", "")}
+
+Keywords: {tactic_id}, {tactic.get("name", "")}, {tactic.get("shortname", "")}"""
+                            ids.append(f"{filename}-tactic-{tactic_id}")
+                            documents.append(tactic_text)
+                            metadatas.append({
+                                "source": filename,
+                                "file_hash": current_hash,
+                                "type": "mitre_tactic",
+                                "mitre_id": tactic_id
+                            })
+                    
+                    # Process threat groups (limit to top 50 for efficiency)
+                    if "groups" in data and isinstance(data["groups"], list):
+                        for group in data["groups"][:50]:  # Top 50 groups
+                            group_id = group.get("mitre_id", "unknown")
+                            aliases = group.get("aliases", [])
+                            group_text = f"""MITRE ATT&CK Threat Group: {group_id} - {group.get("name", "Unknown")}
+Aliases: {', '.join(aliases) if aliases else 'None'}
+
+Description: {group.get("description", "")}
+
+Keywords: {group_id}, {group.get("name", "")}, {', '.join(aliases[:3])}"""
+                            ids.append(f"{filename}-group-{group_id}")
+                            documents.append(group_text)
+                            metadatas.append({
+                                "source": filename,
+                                "file_hash": current_hash,
+                                "type": "mitre_group",
+                                "mitre_id": group_id
+                            })
             
             else:
                 # Fallback for other formats

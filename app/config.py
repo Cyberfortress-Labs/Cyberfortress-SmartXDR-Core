@@ -9,6 +9,7 @@ ASSETS_DIR = "assets"
 ECOSYSTEM_DIR = os.path.join(ASSETS_DIR, "ecosystem")
 NETWORK_DIR = os.path.join(ASSETS_DIR, "network")
 ARCH_DIR = os.path.join(ASSETS_DIR, "architecture")
+MITRE_DIR = os.path.join(ASSETS_DIR, "mitre-attck")
 
 # Database settings
 DB_PATH = "./chroma_db"
@@ -25,7 +26,7 @@ OPENAI_TIMEOUT = 600.0  # 10 minutes default timeout
 OPENAI_MAX_RETRIES = 2  # Default retry count for failed requests
 
 # Query settings
-DEFAULT_RESULTS = 5  # Default number of results to retrieve for queries
+DEFAULT_RESULTS = 10  # Increased for better MITRE ATT&CK technique retrieval
 
 # Token pricing (per 1M tokens)
 INPUT_PRICE_PER_1M = 0.150
