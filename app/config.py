@@ -3,16 +3,21 @@ Configuration file for RAG system constants
 Following OpenAI Python SDK best practices
 """
 import os
+from pathlib import Path
 
-# Directory paths
-ASSETS_DIR = "assets"
+# Get project root directory (assumes this file is in app/config.py)
+PROJECT_ROOT = Path(__file__).parent.parent.resolve()
+
+# Directory paths (now absolute)
+ASSETS_DIR = str(PROJECT_ROOT / "assets")
 ECOSYSTEM_DIR = os.path.join(ASSETS_DIR, "ecosystem")
 NETWORK_DIR = os.path.join(ASSETS_DIR, "network")
 ARCH_DIR = os.path.join(ASSETS_DIR, "architecture")
 MITRE_DIR = os.path.join(ASSETS_DIR, "mitre-attck")
 
+
 # Database settings
-DB_PATH = "./chroma_db"
+DB_PATH = str(PROJECT_ROOT / "chroma_db")
 COLLECTION_NAME = "soc_ecosystem"
 
 # OpenAI model settings

@@ -199,14 +199,24 @@ def _search_and_build_context(collection, query: str, n_results: int, filter_met
     
     # Check relevance
     has_relevant_results = False
+    min_distance = "N/A"
+    
     if results["documents"] and results["documents"][0]:
+        num_found = len(results["documents"][0])
+        print(f"🔍 Search returned {num_found} results")
+        
         if results["distances"] and results["distances"][0]:
-            has_relevant_results = min(results["distances"][0]) < 1.2
+            min_distance = min(results["distances"][0])
+            print(f"📏 Closest match distance: {min_distance:.4f}")
+            # Relaxed threshold from 1.2 to 1.4 to be more inclusive
+            has_relevant_results = min_distance < 1.4
         else:
             has_relevant_results = True
+    else:
+        print("⚠️  Search returned NO results (collection might be empty)")
     
     if not has_relevant_results:
-        print(f"⚠️  No highly relevant context found (min distance: {min(results['distances'][0]) if results['distances'] and results['distances'][0] else 'N/A'})")
+        print(f"⚠️  No highly relevant context found (min distance: {min_distance})")
         print(f"💡 Attempting to answer using general cybersecurity knowledge...")
         return "No specific Cyberfortress documentation found for this query. Use general cybersecurity knowledge to answer.", set(), []
     
@@ -219,7 +229,7 @@ def _search_and_build_context(collection, query: str, n_results: int, filter_met
     sources = set()
     
     for idx, (doc, meta, dist) in enumerate(zip(context_list, metadatas_list, distances)):
-        if dist < 1.5:
+        if dist < 1.4:
             context_parts.append(f"[Document {idx + 1}]\n{doc}")
             if meta and "source" in meta:
                 sources.add(meta["source"])
