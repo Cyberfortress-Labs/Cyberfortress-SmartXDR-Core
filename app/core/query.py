@@ -241,6 +241,13 @@ def _search_and_build_context(collection, query: str, n_results: int, filter_met
         print(f"\n📚 Found {len(context_list)} relevant documents")
         if sources:
             print(f"📄 Sources: {', '.join(sources)}")
+        
+        # Preview context
+        print(f"\n📝 Context Preview (first 300 chars):")
+        print("-" * 60)
+        preview = context_text[:300] + "..." if len(context_text) > 300 else context_text
+        print(preview)
+        print("-" * 60)
     else:
         print(f"\n💡 Using general knowledge (no relevant context)")
     
