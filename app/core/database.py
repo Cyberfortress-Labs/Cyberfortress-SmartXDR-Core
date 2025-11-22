@@ -2,8 +2,8 @@
 ChromaDB initialization and collection management
 """
 import chromadb
-from config import DB_PATH, COLLECTION_NAME
-from embeddings import OpenAIEmbeddingFunction
+from app.config import DB_PATH, COLLECTION_NAME
+from app.core.embeddings import OpenAIEmbeddingFunction
 
 
 def initialize_database():

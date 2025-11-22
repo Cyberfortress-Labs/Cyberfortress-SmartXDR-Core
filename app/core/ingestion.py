@@ -5,8 +5,8 @@ import json
 import os
 import hashlib
 import glob
-from config import ASSETS_DIR, ECOSYSTEM_DIR, NETWORK_DIR, MITRE_DIR
-from chunking import json_to_natural_text, load_topology_context, mitre_to_natural_text
+from app.config import ASSETS_DIR, ECOSYSTEM_DIR, NETWORK_DIR, MITRE_DIR
+from app.core.chunking import json_to_natural_text, load_topology_context, mitre_to_natural_text
 
 
 def get_file_hash(filepath):
@@ -187,12 +187,22 @@ Purpose: {net.get('description', 'N/A')}"""
                     if "tactics" in data and isinstance(data["tactics"], list):
                         for tactic in data["tactics"]:
                             tactic_id = tactic.get("mitre_id", "unknown")
-                            tactic_text = f"""MITRE ATT&CK Tactic: {tactic_id} - {tactic.get("name", "Unknown")}
-Shortname: {tactic.get("shortname", "N/A")}
+                            tactic_name = tactic.get("name", "Unknown")
+                            tactic_shortname = tactic.get("shortname", "N/A")
+                            
+                            # Create bidirectional search text - can search by ID or name
+                            tactic_text = f"""MITRE ATT&CK Tactic
+ID: {tactic_id}
+Name: {tactic_name}
+Shortname: {tactic_shortname}
+
+{tactic_id} is the tactic ID for "{tactic_name}"
+{tactic_name} has tactic ID {tactic_id}
+The {tactic_shortname} tactic is identified as {tactic_id}
 
 Description: {tactic.get("description", "")}
 
-Keywords: {tactic_id}, {tactic.get("name", "")}, {tactic.get("shortname", "")}"""
+Keywords for search: {tactic_id}, {tactic_name}, {tactic_shortname}, tactic {tactic_id}, {tactic_name} tactic, {tactic_name} ID"""
                             ids.append(f"{filename}-tactic-{tactic_id}")
                             documents.append(tactic_text)
                             metadatas.append({

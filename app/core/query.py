@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from openai import OpenAI, APIError, APIConnectionError, RateLimitError
 from openai.types.chat import ChatCompletionMessageParam
 from dotenv import load_dotenv
-from config import (
+from app.config import (
     CHAT_MODEL, 
     DEFAULT_RESULTS, 
     INPUT_PRICE_PER_1M, 
@@ -24,7 +24,7 @@ from config import (
     CACHE_ENABLED,
     CACHE_TTL
 )
-from anonymizer import DataAnonymizer
+from app.core.anonymizer import DataAnonymizer
 
 # Load environment variables
 load_dotenv()
@@ -42,7 +42,7 @@ client = OpenAI(
 anonymizer = DataAnonymizer()
 
 # Debug flag to show anonymization process
-DEBUG_ANONYMIZATION = True  # Set to False to hide detailed logs
+DEBUG_ANONYMIZATION = False  # Set to True to see detailed logs
 
 # API Safety tracking
 class APIUsageTracker:

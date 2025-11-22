@@ -5,7 +5,7 @@ Following OpenAI Python SDK best practices
 import os
 import chromadb
 from openai import OpenAI
-from config import EMBEDDING_MODEL, OPENAI_TIMEOUT, OPENAI_MAX_RETRIES
+from app.config import EMBEDDING_MODEL, OPENAI_TIMEOUT, OPENAI_MAX_RETRIES
 from dotenv import load_dotenv
 
 # Load environment variables

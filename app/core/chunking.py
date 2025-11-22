@@ -4,7 +4,7 @@ Text chunking and semantic processing utilities
 import json
 import os
 from typing import Dict, List, Any
-from config import NETWORK_DIR, MITRE_DIR
+from app.config import NETWORK_DIR, MITRE_DIR
 
 
 def json_to_natural_text(data: Dict[str, Any], filename: str) -> List[str]:
@@ -154,9 +154,11 @@ def mitre_to_natural_text(technique: Dict[str, Any]) -> str:
     # Build natural language text
     text_parts = []
     
-    # Header
+    # Header - Put MITRE ID first for better matching
     tech_type = "Sub-technique" if is_subtechnique else "Technique"
-    text_parts.append(f"MITRE ATT&CK {tech_type}: {mitre_id} - {name}")
+    text_parts.append(f"{mitre_id} - MITRE ATT&CK {tech_type}: {name}")
+    text_parts.append(f"MITRE ID: {mitre_id}")
+    text_parts.append(f"Technique Name: {name}")
     text_parts.append("")
     
     # Tactics
@@ -179,12 +181,12 @@ def mitre_to_natural_text(technique: Dict[str, Any]) -> str:
         for ds in data_sources:
             text_parts.append(f"  - {ds}")
     
-    # Keywords for search
+    # Keywords for search - emphasize MITRE ID
     text_parts.append("")
-    keywords = [mitre_id, name]
+    keywords = [mitre_id, name, f"technique {mitre_id}"]
     if tactics:
         keywords.extend(tactics)
-    text_parts.append(f"Keywords: {', '.join(keywords)}")
+    text_parts.append(f"Search Keywords: {', '.join(keywords)}")
     
     return "\n".join(text_parts)
 
