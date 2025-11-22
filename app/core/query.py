@@ -26,6 +26,8 @@ from app.config import (
 )
 from app.core.anonymizer import DataAnonymizer
 from app.services.prompt_builder_service import PromptBuilder
+from app.utils.rate_limit import APIUsageTracker
+from app.utils.cache import ResponseCache
 
 # Load environment variables
 load_dotenv()
@@ -45,89 +47,15 @@ anonymizer = DataAnonymizer()
 # Initialize PromptBuilder for system prompts (using RAG-optimized prompt)
 prompt_builder = PromptBuilder(prompt_file='rag_system.json')
 
+# Initialize API usage tracker and cache
+usage_tracker = APIUsageTracker(
+    max_calls_per_minute=MAX_CALLS_PER_MINUTE,
+    max_daily_cost=MAX_DAILY_COST
+)
+response_cache = ResponseCache(ttl=CACHE_TTL, enabled=CACHE_ENABLED)
+
 # Debug flag to show anonymization process
 DEBUG_ANONYMIZATION = False  # Set to True to see detailed logs
-
-# API Safety tracking
-class APIUsageTracker:
-    """Track API usage for rate limiting and cost control"""
-    def __init__(self):
-        self.call_timestamps: List[float] = []
-        self.daily_cost = 0.0
-        self.cost_reset_date = datetime.now().date()
-        self.cache: Dict[str, Dict[str, Any]] = {}
-    
-    def check_rate_limit(self) -> bool:
-        """Check if we're within rate limit (calls per minute)"""
-        now = time.time()
-        # Remove timestamps older than 1 minute
-        self.call_timestamps = [ts for ts in self.call_timestamps if now - ts < 60]
-        
-        if len(self.call_timestamps) >= MAX_CALLS_PER_MINUTE:
-            wait_time = 60 - (now - self.call_timestamps[0])
-            print(f"\nWARNING: Rate limit reached! Please wait {wait_time:.1f} seconds...")
-            return False
-        return True
-    
-    def check_daily_cost(self, estimated_cost: float) -> bool:
-        """Check if adding this cost would exceed daily limit"""
-        # Reset daily cost if it's a new day
-        today = datetime.now().date()
-        if today != self.cost_reset_date:
-            self.daily_cost = 0.0
-            self.cost_reset_date = today
-        
-        if self.daily_cost + estimated_cost > MAX_DAILY_COST:
-            print(f"\nWARNING: Daily cost limit reached! (${self.daily_cost:.4f}/${MAX_DAILY_COST})")
-            print(f"   This query would cost ~${estimated_cost:.4f}")
-            print(f"   Limit will reset tomorrow.")
-            return False
-        return True
-    
-    def record_call(self, cost: float):
-        """Record a successful API call"""
-        self.call_timestamps.append(time.time())
-        self.daily_cost += cost
-    
-    def get_cache_key(self, query: str, context_hash: str) -> str:
-        """Generate cache key from query and context"""
-        combined = f"{query}:{context_hash}"
-        return hashlib.md5(combined.encode()).hexdigest()
-    
-    def get_cached_response(self, cache_key: str) -> Optional[str]:
-        """Get cached response if available and not expired"""
-        if not CACHE_ENABLED:
-            return None
-        
-        if cache_key in self.cache:
-            cached_data = self.cache[cache_key]
-            if time.time() - cached_data['timestamp'] < CACHE_TTL:
-                print(f"\nCache hit! Using cached response (saved API call)")
-                return cached_data['response']
-            else:
-                # Expired, remove from cache
-                del self.cache[cache_key]
-        return None
-    
-    def cache_response(self, cache_key: str, response: str):
-        """Cache a response"""
-        if CACHE_ENABLED:
-            self.cache[cache_key] = {
-                'response': response,
-                'timestamp': time.time()
-            }
-    
-    def get_stats(self) -> Dict[str, Any]:
-        """Get current usage statistics"""
-        return {
-            'calls_last_minute': len(self.call_timestamps),
-            'daily_cost': self.daily_cost,
-            'cache_size': len(self.cache),
-            'cost_reset_date': self.cost_reset_date.isoformat()
-        }
-
-# Global tracker instance
-usage_tracker = APIUsageTracker()
 
 
 def anonymize_text(text: str) -> str:
@@ -356,11 +284,12 @@ def _call_openai_api(system_instructions: str, user_input: str, context_text_ano
         usage_tracker.record_call(actual_cost)
         
         if DEBUG_MODE:
-            stats = usage_tracker.get_stats()
+            usage_stats = usage_tracker.get_stats()
+            cache_stats = response_cache.get_stats()
             print(f"\nToday's Usage:")
-            print(f"   - Total cost: ${stats['daily_cost']:.4f} / ${MAX_DAILY_COST}")
-            print(f"   - Calls in last minute: {stats['calls_last_minute']} / {MAX_CALLS_PER_MINUTE}")
-            print(f"   - Cache entries: {stats['cache_size']}")
+            print(f"   - Total cost: ${usage_stats['daily_cost']:.4f} / ${MAX_DAILY_COST}")
+            print(f"   - Calls in last minute: {usage_stats['calls_last_minute']} / {MAX_CALLS_PER_MINUTE}")
+            print(f"   - Cache entries: {cache_stats['cache_size']}")
     
     answer_with_tokens = response.output_text or "No answer generated"
     
@@ -404,8 +333,8 @@ def ask(collection, query: str, n_results: int = DEFAULT_RESULTS, filter_metadat
     
     # Check cache
     context_hash = hashlib.md5(context_text.encode()).hexdigest()
-    cache_key = usage_tracker.get_cache_key(query, context_hash)
-    cached_response = usage_tracker.get_cached_response(cache_key)
+    cache_key = response_cache.get_cache_key(query, context_hash)
+    cached_response = response_cache.get(cache_key)
     
     if cached_response:
         return cached_response
@@ -441,7 +370,7 @@ def ask(collection, query: str, n_results: int = DEFAULT_RESULTS, filter_metadat
             answer += f"\n\nSources: {', '.join(sorted(sources))}"
         
         # Cache the response
-        usage_tracker.cache_response(cache_key, answer)
+        response_cache.set(cache_key, answer)
         
         return answer
         
