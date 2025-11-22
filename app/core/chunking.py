@@ -220,5 +220,5 @@ def load_topology_context() -> str:
         
         return "\n\n".join(context_parts)
     except Exception as e:
-        print(f"⚠️ Cannot load topology: {e}")
+        print(f"WARNING: Cannot load topology: {e}")
         return ""

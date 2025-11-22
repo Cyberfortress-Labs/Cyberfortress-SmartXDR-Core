@@ -49,7 +49,7 @@ def test_prompt_builder():
     print(f"Tokens saved per call:  ~{(len(text_prompt) - len(rag_prompt))//4:,} tokens")
     
     print("\n" + "=" * 80)
-    print("✅ PromptBuilder Integration Test Completed!")
+    print("PromptBuilder Integration Test Completed!")
     print("=" * 80)
 
 

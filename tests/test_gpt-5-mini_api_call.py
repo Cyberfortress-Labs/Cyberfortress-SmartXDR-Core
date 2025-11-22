@@ -77,7 +77,7 @@ if __name__ == "__main__":
                 print()
                 
     except Exception as e:
-        print(f"\n❌ Fatal Error: {e}")
+        print(f"\nFATAL ERROR: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

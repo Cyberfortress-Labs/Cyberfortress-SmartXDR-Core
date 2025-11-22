@@ -64,7 +64,7 @@ class APIUsageTracker:
         
         if len(self.call_timestamps) >= MAX_CALLS_PER_MINUTE:
             wait_time = 60 - (now - self.call_timestamps[0])
-            print(f"\n⚠️ Rate limit reached! Please wait {wait_time:.1f} seconds...")
+            print(f"\nWARNING: Rate limit reached! Please wait {wait_time:.1f} seconds...")
             return False
         return True
     
@@ -77,7 +77,7 @@ class APIUsageTracker:
             self.cost_reset_date = today
         
         if self.daily_cost + estimated_cost > MAX_DAILY_COST:
-            print(f"\n⚠️ Daily cost limit reached! (${self.daily_cost:.4f}/${MAX_DAILY_COST})")
+            print(f"\nWARNING: Daily cost limit reached! (${self.daily_cost:.4f}/${MAX_DAILY_COST})")
             print(f"   This query would cost ~${estimated_cost:.4f}")
             print(f"   Limit will reset tomorrow.")
             return False
@@ -101,7 +101,7 @@ class APIUsageTracker:
         if cache_key in self.cache:
             cached_data = self.cache[cache_key]
             if time.time() - cached_data['timestamp'] < CACHE_TTL:
-                print(f"\n💾 Cache hit! Using cached response (saved API call)")
+                print(f"\nCache hit! Using cached response (saved API call)")
                 return cached_data['response']
             else:
                 # Expired, remove from cache
@@ -203,21 +203,21 @@ def _search_and_build_context(collection, query: str, n_results: int, filter_met
     
     if results["documents"] and results["documents"][0]:
         num_found = len(results["documents"][0])
-        print(f"🔍 Search returned {num_found} results")
+        print(f"Search returned {num_found} results")
         
         if results["distances"] and results["distances"][0]:
             min_distance = min(results["distances"][0])
-            print(f"📏 Closest match distance: {min_distance:.4f}")
+            print(f"Closest match distance: {min_distance:.4f}")
             # Relaxed threshold from 1.2 to 1.4 to be more inclusive
             has_relevant_results = min_distance < 1.4
         else:
             has_relevant_results = True
     else:
-        print("⚠️  Search returned NO results (collection might be empty)")
+        print("WARNING: Search returned NO results (collection might be empty)")
     
     if not has_relevant_results:
-        print(f"⚠️  No highly relevant context found (min distance: {min_distance})")
-        print(f"💡 Attempting to answer using general cybersecurity knowledge...")
+        print(f"WARNING: No highly relevant context found (min distance: {min_distance})")
+        print(f"Attempting to answer using general cybersecurity knowledge...")
         return "No specific Cyberfortress documentation found for this query. Use general cybersecurity knowledge to answer.", set(), []
     
     # Build context from results
@@ -238,18 +238,18 @@ def _search_and_build_context(collection, query: str, n_results: int, filter_met
     
     # Debug info
     if context_list:
-        print(f"\n📚 Found {len(context_list)} relevant documents")
+        print(f"\nFound {len(context_list)} relevant documents")
         if sources:
-            print(f"📄 Sources: {', '.join(sources)}")
+            print(f"Sources: {', '.join(sources)}")
         
         # Preview context
-        print(f"\n📝 Context Preview (first 300 chars):")
+        print(f"\nContext Preview (first 300 chars):")
         print("-" * 60)
         preview = context_text[:300] + "..." if len(context_text) > 300 else context_text
         print(preview)
         print("-" * 60)
     else:
-        print(f"\n💡 Using general knowledge (no relevant context)")
+        print(f"\nUsing general knowledge (no relevant context)")
     
     return context_text, sources, context_list
 
@@ -263,7 +263,7 @@ def _anonymize_context(context_text: str) -> str:
     """
     if DEBUG_ANONYMIZATION:
         print("\n" + "="*80)
-        print("🔍 ANONYMIZATION DEBUG - CONTEXT BEFORE:")
+        print("ANONYMIZATION DEBUG - CONTEXT BEFORE:")
         print("="*80)
         preview = context_text[:500] + "..." if len(context_text) > 500 else context_text
         print(preview)
@@ -273,16 +273,16 @@ def _anonymize_context(context_text: str) -> str:
     
     ip_count = len(re.findall(r'TKN-IP-[a-f0-9]+', context_text_anonymized))
     host_count = len(re.findall(r'HOST-[a-f0-9]+', context_text_anonymized))
-    print(f"🔒 Anonymization: {ip_count} IPs, {host_count} hostnames protected")
+    print(f"Anonymization: {ip_count} IPs, {host_count} hostnames protected")
     
     if DEBUG_ANONYMIZATION:
         print("\n" + "="*80)
-        print("🔒 ANONYMIZATION DEBUG - CONTEXT AFTER (sent to OpenAI):")
+        print("ANONYMIZATION DEBUG - CONTEXT AFTER (sent to OpenAI):")
         print("="*80)
         preview = context_text_anonymized[:500] + "..." if len(context_text_anonymized) > 500 else context_text_anonymized
         print(preview)
         print("\n" + "="*80)
-        print("\n⚠️  NO REAL IPs OR DEVICE NAMES IN ABOVE TEXT - All replaced with tokens!")
+        print("\nWARNING: NO REAL IPs OR DEVICE NAMES IN ABOVE TEXT - All replaced with tokens!")
         print("="*80)
     
     return context_text_anonymized
@@ -336,7 +336,7 @@ def _call_openai_api(system_instructions: str, user_input: str, context_text_ano
                     (estimated_completion_tokens / 1_000_000) * OUTPUT_PRICE_PER_1M
     
     if not usage_tracker.check_daily_cost(estimated_cost):
-        raise ValueError("❌ Daily cost limit reached. Please try again tomorrow.")
+        raise ValueError("ERROR: Daily cost limit reached. Please try again tomorrow.")
     
     # API call
     response = client.responses.create(
@@ -353,7 +353,7 @@ def _call_openai_api(system_instructions: str, user_input: str, context_text_ano
         output_tokens = getattr(usage, 'output_tokens', 0)
         total_tokens = getattr(usage, 'total_tokens', input_tokens + output_tokens)
         
-        print(f"\n💰 Token Usage:")
+        print(f"\nToken Usage:")
         print(f"   - Input tokens: {input_tokens}")
         print(f"   - Output tokens: {output_tokens}")
         print(f"   - Total tokens: {total_tokens}")
@@ -366,7 +366,7 @@ def _call_openai_api(system_instructions: str, user_input: str, context_text_ano
         usage_tracker.record_call(actual_cost)
         
         stats = usage_tracker.get_stats()
-        print(f"\n📊 Today's Usage:")
+        print(f"\nToday's Usage:")
         print(f"   - Total cost: ${stats['daily_cost']:.4f} / ${MAX_DAILY_COST}")
         print(f"   - Calls in last minute: {stats['calls_last_minute']} / {MAX_CALLS_PER_MINUTE}")
         print(f"   - Cache entries: {stats['cache_size']}")
@@ -375,7 +375,7 @@ def _call_openai_api(system_instructions: str, user_input: str, context_text_ano
     
     if DEBUG_ANONYMIZATION:
         print("\n" + "="*80)
-        print("🤖 AI RESPONSE (with anonymized tokens):")
+        print("AI RESPONSE (with anonymized tokens):")
         print("="*80)
         print(answer_with_tokens)
         print("\n" + "="*80)
@@ -402,11 +402,11 @@ def ask(collection, query: str, n_results: int = DEFAULT_RESULTS, filter_metadat
     Returns:
         Answer string with source citations
     """
-    print(f"\n❓ Question: {query}")
+    print(f"\nQuestion: {query}")
     
     # Check rate limit
     if not usage_tracker.check_rate_limit():
-        return "❌ Rate limit exceeded. Please wait a moment before trying again."
+        return "ERROR: Rate limit exceeded. Please wait a moment before trying again."
     
     # Search and build context
     context_text, sources, context_list = _search_and_build_context(collection, query, n_results, filter_metadata)
@@ -440,14 +440,14 @@ def ask(collection, query: str, n_results: int = DEFAULT_RESULTS, filter_metadat
         
         if DEBUG_ANONYMIZATION:
             print("\n" + "="*80)
-            print("✅ FINAL ANSWER (de-anonymized for user):")
+            print("FINAL ANSWER (de-anonymized for user):")
             print("="*80)
             print(answer)
             print("\n" + "="*80)
         
         # Add source citations
         if sources:
-            answer += f"\n\n📚 Sources: {', '.join(sorted(sources))}"
+            answer += f"\n\nSources: {', '.join(sorted(sources))}"
         
         # Cache the response
         usage_tracker.cache_response(cache_key, answer)
@@ -456,15 +456,15 @@ def ask(collection, query: str, n_results: int = DEFAULT_RESULTS, filter_metadat
         
     except RateLimitError as e:
         error_msg = f"Rate limit exceeded. Please try again later. (Request ID: {getattr(e, 'request_id', 'N/A')})"
-        print(f"\n❌ {error_msg}")
+        print(f"\nERROR: {error_msg}")
         return error_msg
         
     except APIConnectionError as e:
         error_msg = f"Connection error: {str(e)}. Please check your internet connection."
-        print(f"\n❌ {error_msg}")
+        print(f"\nERROR: {error_msg}")
         return error_msg
         
     except APIError as e:
         error_msg = f"OpenAI API error: {str(e)} (Request ID: {getattr(e, 'request_id', 'N/A')})"
-        print(f"\n❌ {error_msg}")
+        print(f"\nERROR: {error_msg}")
         return error_msg

@@ -21,16 +21,16 @@ def ingest_data(collection):
     Args:
         collection: ChromaDB collection instance
     """
-    print(f"🔍 Scanning directory '{ASSETS_DIR}'...")
+    print(f"Scanning directory '{ASSETS_DIR}'...")
     
     if not os.path.exists(ASSETS_DIR):
-        print(f"⚠️ Directory '{ASSETS_DIR}' not found!")
+        print(f"WARNING: Directory '{ASSETS_DIR}' not found!")
         return
     
     # Load topology context once
     topology_context = load_topology_context()
     if topology_context:
-        print("✅ Loaded topology context")
+        print("Loaded topology context")
         # Add topology as a special document
         collection.upsert(
             ids=["topology_context"],
@@ -56,7 +56,7 @@ def ingest_data(collection):
     json_files.extend([f for f in mitre_files if os.path.exists(f)])
     
     if not json_files:
-        print("⚠️ No JSON files found.")
+        print("WARNING: No JSON files found.")
         return
 
     total_chunks = 0
@@ -74,13 +74,13 @@ def ingest_data(collection):
         if existing_items["ids"]:
             stored_hash = existing_items["metadatas"][0].get("file_hash") if existing_items["metadatas"] else None
             if stored_hash == current_hash:
-                print(f"✅ {filename}: Unchanged. Skipped.")
+                print(f"{filename}: Unchanged. Skipped.")
                 continue
             else:
-                print(f"🔄 {filename}: Changed. Updating...")
+                print(f"{filename}: Changed. Updating...")
                 collection.delete(where={"source": filename})
         else:
-            print(f"➕ {filename}: New file. Indexing...")
+            print(f"{filename}: New file. Indexing...")
 
         # Read and process data
         try:
@@ -249,7 +249,7 @@ Keywords: {group_id}, {group.get("name", "")}, {', '.join(aliases[:3])}"""
                 print(f"   -> Indexed {len(documents)} chunks.")
                 
         except Exception as e:
-            print(f"❌ Error reading {filename}: {e}")
+            print(f"ERROR reading {filename}: {e}")
     
-    print(f"\n✅ Completed! Total {total_chunks} chunks indexed in ChromaDB.")
-    print(f"📊 Total documents in collection: {collection.count()}")
+    print(f"\nCompleted! Total {total_chunks} chunks indexed in ChromaDB.")
+    print(f"Total documents in collection: {collection.count()}")

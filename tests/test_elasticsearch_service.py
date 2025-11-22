@@ -61,7 +61,7 @@ def test_elastalert_query():
         return result
         
     except Exception as e:
-        print(f"❌ Error querying ElastAlert2: {e}")
+        print(f"ERROR querying ElastAlert2: {e}")
         return None
     finally:
         es_service.close()
@@ -122,7 +122,7 @@ def test_kibana_alerts_query():
         return result
         
     except Exception as e:
-        print(f"❌ Error querying Kibana alerts: {e}")
+        print(f"ERROR querying Kibana alerts: {e}")
         return None
     finally:
         es_service.close()
@@ -168,7 +168,7 @@ def test_aggregated_statistics():
         return result
         
     except Exception as e:
-        print(f"❌ Error getting aggregated statistics: {e}")
+        print(f"ERROR getting aggregated statistics: {e}")
         return None
     finally:
         es_service.close()
