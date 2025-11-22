@@ -297,6 +297,50 @@ class PromptBuilder:
 - Fall back to general cybersecurity knowledge when context is limited
 - The context contains anonymized tokens (TKN-IP-xxx, HOST-xxx) for security"""
 
+    def build_user_input_prompt(self) -> str:
+        """
+        Build user input template for RAG queries
+        
+        Returns:
+            User input template string with {context} and {query} placeholders
+        """
+        user_input_path = self.project_root / 'prompts' / 'system' / 'rag_user_input.json'
+        
+        if user_input_path.exists():
+            with open(user_input_path, 'r', encoding='utf-8') as f:
+                user_input_config = json.load(f)
+                return user_input_config['user_input_template']['template']
+        else:
+            # Fallback template
+            return """Answer the following question. Use CONTEXT if available, otherwise use your general knowledge.
+
+CRITICAL INSTRUCTIONS:
+1. **Language Matching**: 
+   - Vietnamese question → Vietnamese answer
+   - English question → English answer
+
+2. **When NO context or LIMITED context**:
+   - Still answer using your general cybersecurity knowledge
+   - For tools like Suricata, pfSense, Wazuh, etc. - explain what they are
+   - Be helpful even without specific Cyberfortress documentation
+
+3. **When GOOD context available**:
+   - Prioritize context information
+   - Cite sources and anonymized tokens
+
+4. **Vietnamese Examples**:
+   - "Suricata là gì?" → Explain Suricata in Vietnamese (general knowledge OK)
+   - "Execution có tactics ID là gì?" → Search context for "Execution" tactic
+   - "TA0006 là gì?" → Search context for TA0006
+
+CONTEXT (may be limited or general):
+{context}
+
+QUESTION:
+{query}
+
+Provide a clear, helpful answer in the same language as the question. If context is limited, use your general knowledge about cybersecurity tools and concepts."""
+
 
 # Convenience function for quick usage
 def get_system_prompt(include_full_context: bool = False, format: str = 'json') -> str:

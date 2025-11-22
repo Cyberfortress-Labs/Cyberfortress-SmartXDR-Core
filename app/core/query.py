@@ -290,36 +290,16 @@ def _anonymize_context(context_text: str) -> str:
 
 def _build_user_input(context_text_anonymized: str, query: str) -> str:
     """
-    Build user input for API call
+    Build user input for API call using PromptBuilder
     """
-    return f"""Answer the following question. Use CONTEXT if available, otherwise use your general knowledge.
-
-CRITICAL INSTRUCTIONS:
-1. **Language Matching**: 
-   - Vietnamese question → Vietnamese answer
-   - English question → English answer
-
-2. **When NO context or LIMITED context**:
-   - Still answer using your general cybersecurity knowledge
-   - For tools like Suricata, pfSense, Wazuh, etc. - explain what they are
-   - Be helpful even without specific Cyberfortress documentation
-
-3. **When GOOD context available**:
-   - Prioritize context information
-   - Cite sources and anonymized tokens
-
-4. **Vietnamese Examples**:
-   - "Suricata là gì?" → Explain Suricata in Vietnamese (general knowledge OK)
-   - "Execution có tactics ID là gì?" → Search context for "Execution" tactic
-   - "TA0006 là gì?" → Search context for TA0006
-
-CONTEXT (may be limited or general):
-{context_text_anonymized}
-
-QUESTION:
-{query}
-
-Provide a clear, helpful answer in the same language as the question. If context is limited, use your general knowledge about cybersecurity tools and concepts."""
+    # Get user input template from PromptBuilder
+    user_prompt_template = prompt_builder.build_user_input_prompt()
+    
+    # Format with context and query
+    return user_prompt_template.format(
+        context=context_text_anonymized,
+        query=query
+    )
 
 
 def _call_openai_api(system_instructions: str, user_input: str, context_text_anonymized: str, query: str) -> tuple[str, float]:
