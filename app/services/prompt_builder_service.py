@@ -11,12 +11,13 @@ from typing import Dict, Any, Optional
 class PromptBuilder:
     """Builds prompts for Gemini/OpenAI with optional network context injection"""
     
-    def __init__(self, project_root: Optional[Path] = None):
+    def __init__(self, project_root: Optional[Path] = None, prompt_file: str = 'base_system.json'):
         """
         Initialize PromptBuilder
         
         Args:
             project_root: Root path of the project. If None, auto-detects from file location
+            prompt_file: Name of prompt file to load from prompts/system/ (default: base_system.json)
         """
         if project_root is None:
             # Auto-detect: app/services/prompt_builder.py -> go up 2 levels
@@ -24,12 +25,13 @@ class PromptBuilder:
         else:
             self.project_root = Path(project_root)
         
+        self.prompt_file = prompt_file
         self._context_cache = {}
         self.base_prompt = self._load_base_prompt()
     
     def _load_base_prompt(self) -> Dict[str, Any]:
         """Load base system prompt from JSON"""
-        prompt_path = self.project_root / 'prompts' / 'system' / 'base_system.json'
+        prompt_path = self.project_root / 'prompts' / 'system' / self.prompt_file
         with open(prompt_path, 'r', encoding='utf-8') as f:
             return json.load(f)
     
@@ -241,6 +243,59 @@ class PromptBuilder:
         
         with open(examples_path, 'r', encoding='utf-8') as f:
             return json.load(f)
+    
+    def build_rag_prompt(self) -> str:
+        """
+        Build compact RAG-optimized system prompt (minimal tokens)
+        
+        Returns:
+            Lightweight system prompt for RAG use cases
+        """
+        sp = self.base_prompt['system_prompt']
+        
+        # Check if this is the RAG-optimized prompt format
+        if 'capabilities' in sp and 'behavioral_rules' in sp:
+            # New compact format (rag_system.json)
+            prompt_parts = [
+                sp['identity'],
+                "",
+                "**Capabilities:**"
+            ]
+            for cap in sp['capabilities']:
+                prompt_parts.append(f"- {cap}")
+            
+            prompt_parts.append("")
+            prompt_parts.append("**Behavioral Rules:**")
+            for rule in sp['behavioral_rules']:
+                prompt_parts.append(f"- {rule}")
+            
+            # Add Vietnamese support info
+            if 'vietnamese_support' in sp and sp['vietnamese_support']['enabled']:
+                prompt_parts.append("")
+                prompt_parts.append("**Vietnamese Support:**")
+                prompt_parts.append("- Auto-detect and respond in user's language")
+                prompt_parts.append("- Common tools: " + ", ".join(
+                    f"{k} ({v})" for k, v in sp['vietnamese_support']['common_tools'].items()
+                ))
+            
+            # Add context handling
+            if 'context_handling' in sp:
+                prompt_parts.append("")
+                prompt_parts.append(f"**Important:** {sp['context_handling']['anonymization']}")
+            
+            return "\n".join(prompt_parts)
+        else:
+            # Fallback to minimal version of base_system.json
+            return f"""{sp['identity']}
+
+**Primary Role:**
+{sp.get('primary_role', 'Assist with SOC operations and cybersecurity analysis.')}
+
+**Key Rules:**
+- Match user's language (Vietnamese ↔ English)
+- Use provided context when available
+- Fall back to general cybersecurity knowledge when context is limited
+- The context contains anonymized tokens (TKN-IP-xxx, HOST-xxx) for security"""
 
 
 # Convenience function for quick usage

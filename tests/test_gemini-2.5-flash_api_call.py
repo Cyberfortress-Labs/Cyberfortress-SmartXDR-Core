@@ -16,7 +16,7 @@ sys.path.insert(0, str(project_root))
 
 from google import genai
 from google.genai import types
-from app.services.prompt_builder import get_system_prompt
+from app.services.prompt_builder_service import get_system_prompt
 
 
 def generate():

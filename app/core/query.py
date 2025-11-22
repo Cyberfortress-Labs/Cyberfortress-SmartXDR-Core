@@ -1,6 +1,6 @@
 """
 RAG query processing with token usage tracking
-Following OpenAI Python SDK best practices
+Following OpenAI Python SDK best practices - using Responses API
 """
 import os
 import re
@@ -10,7 +10,6 @@ import json
 from typing import Optional, Dict, Any, List, cast
 from datetime import datetime, timedelta
 from openai import OpenAI, APIError, APIConnectionError, RateLimitError
-from openai.types.chat import ChatCompletionMessageParam
 from dotenv import load_dotenv
 from app.config import (
     CHAT_MODEL, 
@@ -25,6 +24,7 @@ from app.config import (
     CACHE_TTL
 )
 from app.core.anonymizer import DataAnonymizer
+from app.services.prompt_builder_service import PromptBuilder
 
 # Load environment variables
 load_dotenv()
@@ -40,6 +40,9 @@ client = OpenAI(
 
 # Initialize anonymizer for data protection
 anonymizer = DataAnonymizer()
+
+# Initialize PromptBuilder for system prompts (using RAG-optimized prompt)
+prompt_builder = PromptBuilder(prompt_file='rag_system.json')
 
 # Debug flag to show anonymization process
 DEBUG_ANONYMIZATION = False  # Set to True to see detailed logs
@@ -175,6 +178,194 @@ def deanonymize_text(text: str) -> str:
     return text
 
 
+def _search_and_build_context(collection, query: str, n_results: int, filter_metadata: Optional[Dict[str, Any]] = None) -> tuple[str, set[str], list[str]]:
+    """
+    Search collection and build context from results
+    
+    Returns:
+        Tuple of (context_text, sources, context_list)
+    """
+    effective_n_results = max(n_results, 5)
+    
+    search_params = {
+        "query_texts": [query],
+        "n_results": effective_n_results
+    }
+    
+    if filter_metadata:
+        search_params["where"] = filter_metadata
+    
+    results = collection.query(**search_params)
+    
+    # Check relevance
+    has_relevant_results = False
+    if results["documents"] and results["documents"][0]:
+        if results["distances"] and results["distances"][0]:
+            has_relevant_results = min(results["distances"][0]) < 1.2
+        else:
+            has_relevant_results = True
+    
+    if not has_relevant_results:
+        print(f"⚠️  No highly relevant context found (min distance: {min(results['distances'][0]) if results['distances'] and results['distances'][0] else 'N/A'})")
+        print(f"💡 Attempting to answer using general cybersecurity knowledge...")
+        return "No specific Cyberfortress documentation found for this query. Use general cybersecurity knowledge to answer.", set(), []
+    
+    # Build context from results
+    context_list = results["documents"][0]
+    metadatas_list = results["metadatas"][0] if results["metadatas"] else []
+    distances = results["distances"][0] if results["distances"] else []
+    
+    context_parts = []
+    sources = set()
+    
+    for idx, (doc, meta, dist) in enumerate(zip(context_list, metadatas_list, distances)):
+        if dist < 1.5:
+            context_parts.append(f"[Document {idx + 1}]\n{doc}")
+            if meta and "source" in meta:
+                sources.add(meta["source"])
+    
+    context_text = "\n\n---\n\n".join(context_parts) if context_parts else "Limited relevant context found."
+    
+    # Debug info
+    if context_list:
+        print(f"\n📚 Found {len(context_list)} relevant documents")
+        if sources:
+            print(f"📄 Sources: {', '.join(sources)}")
+    else:
+        print(f"\n💡 Using general knowledge (no relevant context)")
+    
+    return context_text, sources, context_list
+
+
+def _anonymize_context(context_text: str) -> str:
+    """
+    Anonymize sensitive information in context
+    
+    Returns:
+        Anonymized context text
+    """
+    if DEBUG_ANONYMIZATION:
+        print("\n" + "="*80)
+        print("🔍 ANONYMIZATION DEBUG - CONTEXT BEFORE:")
+        print("="*80)
+        preview = context_text[:500] + "..." if len(context_text) > 500 else context_text
+        print(preview)
+        print("\n" + "="*80)
+    
+    context_text_anonymized = anonymize_text(context_text)
+    
+    ip_count = len(re.findall(r'TKN-IP-[a-f0-9]+', context_text_anonymized))
+    host_count = len(re.findall(r'HOST-[a-f0-9]+', context_text_anonymized))
+    print(f"🔒 Anonymization: {ip_count} IPs, {host_count} hostnames protected")
+    
+    if DEBUG_ANONYMIZATION:
+        print("\n" + "="*80)
+        print("🔒 ANONYMIZATION DEBUG - CONTEXT AFTER (sent to OpenAI):")
+        print("="*80)
+        preview = context_text_anonymized[:500] + "..." if len(context_text_anonymized) > 500 else context_text_anonymized
+        print(preview)
+        print("\n" + "="*80)
+        print("\n⚠️  NO REAL IPs OR DEVICE NAMES IN ABOVE TEXT - All replaced with tokens!")
+        print("="*80)
+    
+    return context_text_anonymized
+
+
+def _build_user_input(context_text_anonymized: str, query: str) -> str:
+    """
+    Build user input for API call
+    """
+    return f"""Answer the following question. Use CONTEXT if available, otherwise use your general knowledge.
+
+CRITICAL INSTRUCTIONS:
+1. **Language Matching**: 
+   - Vietnamese question → Vietnamese answer
+   - English question → English answer
+
+2. **When NO context or LIMITED context**:
+   - Still answer using your general cybersecurity knowledge
+   - For tools like Suricata, pfSense, Wazuh, etc. - explain what they are
+   - Be helpful even without specific Cyberfortress documentation
+
+3. **When GOOD context available**:
+   - Prioritize context information
+   - Cite sources and anonymized tokens
+
+4. **Vietnamese Examples**:
+   - "Suricata là gì?" → Explain Suricata in Vietnamese (general knowledge OK)
+   - "Execution có tactics ID là gì?" → Search context for "Execution" tactic
+   - "TA0006 là gì?" → Search context for TA0006
+
+CONTEXT (may be limited or general):
+{context_text_anonymized}
+
+QUESTION:
+{query}
+
+Provide a clear, helpful answer in the same language as the question. If context is limited, use your general knowledge about cybersecurity tools and concepts."""
+
+
+def _call_openai_api(system_instructions: str, user_input: str, context_text_anonymized: str, query: str) -> tuple[str, float]:
+    """
+    Call OpenAI API and return response
+    
+    Returns:
+        Tuple of (answer_text, actual_cost)
+    """
+    # Estimate cost
+    estimated_prompt_tokens = len(context_text_anonymized) // 3 + len(query) // 3
+    estimated_completion_tokens = 500
+    estimated_cost = (estimated_prompt_tokens / 1_000_000) * INPUT_PRICE_PER_1M + \
+                    (estimated_completion_tokens / 1_000_000) * OUTPUT_PRICE_PER_1M
+    
+    if not usage_tracker.check_daily_cost(estimated_cost):
+        raise ValueError("❌ Daily cost limit reached. Please try again tomorrow.")
+    
+    # API call
+    response = client.responses.create(
+        model=CHAT_MODEL,
+        instructions=system_instructions,
+        input=user_input
+    )
+    
+    # Extract token usage
+    usage = response.usage
+    actual_cost = 0.0
+    if usage:
+        input_tokens = getattr(usage, 'input_tokens', 0)
+        output_tokens = getattr(usage, 'output_tokens', 0)
+        total_tokens = getattr(usage, 'total_tokens', input_tokens + output_tokens)
+        
+        print(f"\n💰 Token Usage:")
+        print(f"   - Input tokens: {input_tokens}")
+        print(f"   - Output tokens: {output_tokens}")
+        print(f"   - Total tokens: {total_tokens}")
+        
+        input_cost = (input_tokens / 1_000_000) * INPUT_PRICE_PER_1M
+        output_cost = (output_tokens / 1_000_000) * OUTPUT_PRICE_PER_1M
+        actual_cost = input_cost + output_cost
+        print(f"   - Estimated cost: ${actual_cost:.6f}")
+        
+        usage_tracker.record_call(actual_cost)
+        
+        stats = usage_tracker.get_stats()
+        print(f"\n📊 Today's Usage:")
+        print(f"   - Total cost: ${stats['daily_cost']:.4f} / ${MAX_DAILY_COST}")
+        print(f"   - Calls in last minute: {stats['calls_last_minute']} / {MAX_CALLS_PER_MINUTE}")
+        print(f"   - Cache entries: {stats['cache_size']}")
+    
+    answer_with_tokens = response.output_text or "No answer generated"
+    
+    if DEBUG_ANONYMIZATION:
+        print("\n" + "="*80)
+        print("🤖 AI RESPONSE (with anonymized tokens):")
+        print("="*80)
+        print(answer_with_tokens)
+        print("\n" + "="*80)
+    
+    return answer_with_tokens, actual_cost
+
+
 def ask(collection, query: str, n_results: int = DEFAULT_RESULTS, filter_metadata: Optional[Dict[str, Any]] = None) -> str:
     """
     Search and answer questions with enhancements:
@@ -196,48 +387,14 @@ def ask(collection, query: str, n_results: int = DEFAULT_RESULTS, filter_metadat
     """
     print(f"\n❓ Question: {query}")
     
-    # === API SAFETY: Check rate limit ===
+    # Check rate limit
     if not usage_tracker.check_rate_limit():
         return "❌ Rate limit exceeded. Please wait a moment before trying again."
     
-    # Increase n_results for comprehensive coverage (especially for SOC components questions)
-    effective_n_results = max(n_results, 5)
+    # Search and build context
+    context_text, sources, context_list = _search_and_build_context(collection, query, n_results, filter_metadata)
     
-    # Search with more results
-    search_params = {
-        "query_texts": [query],
-        "n_results": effective_n_results
-    }
-    
-    if filter_metadata:
-        search_params["where"] = filter_metadata
-    
-    results = collection.query(**search_params)
-    
-    if not results["documents"] or not results["documents"][0]:
-        return "Sorry, no relevant information found in the documentation."
-
-    # Combine context with metadata
-    context_list = results["documents"][0]
-    metadatas_list = results["metadatas"][0] if results["metadatas"] else []
-    distances = results["distances"][0] if results["distances"] else []
-    
-    # Create context text with sources
-    context_parts = []
-    sources = set()
-    
-    for idx, (doc, meta, dist) in enumerate(zip(context_list, metadatas_list, distances)):
-        context_parts.append(f"[Document {idx + 1}]\n{doc}")
-        if meta and "source" in meta:
-            sources.add(meta["source"])
-    
-    context_text = "\n\n---\n\n".join(context_parts)
-    
-    # Debug info
-    print(f"\n📚 Found {len(context_list)} relevant documents")
-    print(f"📄 Sources: {', '.join(sources)}")
-    
-    # === API SAFETY: Check cache ===
+    # Check cache
     context_hash = hashlib.md5(context_text.encode()).hexdigest()
     cache_key = usage_tracker.get_cache_key(query, context_hash)
     cached_response = usage_tracker.get_cached_response(cache_key)
@@ -245,127 +402,23 @@ def ask(collection, query: str, n_results: int = DEFAULT_RESULTS, filter_metadat
     if cached_response:
         return cached_response
     
-    # === DATA PROTECTION: Anonymize sensitive information ===
-    # Before sending to AI, replace IPs and device IDs with tokens
-    if DEBUG_ANONYMIZATION:
-        print("\n" + "="*80)
-        print("🔍 ANONYMIZATION DEBUG - CONTEXT BEFORE:")
-        print("="*80)
-        # Show first 500 chars of original context
-        preview = context_text[:500] + "..." if len(context_text) > 500 else context_text
-        print(preview)
-        print("\n" + "="*80)
+    # Anonymize context
+    context_text_anonymized = _anonymize_context(context_text)
     
-    context_text_anonymized = anonymize_text(context_text)
+    # Build API request
+    system_instructions = prompt_builder.build_rag_prompt()
+    user_input = _build_user_input(context_text_anonymized, query)
     
-    ip_count = len(re.findall(r'TKN-IP-[a-f0-9]+', context_text_anonymized))
-    host_count = len(re.findall(r'HOST-[a-f0-9]+', context_text_anonymized))
-    print(f"🔒 Anonymization: {ip_count} IPs, {host_count} hostnames protected")
-    
-    if DEBUG_ANONYMIZATION:
-        print("\n" + "="*80)
-        print("🔒 ANONYMIZATION DEBUG - CONTEXT AFTER (sent to OpenAI):")
-        print("="*80)
-        # Show first 500 chars of anonymized context
-        preview = context_text_anonymized[:500] + "..." if len(context_text_anonymized) > 500 else context_text_anonymized
-        print(preview)
-        print("\n" + "="*80)
-        print("\n⚠️  NO REAL IPs OR DEVICE NAMES IN ABOVE TEXT - All replaced with tokens!")
-        print("="*80)
-
-    # Build messages following OpenAI's recommended structure
-    # Using 'system' role for instructions and 'user' role for the query
-    messages: List[ChatCompletionMessageParam] = [
-        {
-            "role": "system", 
-            "content": """You are a SOC (Security Operations Center) expert with deep knowledge of Cyberfortress Ecosystem and cybersecurity in general.
-
-Key capabilities:
-- Answer questions about the Cyberfortress infrastructure based on provided context
-- Provide general cybersecurity knowledge when asked about concepts, tools, or best practices
-- Support both English and Vietnamese languages - detect user's language and respond in the same language
-- Be helpful and educational while being technically accurate
-
-IMPORTANT: The context contains anonymized tokens (TKN-IP-xxx, HOST-xxx) for security. Treat them as actual IP addresses and device names in your response."""
-        },
-        {
-            "role": "user", 
-            "content": f"""Please answer the following question. Use the CONTEXT below if it's relevant to the question.
-
-IMPORTANT GUIDELINES:
-1. **Language**: Detect the question language and respond in the SAME language (English or Vietnamese)
-2. **Context-based questions**: If the question is about Cyberfortress infrastructure, use the CONTEXT below
-3. **General questions**: If asking about general cybersecurity concepts, tools, or best practices (not in context), answer using your general knowledge
-4. **Mixed approach**: Combine context information with general knowledge when appropriate
-5. **Accuracy**: Always be technically accurate. If unsure about Cyberfortress-specific details not in context, say "Not mentioned in the documentation"
-6. **Citations**: When using context, cite the anonymized tokens (e.g., TKN-IP-xxx, HOST-xxx) as if they were real values
-7. **Anonymized data**: Treat TKN-IP-xxx as IP addresses and HOST-xxx as device names in your response
-
-CONTEXT (Cyberfortress Infrastructure - Anonymized for Security):
-{context_text_anonymized}
-
-QUESTION:
-{query}
-
-Please provide a clear, detailed answer in the same language as the question."""
-        }
-    ]
-    
-    # Make API call with error handling
-    # Following https://platform.openai.com/docs/guides/error-codes
+    # Call API with error handling
     try:
-        # === API SAFETY: Estimate cost before calling ===
-        # Rough estimate: ~1 token per 4 characters for English, ~1 per 2 for Vietnamese
-        estimated_prompt_tokens = len(context_text_anonymized) // 3 + len(query) // 3
-        estimated_completion_tokens = 500  # Conservative estimate
-        estimated_cost = (estimated_prompt_tokens / 1_000_000) * INPUT_PRICE_PER_1M + \
-                        (estimated_completion_tokens / 1_000_000) * OUTPUT_PRICE_PER_1M
-        
-        if not usage_tracker.check_daily_cost(estimated_cost):
-            return "❌ Daily cost limit reached. Please try again tomorrow."
-        
-        response = client.chat.completions.create(
-            model=CHAT_MODEL,
-            messages=messages
-            # Note: gpt-5-mini only supports default temperature=1, custom values cause 400 error
+        answer_with_tokens, actual_cost = _call_openai_api(
+            system_instructions, 
+            user_input, 
+            context_text_anonymized, 
+            query
         )
         
-        # Extract token usage
-        usage = response.usage
-        actual_cost = 0.0
-        if usage:
-            print(f"\n💰 Token Usage:")
-            print(f"   - Prompt tokens: {usage.prompt_tokens}")
-            print(f"   - Completion tokens: {usage.completion_tokens}")
-            print(f"   - Total tokens: {usage.total_tokens}")
-            
-            # Calculate actual cost
-            input_cost = (usage.prompt_tokens / 1_000_000) * INPUT_PRICE_PER_1M
-            output_cost = (usage.completion_tokens / 1_000_000) * OUTPUT_PRICE_PER_1M
-            actual_cost = input_cost + output_cost
-            print(f"   - Estimated cost: ${actual_cost:.6f}")
-            
-            # Record the call
-            usage_tracker.record_call(actual_cost)
-            
-            # Show daily usage stats
-            stats = usage_tracker.get_stats()
-            print(f"\n📊 Today's Usage:")
-            print(f"   - Total cost: ${stats['daily_cost']:.4f} / ${MAX_DAILY_COST}")
-            print(f"   - Calls in last minute: {stats['calls_last_minute']} / {MAX_CALLS_PER_MINUTE}")
-            print(f"   - Cache entries: {stats['cache_size']}")
-        
-        answer_with_tokens = response.choices[0].message.content or "No answer generated"
-        
-        if DEBUG_ANONYMIZATION:
-            print("\n" + "="*80)
-            print("🤖 AI RESPONSE (with anonymized tokens):")
-            print("="*80)
-            print(answer_with_tokens)
-            print("\n" + "="*80)
-        
-        # === DATA PROTECTION: De-anonymize response ===
-        # Replace tokens with original values before showing to user
+        # De-anonymize response
         answer = deanonymize_text(answer_with_tokens)
         
         if DEBUG_ANONYMIZATION:
@@ -379,7 +432,7 @@ Please provide a clear, detailed answer in the same language as the question."""
         if sources:
             answer += f"\n\n📚 Sources: {', '.join(sorted(sources))}"
         
-        # === API SAFETY: Cache the response ===
+        # Cache the response
         usage_tracker.cache_response(cache_key, answer)
         
         return answer
