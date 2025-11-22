@@ -27,27 +27,27 @@ if __name__ == "__main__":
     # Check if .env file exists and has OPENAI_API_KEY
     env_file = project_root / '.env'
     if not env_file.exists():
-        print("❌ Error: .env file not found!")
+        print("Error: .env file not found!")
         print(f"   Please create a .env file in: {project_root}")
         print("   Add your OpenAI API key: OPENAI_API_KEY=your-key-here")
         sys.exit(1)
     
     if not os.getenv('OPENAI_API_KEY'):
-        print("❌ Error: OPENAI_API_KEY not found in .env file!")
+        print("Error: OPENAI_API_KEY not found in .env file!")
         print("   Please add your OpenAI API key to .env file")
         sys.exit(1)
     
     try:
         # Initialize database
-        print("🔧 Initializing database...")
+        print("Initializing database...")
         collection = initialize_database()
         
         # Run data ingestion (only when updates needed)
-        print("\n📥 Starting data ingestion...")
+        print("\nStarting data ingestion...")
         ingest_data(collection)
         
         print("\n" + "="*80)
-        print("🤖 Cyberfortress SOC RAG Assistant - GPT-5-mini Test")
+        print("Cyberfortress SOC RAG Assistant - GPT-5-mini Test")
         print("="*80)
         print("Example questions:")
         print("  - What is Suricata's management IP?")
@@ -60,18 +60,18 @@ if __name__ == "__main__":
         
         # Chat loop
         while True:
-            q = input("💬 Enter question (or 'exit' to quit): ").strip()
+            q = input("Enter question (or 'exit' to quit): ").strip()
             if q.lower() in ["exit", "quit", "q"]:
-                print("\n👋 Goodbye!")
+                print("\nGoodbye!")
                 break
             if not q:
                 continue
             
             try:
                 answer = ask(collection, q)
-                print(f"\n💡 Answer:\n{answer}\n")
+                print(f"\nAnswer:\n{answer}\n")
             except Exception as e:
-                print(f"\n❌ Error: {e}")
+                print(f"\nError: {e}")
                 import traceback
                 traceback.print_exc()
                 print()
