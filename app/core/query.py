@@ -21,7 +21,8 @@ from app.config import (
     MAX_CALLS_PER_MINUTE,
     MAX_DAILY_COST,
     CACHE_ENABLED,
-    CACHE_TTL
+    CACHE_TTL,
+    DEBUG_MODE
 )
 from app.core.anonymizer import DataAnonymizer
 from app.services.prompt_builder_service import PromptBuilder
@@ -203,21 +204,25 @@ def _search_and_build_context(collection, query: str, n_results: int, filter_met
     
     if results["documents"] and results["documents"][0]:
         num_found = len(results["documents"][0])
-        print(f"Search returned {num_found} results")
+        if DEBUG_MODE:
+            print(f"Search returned {num_found} results")
         
         if results["distances"] and results["distances"][0]:
             min_distance = min(results["distances"][0])
-            print(f"Closest match distance: {min_distance:.4f}")
+            if DEBUG_MODE:
+                print(f"Closest match distance: {min_distance:.4f}")
             # Relaxed threshold from 1.2 to 1.4 to be more inclusive
             has_relevant_results = min_distance < 1.4
         else:
             has_relevant_results = True
     else:
-        print("WARNING: Search returned NO results (collection might be empty)")
+        if DEBUG_MODE:
+            print("WARNING: Search returned NO results (collection might be empty)")
     
     if not has_relevant_results:
-        print(f"WARNING: No highly relevant context found (min distance: {min_distance})")
-        print(f"Attempting to answer using general cybersecurity knowledge...")
+        if DEBUG_MODE:
+            print(f"WARNING: No highly relevant context found (min distance: {min_distance})")
+            print(f"Attempting to answer using general cybersecurity knowledge...")
         return "No specific Cyberfortress documentation found for this query. Use general cybersecurity knowledge to answer.", set(), []
     
     # Build context from results
@@ -237,19 +242,20 @@ def _search_and_build_context(collection, query: str, n_results: int, filter_met
     context_text = "\n\n---\n\n".join(context_parts) if context_parts else "Limited relevant context found."
     
     # Debug info
-    if context_list:
-        print(f"\nFound {len(context_list)} relevant documents")
-        if sources:
-            print(f"Sources: {', '.join(sources)}")
-        
-        # Preview context
-        print(f"\nContext Preview (first 300 chars):")
-        print("-" * 60)
-        preview = context_text[:300] + "..." if len(context_text) > 300 else context_text
-        print(preview)
-        print("-" * 60)
-    else:
-        print(f"\nUsing general knowledge (no relevant context)")
+    if DEBUG_MODE:
+        if context_list:
+            print(f"\nFound {len(context_list)} relevant documents")
+            if sources:
+                print(f"Sources: {', '.join(sources)}")
+            
+            # Preview context
+            print(f"\nContext Preview (first 300 chars):")
+            print("-" * 60)
+            preview = context_text[:300] + "..." if len(context_text) > 300 else context_text
+            print(preview)
+            print("-" * 60)
+        else:
+            print(f"\nUsing general knowledge (no relevant context)")
     
     return context_text, sources, context_list
 
@@ -273,7 +279,8 @@ def _anonymize_context(context_text: str) -> str:
     
     ip_count = len(re.findall(r'TKN-IP-[a-f0-9]+', context_text_anonymized))
     host_count = len(re.findall(r'HOST-[a-f0-9]+', context_text_anonymized))
-    print(f"Anonymization: {ip_count} IPs, {host_count} hostnames protected")
+    if DEBUG_MODE:
+        print(f"Anonymization: {ip_count} IPs, {host_count} hostnames protected")
     
     if DEBUG_ANONYMIZATION:
         print("\n" + "="*80)
@@ -333,23 +340,27 @@ def _call_openai_api(system_instructions: str, user_input: str, context_text_ano
         output_tokens = getattr(usage, 'output_tokens', 0)
         total_tokens = getattr(usage, 'total_tokens', input_tokens + output_tokens)
         
-        print(f"\nToken Usage:")
-        print(f"   - Input tokens: {input_tokens}")
-        print(f"   - Output tokens: {output_tokens}")
-        print(f"   - Total tokens: {total_tokens}")
+        if DEBUG_MODE:
+            print(f"\nToken Usage:")
+            print(f"   - Input tokens: {input_tokens}")
+            print(f"   - Output tokens: {output_tokens}")
+            print(f"   - Total tokens: {total_tokens}")
         
         input_cost = (input_tokens / 1_000_000) * INPUT_PRICE_PER_1M
         output_cost = (output_tokens / 1_000_000) * OUTPUT_PRICE_PER_1M
         actual_cost = input_cost + output_cost
-        print(f"   - Estimated cost: ${actual_cost:.6f}")
+        
+        if DEBUG_MODE:
+            print(f"   - Estimated cost: ${actual_cost:.6f}")
         
         usage_tracker.record_call(actual_cost)
         
-        stats = usage_tracker.get_stats()
-        print(f"\nToday's Usage:")
-        print(f"   - Total cost: ${stats['daily_cost']:.4f} / ${MAX_DAILY_COST}")
-        print(f"   - Calls in last minute: {stats['calls_last_minute']} / {MAX_CALLS_PER_MINUTE}")
-        print(f"   - Cache entries: {stats['cache_size']}")
+        if DEBUG_MODE:
+            stats = usage_tracker.get_stats()
+            print(f"\nToday's Usage:")
+            print(f"   - Total cost: ${stats['daily_cost']:.4f} / ${MAX_DAILY_COST}")
+            print(f"   - Calls in last minute: {stats['calls_last_minute']} / {MAX_CALLS_PER_MINUTE}")
+            print(f"   - Cache entries: {stats['cache_size']}")
     
     answer_with_tokens = response.output_text or "No answer generated"
     

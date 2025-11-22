@@ -34,11 +34,14 @@ OPENAI_MAX_RETRIES = 2  # Default retry count for failed requests
 DEFAULT_RESULTS = 10  # Increased for better MITRE ATT&CK technique retrieval
 
 # Token pricing (per 1M tokens)
-INPUT_PRICE_PER_1M = 0.150
-OUTPUT_PRICE_PER_1M = 0.600
+INPUT_PRICE_PER_1M = 0.25
+OUTPUT_PRICE_PER_1M = 1
 
 # API Safety & Cost Control
 MAX_CALLS_PER_MINUTE = 20  # Rate limit: max API calls per minute
 MAX_DAILY_COST = 1.0  # Maximum spend per day in USD
 CACHE_ENABLED = True  # Enable response caching to reduce duplicate calls
 CACHE_TTL = 3600  # Cache time-to-live in seconds (1 hour)
+
+# Debug Mode
+DEBUG_MODE = True  # Set to False in production to reduce console output
