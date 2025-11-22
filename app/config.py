@@ -5,6 +5,10 @@ Following OpenAI Python SDK best practices
 import os
 from pathlib import Path
 
+# Debug Mode
+DEBUG_MODE = True  # Set to False in production to reduce console output
+
+
 # Get project root directory (assumes this file is in app/config.py)
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 
@@ -46,6 +50,3 @@ MAX_CALLS_PER_MINUTE = 20  # Rate limit: max API calls per minute
 MAX_DAILY_COST = 1.0  # Maximum spend per day in USD
 CACHE_ENABLED = True  # Enable response caching to reduce duplicate calls
 CACHE_TTL = 3600  # Cache time-to-live in seconds (1 hour)
-
-# Debug Mode
-DEBUG_MODE = True  # Set to False in production to reduce console output
