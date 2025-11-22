@@ -8,6 +8,10 @@ from pathlib import Path
 # Get project root directory (assumes this file is in app/config.py)
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 
+# Network settings
+PORT=8080
+HOST='0.0.0.0'
+
 # Directory paths (now absolute)
 ASSETS_DIR = str(PROJECT_ROOT / "assets")
 ECOSYSTEM_DIR = os.path.join(ASSETS_DIR, "ecosystem")
