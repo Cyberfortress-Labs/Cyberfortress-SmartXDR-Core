@@ -2,10 +2,13 @@
 AI/LLM API Routes - RAG Query Endpoint
 """
 from flask import Blueprint, request, jsonify
-from app.core.query import ask
 from app import get_collection
+from app.services.llm_service import LLMService
 
 ai_bp = Blueprint('ai', __name__)
+
+# Initialize LLM Service (singleton)
+llm_service = LLMService()
 
 
 @ai_bp.route('/ask', methods=['POST'])
@@ -77,25 +80,31 @@ def ask_llm():
                 'message': 'Database not initialized'
             }), 500
         
-        # Call RAG query
-        answer = ask(collection, query, n_results=n_results, filter_metadata=filter_metadata)
+        # Call LLM Service
+        result = llm_service.ask_rag(
+            collection=collection,
+            query=query,
+            n_results=n_results,
+            filter_metadata=filter_metadata
+        )
         
-        # Check if response is an error message
-        is_error = answer.startswith('ERROR:')
-        cached = 'Cache hit!' in answer or answer.startswith('Cache hit!')
-        
-        if is_error:
+        # Handle response
+        if result['status'] == 'error':
+            error_type = result.get('error_type', 'unknown')
+            status_code = 429 if error_type == 'rate_limit' else 500
+            
             return jsonify({
                 'status': 'error',
                 'query': query,
-                'message': answer
-            }), 429 if 'Rate limit' in answer or 'cost limit' in answer else 500
+                'message': result['error']
+            }), status_code
         
         return jsonify({
             'status': 'success',
             'query': query,
-            'answer': answer,
-            'cached': cached,
+            'answer': result['answer'],
+            'cached': result.get('cached', False),
+            'sources': result.get('sources', []),
             'n_results': n_results
         }), 200
         
@@ -121,47 +130,18 @@ def get_stats():
         {
             "status": "success",
             "stats": {
-                "rate_limit": {
-                    "calls_last_minute": 5,
-                    "max_calls_per_minute": 20
-                },
-                "cost": {
-                    "daily_cost": 0.0234,
-                    "max_daily_cost": 1.0,
-                    "reset_date": "2025-11-22"
-                },
-                "cache": {
-                    "cache_size": 12,
-                    "ttl": 3600,
-                    "enabled": true
-                }
+                "rate_limit": {...},
+                "cost": {...},
+                "cache": {...}
             }
         }
     """
     try:
-        from app.core.query import usage_tracker, response_cache
-        
-        usage_stats = usage_tracker.get_stats()
-        cache_stats = response_cache.get_stats()
+        stats = llm_service.get_stats()
         
         return jsonify({
             'status': 'success',
-            'stats': {
-                'rate_limit': {
-                    'calls_last_minute': usage_stats['calls_last_minute'],
-                    'max_calls_per_minute': usage_stats['max_calls_per_minute']
-                },
-                'cost': {
-                    'daily_cost': usage_stats['daily_cost'],
-                    'max_daily_cost': usage_stats['max_daily_cost'],
-                    'reset_date': usage_stats['cost_reset_date']
-                },
-                'cache': {
-                    'cache_size': cache_stats['cache_size'],
-                    'ttl': cache_stats['ttl'],
-                    'enabled': cache_stats['enabled']
-                }
-            }
+            'stats': stats
         }), 200
         
     except Exception as e:
@@ -183,9 +163,7 @@ def clear_cache():
         }
     """
     try:
-        from app.core.query import response_cache
-        
-        response_cache.clear()
+        llm_service.clear_cache()
         
         return jsonify({
             'status': 'success',

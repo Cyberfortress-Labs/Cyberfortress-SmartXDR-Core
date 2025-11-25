@@ -1,12 +1,27 @@
 """
-LLM Service - AI Analysis cho IntelOwl results
+LLM Service - AI Analysis for RAG queries and IntelOwl results
 """
 import os
+import re
 import json
+import hashlib
 from pathlib import Path
-from openai import OpenAI
+from typing import Optional, Dict, Any
+from openai import OpenAI, APIError, APIConnectionError, RateLimitError
 from dotenv import load_dotenv
-from app.config import CHAT_MODEL, OPENAI_TIMEOUT, OPENAI_MAX_RETRIES
+from app.config import (
+    CHAT_MODEL, 
+    DEFAULT_RESULTS,
+    INPUT_PRICE_PER_1M, 
+    OUTPUT_PRICE_PER_1M,
+    OPENAI_TIMEOUT, 
+    OPENAI_MAX_RETRIES,
+    MAX_CALLS_PER_MINUTE,
+    MAX_DAILY_COST,
+    CACHE_ENABLED,
+    CACHE_TTL,
+    DEBUG_MODE
+)
 
 # Import analyzer registry
 from app.services.analyzers import get_handler, get_all_handlers, get_registered_analyzer_names
@@ -20,9 +35,22 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent.resolve()
 class LLMService:
     """
     Service để gọi LLM APIs cho AI analysis
+    Bao gồm: RAG queries, IntelOwl analysis, etc.
     """
     
+    _instance = None
+    
+    def __new__(cls):
+        """Singleton pattern để reuse connections"""
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+    
     def __init__(self):
+        if self._initialized:
+            return
+            
         self.openai_client = OpenAI(
             api_key=os.environ.get("OPENAI_API_KEY"),
             timeout=OPENAI_TIMEOUT,
@@ -30,6 +58,272 @@ class LLMService:
         )
         self.chat_model = CHAT_MODEL
         self.prompts_dir = PROJECT_ROOT / "prompts"
+        
+        # Initialize utilities
+        from app.utils.rate_limit import APIUsageTracker
+        from app.utils.cache import ResponseCache
+        from app.core.anonymizer import DataAnonymizer
+        from app.services.prompt_builder_service import PromptBuilder
+        
+        self.usage_tracker = APIUsageTracker(
+            max_calls_per_minute=MAX_CALLS_PER_MINUTE,
+            max_daily_cost=MAX_DAILY_COST
+        )
+        self.response_cache = ResponseCache(ttl=CACHE_TTL, enabled=CACHE_ENABLED)
+        self.anonymizer = DataAnonymizer()
+        self.prompt_builder = PromptBuilder(prompt_file='rag_system.json')
+        
+        self._initialized = True
+    
+    # ==================== RAG Query Methods ====================
+    
+    def ask_rag(
+        self, 
+        collection, 
+        query: str, 
+        n_results: int = DEFAULT_RESULTS, 
+        filter_metadata: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        RAG Query - Search and answer questions using ChromaDB context
+        
+        Args:
+            collection: ChromaDB collection instance
+            query: User's question
+            n_results: Number of documents to retrieve
+            filter_metadata: Optional metadata filter
+        
+        Returns:
+            {
+                "status": "success" | "error",
+                "answer": "...",
+                "cached": bool,
+                "sources": [...],
+                "error": "..." (if error)
+            }
+        """
+        if DEBUG_MODE:
+            print(f"\n[LLM Service] Question: {query}")
+        
+        # Check rate limit
+        if not self.usage_tracker.check_rate_limit():
+            return {
+                "status": "error",
+                "error": "Rate limit exceeded. Please wait a moment before trying again.",
+                "error_type": "rate_limit"
+            }
+        
+        # Search and build context
+        context_text, sources, _ = self._search_and_build_context(
+            collection, query, n_results, filter_metadata
+        )
+        
+        # Check cache
+        context_hash = hashlib.md5(context_text.encode()).hexdigest()
+        cache_key = self.response_cache.get_cache_key(query, context_hash)
+        cached_response = self.response_cache.get(cache_key)
+        
+        if cached_response:
+            return {
+                "status": "success",
+                "answer": cached_response,
+                "cached": True,
+                "sources": list(sources)
+            }
+        
+        # Anonymize context
+        context_text_anonymized = self._anonymize_context(context_text)
+        
+        # Build API request
+        system_instructions = self.prompt_builder.build_rag_prompt()
+        user_input = self._build_rag_user_input(context_text_anonymized, query)
+        
+        # Call API
+        try:
+            answer_with_tokens, actual_cost = self._call_responses_api(
+                system_instructions, 
+                user_input
+            )
+            
+            # De-anonymize response
+            answer = self._deanonymize_text(answer_with_tokens)
+            
+            # Add source citations
+            if sources:
+                answer += f"\n\nSources: {', '.join(sorted(sources))}"
+            
+            # Cache the response
+            self.response_cache.set(cache_key, answer)
+            
+            return {
+                "status": "success",
+                "answer": answer,
+                "cached": False,
+                "sources": list(sources),
+                "cost": actual_cost
+            }
+            
+        except RateLimitError as e:
+            return {
+                "status": "error",
+                "error": f"OpenAI rate limit exceeded. Please try again later.",
+                "error_type": "rate_limit",
+                "request_id": getattr(e, 'request_id', None)
+            }
+            
+        except APIConnectionError as e:
+            return {
+                "status": "error",
+                "error": f"Connection error: {str(e)}",
+                "error_type": "connection"
+            }
+            
+        except APIError as e:
+            return {
+                "status": "error",
+                "error": f"OpenAI API error: {str(e)}",
+                "error_type": "api_error",
+                "request_id": getattr(e, 'request_id', None)
+            }
+    
+    def _search_and_build_context(
+        self, 
+        collection, 
+        query: str, 
+        n_results: int, 
+        filter_metadata: Optional[Dict[str, Any]] = None
+    ) -> tuple:
+        """Search collection and build context from results"""
+        effective_n_results = max(n_results, 5)
+        
+        search_params = {
+            "query_texts": [query],
+            "n_results": effective_n_results
+        }
+        
+        if filter_metadata:
+            search_params["where"] = filter_metadata
+        
+        results = collection.query(**search_params)
+        
+        # Check relevance
+        has_relevant_results = False
+        
+        if results["documents"] and results["documents"][0]:
+            if results["distances"] and results["distances"][0]:
+                min_distance = min(results["distances"][0])
+                has_relevant_results = min_distance < 1.4
+            else:
+                has_relevant_results = True
+        
+        if not has_relevant_results:
+            return "No specific Cyberfortress documentation found for this query.", set(), []
+        
+        # Build context from results
+        context_list = results["documents"][0]
+        metadatas_list = results["metadatas"][0] if results["metadatas"] else []
+        distances = results["distances"][0] if results["distances"] else []
+        
+        context_parts = []
+        sources = set()
+        
+        for idx, (doc, meta, dist) in enumerate(zip(context_list, metadatas_list, distances)):
+            if dist < 1.4:
+                context_parts.append(f"[Document {idx + 1}]\n{doc}")
+                if meta and "source" in meta:
+                    sources.add(meta["source"])
+        
+        context_text = "\n\n---\n\n".join(context_parts) if context_parts else "Limited relevant context found."
+        
+        return context_text, sources, context_list
+    
+    def _anonymize_context(self, text: str) -> str:
+        """Anonymize sensitive information in text"""
+        # Anonymize IP addresses
+        ip_pattern = r'\b(?:\d{1,3}\.){3}\d{1,3}\b'
+        text = re.sub(ip_pattern, lambda m: self.anonymizer.anonymize_ip(m.group(), method='token'), text)
+        
+        # Anonymize device IDs
+        device_pattern = r'\b([a-z]+-(?:[a-z]+-)?\d+)\b'
+        text = re.sub(device_pattern, lambda m: self.anonymizer.anonymize_hostname(m.group(1), method='token'), text)
+        
+        return text
+    
+    def _deanonymize_text(self, text: str) -> str:
+        """De-anonymize text by replacing tokens with original values"""
+        token_pattern = r'(TKN-IP-[a-f0-9]+|HOST-[a-f0-9]+|USER-[a-f0-9]+|MAC-[a-f0-9]+)'
+        
+        def replace_token(match):
+            token = match.group(1)
+            original = self.anonymizer.deanonymize(token)
+            return original if original else token
+        
+        return re.sub(token_pattern, replace_token, text)
+    
+    def _build_rag_user_input(self, context: str, query: str) -> str:
+        """Build user input for RAG query"""
+        user_prompt_template = self.prompt_builder.build_user_input_prompt()
+        return user_prompt_template.format(context=context, query=query)
+    
+    def _call_responses_api(self, system_instructions: str, user_input: str) -> tuple:
+        """
+        Call OpenAI Responses API (for RAG queries)
+        
+        Returns:
+            Tuple of (answer_text, actual_cost)
+        """
+        response = self.openai_client.responses.create(
+            model=self.chat_model,
+            instructions=system_instructions,
+            input=user_input
+        )
+        
+        # Extract token usage and cost
+        usage = response.usage
+        actual_cost = 0.0
+        
+        if usage:
+            input_tokens = getattr(usage, 'input_tokens', 0)
+            output_tokens = getattr(usage, 'output_tokens', 0)
+            
+            if DEBUG_MODE:
+                print(f"[LLM Service] Tokens: {input_tokens} in, {output_tokens} out")
+            
+            actual_cost = (input_tokens / 1_000_000) * INPUT_PRICE_PER_1M + \
+                         (output_tokens / 1_000_000) * OUTPUT_PRICE_PER_1M
+            
+            self.usage_tracker.record_call(actual_cost)
+        
+        answer = response.output_text or "No answer generated"
+        return answer, actual_cost
+    
+    # ==================== Stats & Cache Methods ====================
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """Get API usage statistics"""
+        usage_stats = self.usage_tracker.get_stats()
+        cache_stats = self.response_cache.get_stats()
+        
+        return {
+            "rate_limit": {
+                "calls_last_minute": usage_stats['calls_last_minute'],
+                "max_calls_per_minute": usage_stats['max_calls_per_minute']
+            },
+            "cost": {
+                "daily_cost": usage_stats['daily_cost'],
+                "max_daily_cost": usage_stats['max_daily_cost'],
+                "reset_date": usage_stats['cost_reset_date']
+            },
+            "cache": {
+                "cache_size": cache_stats['cache_size'],
+                "ttl": cache_stats['ttl'],
+                "enabled": cache_stats['enabled']
+            }
+        }
+    
+    def clear_cache(self):
+        """Clear response cache"""
+        self.response_cache.clear()
     
     def _load_prompt_config(self, prompt_file: str) -> dict:
         """
