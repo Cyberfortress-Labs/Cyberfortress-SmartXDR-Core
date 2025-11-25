@@ -31,10 +31,14 @@ if __name__ == '__main__':
     print("Cyberfortress SmartXDR Core - API Server")
     print("="*80)
     print("Endpoints:")
-    print("  - POST /api/ai/ask       - Ask LLM a question")
-    print("  - GET  /api/ai/stats     - Get usage statistics")
-    print("  - POST /api/ai/cache/clear - Clear response cache")
-    print("  - GET  /health           - Health check")
+    print("  AI/RAG:")
+    print("    - POST /api/ai/ask       - Ask LLM a question")
+    print("    - GET  /api/ai/stats     - Get usage statistics")
+    print("    - POST /api/ai/cache/clear - Clear response cache")
+    print("  IOC Enrichment:")
+    print("    - POST /api/enrich/explain_intelowl - Explain IntelOwl results with AI")
+    print("  Health:")
+    print("    - GET  /health           - Health check")
     print("="*80 + "\n")
     
     app.run(

@@ -25,6 +25,7 @@ def create_app():
     # Configuration
     app.config['JSON_SORT_KEYS'] = False
     app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
+    app.config['JSON_AS_ASCII'] = False  # Để tiếng Việt hiển thị đúng
     
     # Initialize ChromaDB
     global collection
@@ -32,7 +33,10 @@ def create_app():
     
     # Register blueprints
     from app.routes.ai import ai_bp
+    from app.routes.ioc import ioc_bp
+    
     app.register_blueprint(ai_bp, url_prefix='/api/ai')
+    app.register_blueprint(ioc_bp)
     
     @app.route('/health', methods=['GET'])
     def health():
