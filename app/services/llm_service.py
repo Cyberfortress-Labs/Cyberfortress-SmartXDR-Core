@@ -580,3 +580,320 @@ class LLMService:
                 recommendations.append(line.lstrip('-•0123456789. '))
         
         return recommendations[:5]  # Top 5
+    
+    # ==================== Alert Summarization Methods ====================
+    
+    def summarize_alerts(self, combined_alert_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Tóm tắt alerts từ ElastAlert2, Kibana Security và ML Predictions
+        
+        Args:
+            combined_alert_data: Output từ ElasticsearchService.get_combined_alerts_for_daily_report()
+        
+        Returns:
+            {
+                "status": "success" | "error",
+                "summary": "Tóm tắt bằng tiếng Việt...",
+                "severity_level": "CRITICAL/HIGH/MEDIUM/LOW",
+                "key_findings": [...],
+                "recommended_actions": [...],
+                "metadata": {...}
+            }
+        """
+        # Load prompt configuration
+        try:
+            prompt_config = self._load_prompt_config("instructions/alert_summary.json")
+        except FileNotFoundError as e:
+            if DEBUG_LLM:
+                print(f"[ERROR LLM] {str(e)}")
+            return {
+                "status": "error",
+                "error": "Không tìm thấy file prompt config",
+                "summary": "",
+                "severity_level": "UNKNOWN"
+            }
+        
+        # Extract data from combined_alert_data
+        metadata = combined_alert_data.get('metadata', {})
+        elastalert = combined_alert_data.get('elastalert', {})
+        kibana = combined_alert_data.get('kibana_alerts', {})
+        ml_predictions = combined_alert_data.get('ml_predictions', {})
+        statistics = combined_alert_data.get('statistics', {})
+        
+        # Check if there are any alerts worth summarizing
+        total_critical_alerts = metadata.get('total_alert_count', 0)
+        ml_info_count = ml_predictions.get('by_severity', {}).get('INFO', {}).get('count', 0)
+        
+        if total_critical_alerts == 0:
+            # No critical alerts - return a summary without LLM call
+            summary_text = (
+                f"**Tình hình bảo mật {metadata.get('time_range_hours', 24)}h qua: BÌNH THƯỜNG**\n\n"
+                f"Không phát hiện cảnh báo nghiêm trọng nào:\n"
+                f"- ElastAlert2 (Critical): 0\n"
+                f"- Kibana Security Alerts: 0\n"
+                f"- ML Classification EROR: 0\n"
+                f"- ML Classification WARN: 0\n"
+            )
+            
+            if ml_info_count > 0:
+                summary_text += f"- ML Classification INFO (bình thường): {ml_info_count} logs\n"
+            
+            summary_text += "\n**Kết luận:** Hệ thống hoạt động ổn định, không cần hành động đặc biệt."
+            
+            return {
+                "status": "success",
+                "summary": summary_text,
+                "severity_level": "LOW",
+                "key_findings": ["Không có cảnh báo nghiêm trọng trong khoảng thời gian này"],
+                "recommended_actions": ["Tiếp tục giám sát hệ thống theo lịch thường xuyên"],
+                "metadata": {
+                    "time_range_hours": metadata.get('time_range_hours', 24),
+                    "total_alerts": 0,
+                    "elastalert_count": 0,
+                    "kibana_count": 0,
+                    "ml_eror_count": 0,
+                    "ml_warn_count": 0,
+                    "ml_info_count": ml_info_count,
+                    "generated_at": metadata.get('generated_at', ''),
+                    "skipped_llm_call": True
+                }
+            }
+        
+        # Pre-compute compact stats (tối ưu token)
+        compact_stats = self._prepare_alert_stats_for_llm(
+            elastalert, kibana, ml_predictions, statistics, metadata
+        )
+        
+        if DEBUG_LLM:
+            print(f"[DEBUG LLM] Alert stats prepared: {len(json.dumps(compact_stats))} chars")
+        
+        # Build prompt
+        settings = prompt_config.get('settings', {})
+        max_tokens = settings.get('max_completion_tokens', 800)
+        
+        system_prompt = prompt_config.get('system_prompt', '')
+        user_prompt_template = prompt_config.get('user_prompt_template', '')
+        
+        user_prompt = user_prompt_template.format(
+            time_range=metadata.get('time_range_hours', 24),
+            total_alerts=metadata.get('total_alert_count', 0),
+            elastalert_count=metadata.get('elastalert_count', 0),
+            kibana_count=metadata.get('kibana_alert_count', 0),
+            ml_eror_count=metadata.get('ml_eror_count', 0),
+            ml_warn_count=metadata.get('ml_warn_count', 0),
+            elastalert_rules=compact_stats['elastalert_rules'],
+            severity_distribution=compact_stats['severity_distribution'],
+            ml_predictions_summary=compact_stats['ml_predictions_summary'],
+            top_detection_rules=compact_stats['top_detection_rules'],
+            top_attacked=compact_stats['top_attacked'],
+            top_attackers=compact_stats['top_attackers'],
+            event_distribution=compact_stats['event_distribution']
+        )
+        
+        # Call OpenAI
+        try:
+            response = self.openai_client.chat.completions.create(
+                model=self.chat_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                max_completion_tokens=max_tokens
+            )
+            
+            ai_text = response.choices[0].message.content or ""
+            
+            # Extract severity level from response
+            severity_level = self._extract_severity_from_summary(ai_text)
+            
+            # Extract recommended actions
+            actions = self._extract_recommendations(ai_text)
+            
+            # Calculate severity based on data if not found in response
+            if severity_level == "UNKNOWN":
+                severity_level = self._calculate_alert_severity(elastalert, kibana, ml_predictions)
+            
+            return {
+                "status": "success",
+                "summary": ai_text,
+                "severity_level": severity_level,
+                "key_findings": self._extract_key_findings_from_summary(ai_text),
+                "recommended_actions": actions,
+                "metadata": {
+                    "time_range_hours": metadata.get('time_range_hours', 24),
+                    "total_alerts": metadata.get('total_alert_count', 0),
+                    "elastalert_count": metadata.get('elastalert_count', 0),
+                    "kibana_count": metadata.get('kibana_alert_count', 0),
+                    "ml_eror_count": metadata.get('ml_eror_count', 0),
+                    "ml_warn_count": metadata.get('ml_warn_count', 0),
+                    "generated_at": metadata.get('generated_at', '')
+                }
+            }
+            
+        except Exception as e:
+            if DEBUG_LLM:
+                print(f"[ERROR LLM] Alert summarization failed: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "summary": "",
+                "severity_level": "UNKNOWN"
+            }
+    
+    def _prepare_alert_stats_for_llm(
+        self, 
+        elastalert: Dict, 
+        kibana: Dict,
+        ml_predictions: Dict,
+        statistics: Dict,
+        metadata: Dict
+    ) -> Dict[str, str]:
+        """
+        Chuẩn bị stats dạng compact text để giảm tokens
+        
+        Thay vì gửi raw JSON, convert thành bullet points ngắn gọn
+        """
+        # ElastAlert2 rules - chỉ top 5
+        ea_rules = elastalert.get('summary', {}).get('count_by_rule', {})
+        ea_rules_sorted = sorted(ea_rules.items(), key=lambda x: x[1], reverse=True)[:5]
+        elastalert_rules = "\n".join([
+            f"  - {rule}: {count} alerts" 
+            for rule, count in ea_rules_sorted
+        ]) if ea_rules_sorted else "  - Không có alert"
+        
+        # Kibana severity distribution
+        severity_dist = kibana.get('total_by_severity', {})
+        severity_distribution = ", ".join([
+            f"{sev}: {count}" 
+            for sev, count in severity_dist.items()
+        ]) if severity_dist else "Không có data"
+        
+        # ML Predictions Summary
+        ml_by_severity = ml_predictions.get('by_severity', {})
+        ml_eror = ml_by_severity.get('EROR', {})
+        ml_warn = ml_by_severity.get('WARNING', {})  # ES uses WARNING not WARN
+        ml_info = ml_by_severity.get('INFO', {})
+        
+        ml_predictions_summary = (
+            f"EROR (cần xử lý gấp): {ml_eror.get('count', 0)} logs (avg prob: {ml_eror.get('avg_probability', 0):.2f})\n"
+            f"  WARNING (cần xem xét): {ml_warn.get('count', 0)} logs (avg prob: {ml_warn.get('avg_probability', 0):.2f})\n"
+            f"  INFO (bình thường): {ml_info.get('count', 0)} logs"
+        )
+        
+        # Add sample EROR logs if available (top 3)
+        eror_samples = ml_eror.get('samples', [])[:3]
+        if eror_samples:
+            ml_predictions_summary += "\n  Top EROR logs:"
+            for s in eror_samples:
+                msg = s.get('message', '')[:100]
+                prob = s.get('probability', 0)
+                ml_predictions_summary += f"\n    - [{prob:.2f}] {msg}..."
+        
+        # Top detection rules - chỉ top 5
+        top_rules = kibana.get('summary', {}).get('top_rules', [])[:5]
+        top_detection_rules = "\n".join([
+            f"  - {r['rule']}: {r['count']} hits"
+            for r in top_rules
+        ]) if top_rules else "  - Không có detection rules"
+        
+        # Top attacked/attacker IPs - chỉ top 5
+        top_attacked_ips = statistics.get('top_attacked_ips', [])[:5]
+        top_attacked = ", ".join([
+            f"{ip['ip']} ({ip['hits']})"
+            for ip in top_attacked_ips
+        ]) if top_attacked_ips else "N/A"
+        
+        top_attacker_ips = statistics.get('top_attacker_ips', [])[:5]
+        top_attackers = ", ".join([
+            f"{ip['ip']} ({ip['hits']})"
+            for ip in top_attacker_ips
+        ]) if top_attacker_ips else "N/A"
+        
+        # Event distribution - chỉ top 5 categories
+        event_dist = statistics.get('event_distribution', {})
+        event_dist_sorted = sorted(event_dist.items(), key=lambda x: x[1], reverse=True)[:5]
+        event_distribution = ", ".join([
+            f"{cat}: {count}"
+            for cat, count in event_dist_sorted
+        ]) if event_dist_sorted else "N/A"
+        
+        return {
+            "elastalert_rules": elastalert_rules,
+            "severity_distribution": severity_distribution,
+            "ml_predictions_summary": ml_predictions_summary,
+            "top_detection_rules": top_detection_rules,
+            "top_attacked": top_attacked,
+            "top_attackers": top_attackers,
+            "event_distribution": event_distribution
+        }
+    
+    def _extract_severity_from_summary(self, ai_text: str) -> str:
+        """Extract severity level từ AI response"""
+        text_upper = ai_text.upper()
+        
+        # Tìm pattern "Mức độ nghiêm trọng: X" hoặc "Severity: X"
+        if "CRITICAL" in text_upper:
+            return "CRITICAL"
+        elif "HIGH" in text_upper or "CAO" in text_upper:
+            return "HIGH"
+        elif "MEDIUM" in text_upper or "TRUNG BÌNH" in text_upper:
+            return "MEDIUM"
+        elif "LOW" in text_upper or "THẤP" in text_upper:
+            return "LOW"
+        
+        return "UNKNOWN"
+    
+    def _extract_key_findings_from_summary(self, ai_text: str) -> list:
+        """Extract key findings từ AI summary"""
+        findings = []
+        lines = ai_text.split('\n')
+        
+        in_findings_section = False
+        for line in lines:
+            line = line.strip()
+            
+            # Detect section headers
+            if any(kw in line.lower() for kw in ['vấn đề', 'ưu tiên', 'finding', 'phát hiện']):
+                in_findings_section = True
+                continue
+            
+            if in_findings_section:
+                if line.startswith(('-', '•', '*')) or (line and line[0].isdigit()):
+                    finding = line.lstrip('-•*0123456789. ')
+                    if len(finding) > 10:  # Skip too short lines
+                        findings.append(finding)
+                elif line == '' or any(kw in line.lower() for kw in ['đề xuất', 'action', 'hành động']):
+                    in_findings_section = False
+        
+        return findings[:5]  # Top 5
+    
+    def _calculate_alert_severity(self, elastalert: Dict, kibana: Dict, ml_predictions: Optional[Dict] = None) -> str:
+        """Calculate severity based on alert data including ML predictions"""
+        ea_count = elastalert.get('total', 0)
+        severity_dist = kibana.get('total_by_severity', {})
+        
+        critical_count = severity_dist.get('critical', 0)
+        high_count = severity_dist.get('high', 0)
+        
+        # ML predictions - EROR is critical priority
+        ml_eror_count = 0
+        ml_warn_count = 0
+        if ml_predictions:
+            ml_by_severity = ml_predictions.get('by_severity', {})
+            ml_eror_count = ml_by_severity.get('EROR', {}).get('count', 0)
+            ml_warn_count = ml_by_severity.get('WARNING', {}).get('count', 0)  # ES uses WARNING
+        
+        # Logic: 
+        # - Any critical alert or ML EROR > 5 = CRITICAL
+        # - ElastAlert2 > 10 or High > 20 or ML EROR > 0 = HIGH
+        # - ElastAlert2 > 0 or High > 5 or ML WARNING > 10 = MEDIUM
+        # - Otherwise = LOW
+        
+        if critical_count > 0 or ml_eror_count > 5:
+            return "CRITICAL"
+        elif ea_count > 10 or high_count > 20 or ml_eror_count > 0:
+            return "HIGH"
+        elif ea_count > 0 or high_count > 5 or ml_warn_count > 10:
+            return "MEDIUM"
+        else:
+            return "LOW"

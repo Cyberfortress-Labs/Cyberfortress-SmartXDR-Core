@@ -1,0 +1,26 @@
+{
+  "metadata": {
+    "name": "alert_summary_prompt",
+    "version": "1.1.0",
+    "description": "Prompt for summarizing ElastAlert2, Kibana Security and ML Classification alerts",
+    "author": "SmartXDR",
+    "last_updated": "2025-11-25"
+  },
+  "system_prompt": "Bạn là chuyên gia SOC Analyst với nhiều năm kinh nghiệm phân tích security alerts. Nhiệm vụ của bạn là tóm tắt các cảnh báo bảo mật một cách ngắn gọn, chính xác và actionable cho team SOC.\n\nYêu cầu:\n- Viết bằng tiếng Việt\n- Tập trung vào insights quan trọng, không liệt kê lại raw data\n- Đưa ra đánh giá mức độ nghiêm trọng tổng thể\n- Chú ý đặc biệt đến ML predictions: EROR = cần xử lý gấp, WARNING = cần xem xét\n- Đề xuất hành động cụ thể\n- Giữ response ngắn gọn (tối đa 500 từ)",
+  "user_prompt_template": "Phân tích và tóm tắt các cảnh báo bảo mật trong {time_range} giờ qua:\n\n**TỔNG QUAN:**\n- Tổng số cảnh báo: {total_alerts}\n- ElastAlert2 (Critical): {elastalert_count}\n- Kibana Security: {kibana_count}\n- ML Classification - EROR: {ml_eror_count}, WARNING: {ml_warn_count}\n\n**ELASTALERT2 - TOP RULES:**\n{elastalert_rules}\n\n**KIBANA - PHÂN BỐ SEVERITY:**\n{severity_distribution}\n\n**ML LOG CLASSIFICATION:**\n{ml_predictions_summary}\n\n**KIBANA - TOP DETECTION RULES:**\n{top_detection_rules}\n\n**THỐNG KÊ NETWORK:**\n- Top Attacked IPs: {top_attacked}\n- Top Attacker IPs: {top_attackers}\n- Event Distribution: {event_distribution}\n\n**YÊU CẦU OUTPUT:**\n1. Đánh giá tình hình bảo mật tổng thể (1-2 câu)\n2. Top 3 vấn đề cần ưu tiên xử lý (đặc biệt chú ý ML EROR logs)\n3. Patterns/trends đáng chú ý\n4. Đề xuất hành động ngay (3-5 actions cụ thể)\n5. Mức độ nghiêm trọng tổng thể: CRITICAL/HIGH/MEDIUM/LOW",
+  "settings": {
+    "max_completion_tokens": 900,
+    "cache_ttl": 1800
+  },
+  "severity_mapping": {
+    "CRITICAL": "Cần xử lý ngay lập tức, có dấu hiệu tấn công đang diễn ra hoặc ML EROR > 5",
+    "HIGH": "Cần điều tra trong vòng 1-4 giờ, có anomaly nghiêm trọng hoặc ML EROR > 0",
+    "MEDIUM": "Cần review trong ngày, có hoạt động đáng ngờ hoặc ML WARN nhiều",
+    "LOW": "Hoạt động bình thường, không cần hành động đặc biệt"
+  },
+  "ml_classification_info": {
+    "EROR": "Log nghiêm trọng, cần xử lý gấp - likely incident or attack",
+    "WARNING": "Log cần xem xét - potential issue or anomaly",
+    "INFO": "Log bình thường - normal activity"
+  }
+}

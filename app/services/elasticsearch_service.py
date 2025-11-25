@@ -571,6 +571,267 @@ class ElasticsearchService:
             logger.error(f"Error getting aggregated statistics: {e}")
             raise
     
+    def get_ml_predictions(
+        self,
+        hours: int = 24,
+        min_probability: float = 0.5,
+        max_results: int = 1000,
+        indices: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Query ML prediction results from log classification pipeline
+        
+        ML Pipeline outputs logs with severity predictions:
+        - ml.prediction.predicted_value: INFO, WARNING, ERROR
+        - ml.prediction.prediction_probability: Confidence score (0-1)
+        
+        Severity Levels:
+        - INFO: Normal activity, no action needed
+        - WARNING: Needs review, potential issue
+        - ERROR: Requires immediate attention, likely incident
+        
+        Args:
+            hours: Time range to query (default: 24)
+            min_probability: Minimum prediction probability (default: 0.5)
+            max_results: Maximum results to return per severity
+            indices: Indices to query (default: logs-*, filebeat-*)
+            
+        Returns:
+            {
+                "total": int,
+                "by_severity": {
+                    "ERROR": {"count": int, "samples": [...]},
+                    "WARNING": {"count": int, "samples": [...]},
+                    "INFO": {"count": int, "samples": [...]}
+                },
+                "summary": {
+                    "time_range": str,
+                    "high_confidence_count": int,
+                    "severity_distribution": {...}
+                }
+            }
+        """
+        try:
+            if indices is None:
+                indices = ["logs-*", "filebeat-*", "winlogbeat-*"]
+            
+            end_time = datetime.utcnow()
+            start_time = end_time - timedelta(hours=hours)
+            
+            # Aggregation query - get distribution first
+            agg_query = {
+                "query": {
+                    "bool": {
+                        "must": [
+                            {"exists": {"field": "ml.prediction.predicted_value"}},
+                            {
+                                "range": {
+                                    "ml.prediction.prediction_probability": {
+                                        "gt": min_probability
+                                    }
+                                }
+                            },
+                            {
+                                "range": {
+                                    "@timestamp": {
+                                        "gte": start_time.isoformat(),
+                                        "lte": end_time.isoformat()
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                },
+                "size": 0,
+                "aggs": {
+                    "severity_distribution": {
+                        "terms": {
+                            "field": "ml.prediction.predicted_value",
+                            "size": 10
+                        },
+                        "aggs": {
+                            "avg_probability": {
+                                "avg": {"field": "ml.prediction.prediction_probability"}
+                            },
+                            "high_confidence": {
+                                "filter": {
+                                    "range": {
+                                        "ml.prediction.prediction_probability": {"gte": 0.8}
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "probability_ranges": {
+                        "range": {
+                            "field": "ml.prediction.prediction_probability",
+                            "ranges": [
+                                {"key": "low", "from": 0.5, "to": 0.7},
+                                {"key": "medium", "from": 0.7, "to": 0.9},
+                                {"key": "high", "from": 0.9, "to": 1.0}
+                            ]
+                        }
+                    }
+                }
+            }
+            
+            agg_response = self.client.search(
+                index=indices,
+                body=agg_query,
+                ignore_unavailable=True
+            )
+            
+            total_hits = agg_response['hits']['total']['value']
+            
+            # Parse severity distribution
+            severity_distribution = {}
+            high_confidence_count = 0
+            
+            for bucket in agg_response['aggregations']['severity_distribution']['buckets']:
+                severity = bucket['key']
+                count = bucket['doc_count']
+                avg_prob = bucket['avg_probability']['value']
+                high_conf = bucket['high_confidence']['doc_count']
+                
+                severity_distribution[severity] = {
+                    "count": count,
+                    "avg_probability": round(avg_prob, 3) if avg_prob else 0,
+                    "high_confidence_count": high_conf
+                }
+                high_confidence_count += high_conf
+            
+            # Get sample logs for each severity (prioritize ERROR and WARNING)
+            by_severity = {}
+            
+            for severity in ["ERROR", "WARNING", "INFO"]:
+                # Adjust sample size based on severity importance
+                sample_size = {
+                    "ERROR": min(100, max_results),    # All ERROR logs
+                    "WARNING": min(50, max_results // 2), # 50% WARNING
+                    "INFO": min(20, max_results // 5)  # 20% INFO
+                }.get(severity, 20)
+                
+                sample_query = {
+                    "query": {
+                        "bool": {
+                            "must": [
+                                {"term": {"ml.prediction.predicted_value": severity}},
+                                {
+                                    "range": {
+                                        "ml.prediction.prediction_probability": {
+                                            "gt": min_probability
+                                        }
+                                    }
+                                },
+                                {
+                                    "range": {
+                                        "@timestamp": {
+                                            "gte": start_time.isoformat(),
+                                            "lte": end_time.isoformat()
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "sort": [
+                        {"ml.prediction.prediction_probability": {"order": "desc"}},
+                        {"@timestamp": {"order": "desc"}}
+                    ],
+                    "size": sample_size,
+                    "_source": [
+                        "@timestamp",
+                        "message",
+                        "ml.prediction.predicted_value",
+                        "ml.prediction.prediction_probability",
+                        "source.ip",
+                        "destination.ip",
+                        "host.name",
+                        "event.category",
+                        "event.action",
+                        "log.level",
+                        "agent.type"
+                    ]
+                }
+                
+                sample_response = self.client.search(
+                    index=indices,
+                    body=sample_query,
+                    ignore_unavailable=True
+                )
+                
+                samples = []
+                for hit in sample_response['hits']['hits']:
+                    source = hit['_source']
+                    ml_pred = source.get('ml', {}).get('prediction', {})
+                    
+                    sample = {
+                        "timestamp": source.get('@timestamp'),
+                        "message": source.get('message', '')[:500],  # Truncate long messages
+                        "predicted_severity": ml_pred.get('predicted_value'),
+                        "probability": ml_pred.get('prediction_probability'),
+                        "source_ip": source.get('source', {}).get('ip'),
+                        "destination_ip": source.get('destination', {}).get('ip'),
+                        "host": source.get('host', {}).get('name'),
+                        "event_category": source.get('event', {}).get('category'),
+                        "event_action": source.get('event', {}).get('action'),
+                        "log_level": source.get('log', {}).get('level'),
+                        "agent_type": source.get('agent', {}).get('type')
+                    }
+                    samples.append(sample)
+                
+                by_severity[severity] = {
+                    "count": severity_distribution.get(severity, {}).get('count', 0),
+                    "avg_probability": severity_distribution.get(severity, {}).get('avg_probability', 0),
+                    "samples": samples
+                }
+            
+            result = {
+                "total": total_hits,
+                "by_severity": by_severity,
+                "summary": {
+                    "time_range": f"{start_time.isoformat()} to {end_time.isoformat()}",
+                    "min_probability_threshold": min_probability,
+                    "high_confidence_count": high_confidence_count,
+                    "severity_distribution": {
+                        sev: data.get('count', 0) 
+                        for sev, data in severity_distribution.items()
+                    },
+                    "probability_ranges": {
+                        b['key']: b['doc_count']
+                        for b in agg_response['aggregations']['probability_ranges']['buckets']
+                    }
+                }
+            }
+            
+            logger.info(
+                f"Retrieved ML predictions: {total_hits} total "
+                f"ERROR: {by_severity.get('ERROR', {}).get('count', 0)}, "
+                f"WARNING: {by_severity.get('WARNING', {}).get('count', 0)}, "
+                f"INFO: {by_severity.get('INFO', {}).get('count', 0)})"
+            )
+            
+            return result
+            
+        except NotFoundError:
+            logger.warning("ML prediction indices not found")
+            return {
+                "total": 0,
+                "by_severity": {},
+                "summary": {
+                    "time_range": f"Last {hours} hours",
+                    "high_confidence_count": 0,
+                    "severity_distribution": {}
+                }
+            }
+        except Exception as e:
+            logger.error(f"Error querying ML predictions: {e}")
+            return {
+                "total": 0,
+                "by_severity": {},
+                "summary": {"error": str(e)}
+            }
+    
     def get_combined_alerts_for_daily_report(
         self,
         hours: int = 24
@@ -581,12 +842,14 @@ class ElasticsearchService:
         Combines:
         1. ElastAlert2 critical alerts (100%)
         2. Kibana security alerts (smart sampling)
-        3. Aggregated statistics (context)
+        3. ML log classification predictions
+        4. Aggregated statistics (context)
         
         Returns:
             {
                 "elastalert": {...},
                 "kibana_alerts": {...},
+                "ml_predictions": {...},
                 "statistics": {...},
                 "metadata": {
                     "generated_at": str,
@@ -600,24 +863,35 @@ class ElasticsearchService:
         # Query all data sources
         elastalert = self.get_elastalert_alerts(hours=hours)
         kibana_alerts = self.get_kibana_security_alerts(hours=hours)
+        ml_predictions = self.get_ml_predictions(hours=hours)
         statistics = self.get_aggregated_statistics(hours=hours)
+        
+        # Calculate totals
+        kibana_total = sum(kibana_alerts['total_by_severity'].values())
+        ml_eror_count = ml_predictions.get('by_severity', {}).get('ERROR', {}).get('count', 0)
+        ml_warn_count = ml_predictions.get('by_severity', {}).get('WARNING', {}).get('count', 0)
         
         total_alerts = (
             elastalert['total'] +
-            sum(kibana_alerts['total_by_severity'].values())
+            kibana_total +
+            ml_eror_count + ml_warn_count  # Only count ERROR and WARNING from ML
         )
         
         result = {
             "elastalert": elastalert,
             "kibana_alerts": kibana_alerts,
+            "ml_predictions": ml_predictions,
             "statistics": statistics,
             "metadata": {
                 "generated_at": datetime.utcnow().isoformat(),
                 "time_range_hours": hours,
                 "total_alert_count": total_alerts,
                 "elastalert_count": elastalert['total'],
-                "kibana_alert_count": sum(kibana_alerts['total_by_severity'].values()),
-                "sampled_alert_count": len(kibana_alerts['sampled_alerts'])
+                "kibana_alert_count": kibana_total,
+                "sampled_alert_count": len(kibana_alerts['sampled_alerts']),
+                "ml_prediction_count": ml_predictions.get('total', 0),
+                "ml_eror_count": ml_eror_count,
+                "ml_warn_count": ml_warn_count
             }
         }
         
@@ -625,7 +899,8 @@ class ElasticsearchService:
             f"Combined report data ready: "
             f"{total_alerts} total alerts → "
             f"{elastalert['total']} ElastAlert2 + "
-            f"{len(kibana_alerts['sampled_alerts'])} Kibana (sampled)"
+            f"{len(kibana_alerts['sampled_alerts'])} Kibana (sampled) + "
+            f"{ml_eror_count} ML ERROR + {ml_warn_count} ML WARNING"
         )
         
         return result

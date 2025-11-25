@@ -1,0 +1,16 @@
+{
+  "key_findings": [],
+  "metadata": {
+    "elastalert_count": 0,
+    "generated_at": "2025-11-25T09:56:15.512901",
+    "kibana_count": 0,
+    "ml_eror_count": 26786,
+    "ml_warn_count": 103537,
+    "time_range_hours": 240,
+    "total_alerts": 130323
+  },
+  "recommended_actions": [],
+  "severity_level": "MEDIUM",
+  "status": "success",
+  "summary": ""
+}
