@@ -30,10 +30,10 @@ class ResponseCache:
             context_hash: Hash of the context used
             
         Returns:
-            MD5 hash as cache key
+            SHA256 hash as cache key
         """
         combined = f"{query}:{context_hash}"
-        return hashlib.md5(combined.encode()).hexdigest()
+        return hashlib.sha256(combined.encode()).hexdigest()
     
     def get(self, cache_key: str) -> Optional[str]:
         """

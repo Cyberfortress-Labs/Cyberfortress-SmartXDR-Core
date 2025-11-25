@@ -332,7 +332,7 @@ def ask(collection, query: str, n_results: int = DEFAULT_RESULTS, filter_metadat
     context_text, sources, context_list = _search_and_build_context(collection, query, n_results, filter_metadata)
     
     # Check cache
-    context_hash = hashlib.md5(context_text.encode()).hexdigest()
+    context_hash = hashlib.sha256(context_text.encode()).hexdigest()
     cache_key = response_cache.get_cache_key(query, context_hash)
     cached_response = response_cache.get(cache_key)
     

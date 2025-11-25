@@ -4,17 +4,23 @@ Following OpenAI Python SDK best practices
 """
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 
-# Debug Mode
-DEBUG_MODE = True  # Set to False in production to reduce console output
+# Load environment variables
+load_dotenv()
+
+# Debug Mode - Configurable via .env
+DEBUG_MODE = os.environ.get('DEBUG', 'false').lower() in ('true', '1', 'yes')
+DEBUG_LLM = os.environ.get('DEBUG_LLM', 'false').lower() in ('true', '1', 'yes')
+DEBUG_ANONYMIZATION = os.environ.get('DEBUG_ANONYMIZATION', 'false').lower() in ('true', '1', 'yes')
 
 
 # Get project root directory (assumes this file is in app/config.py)
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 
 # Network settings
-PORT=8080
-HOST='0.0.0.0'
+PORT = 8080
+HOST = '0.0.0.0'
 
 # Directory paths (now absolute)
 ASSETS_DIR = str(PROJECT_ROOT / "assets")

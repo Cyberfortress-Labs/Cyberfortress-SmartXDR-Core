@@ -20,7 +20,9 @@ from app.config import (
     MAX_DAILY_COST,
     CACHE_ENABLED,
     CACHE_TTL,
-    DEBUG_MODE
+    DEBUG_MODE,
+    DEBUG_LLM,
+    DEBUG_ANONYMIZATION
 )
 
 # Import analyzer registry
@@ -119,7 +121,7 @@ class LLMService:
         )
         
         # Check cache
-        context_hash = hashlib.md5(context_text.encode()).hexdigest()
+        context_hash = hashlib.sha256(context_text.encode()).hexdigest()
         cache_key = self.response_cache.get_cache_key(query, context_hash)
         cached_response = self.response_cache.get(cache_key)
         
@@ -363,7 +365,8 @@ class LLMService:
         try:
             prompt_config = self._load_prompt_config("instructions/ioc_enrichment.json")
         except FileNotFoundError as e:
-            print(f"[ERROR LLM] {str(e)}")
+            if DEBUG_LLM:
+                print(f"[ERROR LLM] {str(e)}")
             return {
                 "summary": f"Lỗi: Không tìm thấy file prompt config",
                 "risk_level": "UNKNOWN",
@@ -396,8 +399,9 @@ class LLMService:
         total_analyzers = len(analyzer_reports)
         successful_count = len(successful_analyzers)
         
-        print(f"[DEBUG LLM] Total: {total_analyzers}, Success: {successful_count}, Critical findings: {len(critical_findings)}")
-        print(f"[DEBUG LLM] Pre-computed stats: {stats}")
+        if DEBUG_LLM:
+            print(f"[DEBUG LLM] Total: {total_analyzers}, Success: {successful_count}, Critical findings: {len(critical_findings)}")
+            print(f"[DEBUG LLM] Pre-computed stats: {stats}")
         
         # Build prompt from template
         user_prompt_template = prompt_config.get('user_prompt_template', '')
@@ -439,7 +443,8 @@ class LLMService:
             }
             
         except Exception as e:
-            print(f"[ERROR LLM] {str(e)}")
+            if DEBUG_LLM:
+                print(f"[ERROR LLM] {str(e)}")
             return {
                 "summary": f"Lỗi khi phân tích: {str(e)}",
                 "risk_level": "UNKNOWN",
