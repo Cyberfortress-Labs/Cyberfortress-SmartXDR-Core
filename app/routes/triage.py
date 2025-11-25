@@ -5,6 +5,14 @@ from flask import Blueprint, request, jsonify
 from app.services.llm_service import LLMService
 from app.services.elasticsearch_service import ElasticsearchService
 
+# Try to import source config
+try:
+    from app.sources_config import get_source_config, reload_source_config
+    SOURCE_CONFIG = get_source_config()
+except ImportError:
+    SOURCE_CONFIG = None
+    reload_source_config = None
+
 triage_bp = Blueprint('triage', __name__)
 
 # Initialize services (singleton)
@@ -90,36 +98,51 @@ def get_raw_alerts():
     Get raw alert data without AI summarization
     
     Query Params:
-        - hours: Time range in hours (default: 24)
-        - source: "elastalert", "kibana", or "all" (default: "all")
+        - hours: Time range in hours (default: 24, max: 240)
+        - source: Data source to query:
+            * "all" - Combined data from all sources (default)
+            * "elastalert" - ElastAlert2 critical alerts
+            * "kibana" - Kibana Security alerts
+            * "ml" - ML predictions only
+            * Log sources from config: "pfsense", "suricata", "zeek", etc.
+            * Custom: Any string will be tried as {source}-* pattern
     
     Response:
         {
             "status": "success",
-            "data": {...},
-            "metadata": {...}
+            "source": "suricata",
+            "hours": 24,
+            "data": {...}
         }
     """
     try:
         hours = request.args.get('hours', 24, type=int)
         source = request.args.get('source', 'all').lower()
         
-        # Validate
+        # Validate hours
         if hours < 1:
             hours = 24
         if hours > 240:
             hours = 240
         
-        if source not in ['elastalert', 'kibana', 'all']:
-            source = 'all'
+        # Check if source is aggregated type
+        aggregated_sources = ['all', 'elastalert', 'kibana', 'ml']
         
         # Fetch data based on source
-        if source == 'elastalert':
+        if source == 'all':
+            data = es_service.get_combined_alerts_for_daily_report(hours=hours)
+        elif source == 'elastalert':
             data = es_service.get_elastalert_alerts(hours=hours)
         elif source == 'kibana':
             data = es_service.get_kibana_security_alerts(hours=hours)
-        else:  # all
-            data = es_service.get_combined_alerts_for_daily_report(hours=hours)
+        elif source == 'ml':
+            data = es_service.get_ml_predictions(hours=hours)
+        else:
+            # Use the new method that reads from config
+            data = es_service.get_logs_by_source_name(
+                source_name=source,
+                hours=hours
+            )
         
         if data.get('status') == 'error':
             return jsonify({
@@ -138,6 +161,60 @@ def get_raw_alerts():
         return jsonify({
             'status': 'error',
             'message': f'Internal server error: {str(e)}'
+        }), 500
+
+
+@triage_bp.route('/sources', methods=['GET'])
+def list_available_sources():
+    """
+    List all available log sources from configuration
+    
+    Query Params:
+        - reload: Set to "true" to reload config from file
+    
+    Response:
+        {
+            "status": "success",
+            "sources": {
+                "aggregated": ["all", "elastalert", "kibana", "ml"],
+                "log_sources": {
+                    "suricata": "suricata-*",
+                    "pfsense": "*pfsense*",
+                    ...
+                },
+                "categories": {...}
+            },
+            "usage": "..."
+        }
+    """
+    try:
+        # Check if reload requested
+        should_reload = request.args.get('reload', 'false').lower() == 'true'
+        
+        if should_reload and reload_source_config:
+            reload_source_config()
+        
+        # Get sources from config or service
+        if SOURCE_CONFIG:
+            sources = SOURCE_CONFIG.to_dict()
+        else:
+            sources = es_service.get_available_sources()
+        
+        return jsonify({
+            'status': 'success',
+            'sources': sources,
+            'usage': {
+                'aggregated': 'GET /api/triage/alerts/raw?source=elastalert&hours=24',
+                'log_source': 'GET /api/triage/alerts/raw?source=suricata&hours=24',
+                'custom': 'GET /api/triage/alerts/raw?source=custom-index&hours=24',
+                'reload_config': 'GET /api/triage/sources?reload=true'
+            }
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'Error listing sources: {str(e)}'
         }), 500
 
 

@@ -26,6 +26,15 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
+# Import source config loader
+try:
+    from app.sources_config import get_source_config
+    SOURCE_CONFIG = get_source_config()
+except ImportError:
+    # Fallback if config module not available
+    SOURCE_CONFIG = None
+    logger.warning("Source config module not available, using fallback patterns")
+
 
 class ElasticsearchService:
     """Service for querying alerts from Elasticsearch indices"""
@@ -485,8 +494,8 @@ class ElasticsearchService:
                     "logs-*",
                     "filebeat-*",
                     "packetbeat-*",
-                    "suricata-*",
-                    "zeek-*"
+                    "*suricata*",
+                    "*zeek-*"
                 ]
             
             end_time = datetime.utcnow()
@@ -904,6 +913,307 @@ class ElasticsearchService:
         )
         
         return result
+    
+    def get_logs_by_source(
+        self,
+        hours: int = 24,
+        index_pattern: str = "logs-*",
+        source_name: str = "unknown",
+        max_results: int = 500
+    ) -> Dict[str, Any]:
+        """
+        Query logs from a specific source/index pattern
+        
+        Args:
+            hours: Time range to query
+            index_pattern: Elasticsearch index pattern (e.g., "suricata-*", "pfsense-*")
+            source_name: Human-readable source name for response
+            max_results: Maximum number of log entries to return
+            
+        Returns:
+            {
+                "total": int,
+                "logs": List[Dict],
+                "summary": {
+                    "source": str,
+                    "time_range": str,
+                    "top_event_types": [...],
+                    "severity_distribution": {...}
+                }
+            }
+        """
+        try:
+            from datetime import datetime, timedelta
+            
+            end_time = datetime.utcnow()
+            start_time = end_time - timedelta(hours=hours)
+            
+            # Aggregation query first
+            agg_query = {
+                "query": {
+                    "range": {
+                        "@timestamp": {
+                            "gte": start_time.isoformat(),
+                            "lte": end_time.isoformat()
+                        }
+                    }
+                },
+                "size": 0,
+                "aggs": {
+                    "event_types": {
+                        "terms": {
+                            "field": "event.category",
+                            "size": 10
+                        }
+                    },
+                    "severity": {
+                        "terms": {
+                            "field": "log.level",
+                            "size": 10
+                        }
+                    },
+                    "event_actions": {
+                        "terms": {
+                            "field": "event.action",
+                            "size": 10
+                        }
+                    },
+                    "hosts": {
+                        "terms": {
+                            "field": "host.name",
+                            "size": 10
+                        }
+                    }
+                }
+            }
+            
+            agg_response = self.client.search(
+                index=index_pattern,
+                body=agg_query,
+                ignore_unavailable=True,
+                track_total_hits=True  # Get accurate total count
+            )
+            
+            # Handle total hits (can be int or dict with 'value')
+            total_hits_raw = agg_response['hits']['total']
+            if isinstance(total_hits_raw, dict):
+                total_hits = total_hits_raw['value']
+            else:
+                total_hits = total_hits_raw
+            
+            # Get sample logs
+            logs_query = {
+                "query": {
+                    "range": {
+                        "@timestamp": {
+                            "gte": start_time.isoformat(),
+                            "lte": end_time.isoformat()
+                        }
+                    }
+                },
+                "sort": [{"@timestamp": {"order": "desc"}}],
+                "size": max_results,
+                "_source": [
+                    "@timestamp", "message", "event.category", "event.action",
+                    "source.ip", "destination.ip", "host.name", "log.level",
+                    "rule.name", "rule.description", "network.protocol",
+                    "url.path", "http.response.status_code", "user.name",
+                    "ml.prediction.predicted_value", "ml.prediction.prediction_probability"
+                ]
+            }
+            
+            logs_response = self.client.search(
+                index=index_pattern,
+                body=logs_query,
+                ignore_unavailable=True
+            )
+            
+            # Parse logs
+            logs = []
+            for hit in logs_response['hits']['hits']:
+                source = hit['_source']
+                ml_pred = source.get('ml', {}).get('prediction', {})
+                
+                log_entry = {
+                    "timestamp": source.get('@timestamp'),
+                    "message": source.get('message', '')[:500] if source.get('message') else None,
+                    "event_category": source.get('event', {}).get('category'),
+                    "event_action": source.get('event', {}).get('action'),
+                    "source_ip": source.get('source', {}).get('ip'),
+                    "destination_ip": source.get('destination', {}).get('ip'),
+                    "host": source.get('host', {}).get('name'),
+                    "log_level": source.get('log', {}).get('level'),
+                    "rule_name": source.get('rule', {}).get('name'),
+                    "protocol": source.get('network', {}).get('protocol'),
+                    "user": source.get('user', {}).get('name'),
+                    "ml_prediction": ml_pred.get('predicted_value'),
+                    "ml_probability": ml_pred.get('prediction_probability')
+                }
+                logs.append(log_entry)
+            
+            # Parse aggregations (handle missing aggregations gracefully)
+            aggregations = agg_response.get('aggregations', {})
+            
+            result = {
+                "total": total_hits,
+                "returned": len(logs),
+                "logs": logs,
+                "summary": {
+                    "source": source_name,
+                    "index_pattern": index_pattern,
+                    "time_range": f"{start_time.isoformat()} to {end_time.isoformat()}",
+                    "top_event_types": [
+                        {"type": b['key'], "count": b['doc_count']}
+                        for b in aggregations.get('event_types', {}).get('buckets', [])
+                    ],
+                    "top_actions": [
+                        {"action": b['key'], "count": b['doc_count']}
+                        for b in aggregations.get('event_actions', {}).get('buckets', [])
+                    ],
+                    "severity_distribution": {
+                        b['key']: b['doc_count']
+                        for b in aggregations.get('severity', {}).get('buckets', [])
+                    },
+                    "top_hosts": [
+                        {"host": b['key'], "count": b['doc_count']}
+                        for b in aggregations.get('hosts', {}).get('buckets', [])
+                    ]
+                }
+            }
+            
+            logger.info(f"Retrieved {len(logs)} logs from {source_name} ({index_pattern})")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error querying logs from {source_name}: {e}")
+            return {
+                "total": 0,
+                "logs": [],
+                "summary": {
+                    "source": source_name,
+                    "error": str(e)
+                },
+                "status": "error",
+                "error": str(e)
+            }
+    
+    def get_available_sources(self) -> Dict[str, Any]:
+        """
+        Get list of available log sources from configuration
+        
+        Returns:
+            {
+                "aggregated": ["all", "elastalert", "kibana", "ml"],
+                "log_sources": {
+                    "suricata": "suricata-*",
+                    "pfsense": "*pfsense*",
+                    ...
+                },
+                "categories": {...}
+            }
+        """
+        if SOURCE_CONFIG:
+            return SOURCE_CONFIG.to_dict()
+        
+        # Fallback if config not available
+        return {
+            "aggregated": ["all", "elastalert", "kibana", "ml"],
+            "log_sources": {
+                "pfsense": "*pfsense*",
+                "suricata": "*suricata*",
+                "zeek": "*zeek*",
+                "windows": "*winlogbeat*",
+                "wazuh": "wazuh-alerts-*",
+                "filebeat": "filebeat-*"
+            },
+            "categories": {}
+        }
+    
+    def get_index_pattern_for_source(self, source_name: str) -> Optional[str]:
+        """
+        Get Elasticsearch index pattern for a given source name
+        
+        Uses configuration from sources.json if available
+        
+        Args:
+            source_name: Name of the log source
+            
+        Returns:
+            Index pattern string or None if not found
+        """
+        source_name = source_name.lower()
+        
+        # Try config first
+        if SOURCE_CONFIG:
+            pattern = SOURCE_CONFIG.get_index_pattern(source_name)
+            if pattern:
+                return pattern
+        
+        # Fallback patterns
+        fallback_patterns = {
+            "pfsense": "*pfsense*",
+            "suricata": "*suricata*",
+            "zeek": "*zeek*",
+            "windows": "*winlogbeat*",
+            "winlogbeat": "*winlogbeat*",
+            "modsecurity": "*modsecurity*",
+            "wazuh": "wazuh-alerts-*",
+            "syslog": "*syslog*",
+            "filebeat": "filebeat-*",
+            "packetbeat": "packetbeat-*",
+            "nginx": "*nginx*",
+            "apache": "*apache*"
+        }
+        
+        if source_name in fallback_patterns:
+            return fallback_patterns[source_name]
+        
+        # Default pattern: source-*
+        return f"{source_name}-*"
+    
+    def get_logs_by_source_name(
+        self,
+        source_name: str,
+        hours: int = 24,
+        max_results: int = 500
+    ) -> Dict[str, Any]:
+        """
+        Query logs by source name (uses config to get index pattern)
+        
+        Args:
+            source_name: Name of the log source (e.g., "suricata", "pfsense")
+            hours: Time range to query
+            max_results: Maximum results to return
+            
+        Returns:
+            Same format as get_logs_by_source()
+        """
+        index_pattern = self.get_index_pattern_for_source(source_name)
+        
+        if not index_pattern:
+            return {
+                "total": 0,
+                "logs": [],
+                "summary": {
+                    "source": source_name,
+                    "error": f"Unknown source: {source_name}"
+                },
+                "status": "error"
+            }
+        
+        return self.get_logs_by_source(
+            hours=hours,
+            index_pattern=index_pattern,
+            source_name=source_name,
+            max_results=max_results
+        )
+    
+    def health_check(self) -> bool:
+        """Check Elasticsearch connection health"""
+        try:
+            return self.client.ping()
+        except Exception:
+            return False
     
     def close(self):
         """Close Elasticsearch client connection"""

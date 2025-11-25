@@ -156,27 +156,113 @@ Get raw alert data without AI summarization.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| hours | int | 24 | Time range (1-168 hours) |
-| source | string | all | "elastalert", "kibana", or "all" |
+| hours | int | 24 | Time range (1-240 hours) |
+| source | string | all | Data source to query (see /sources endpoint) |
+
+**Available Sources:**
+- **Aggregated:** `all`, `elastalert`, `kibana`, `ml`
+- **Log Sources:** `pfsense`, `suricata`, `zeek`, `windows`, `modsecurity`, `wazuh`, `syslog`, `filebeat`, `packetbeat`, `nginx`, `apache`
+- **Custom:** Any string will be tried as `{source}-*` pattern
 
 **Example:**
 ```
-GET /api/triage/alerts/raw?hours=24&source=elastalert
+GET /api/triage/alerts/raw?hours=24&source=suricata
 ```
 
 **Response:**
 ```json
 {
     "status": "success",
-    "source": "elastalert",
+    "source": "suricata",
     "hours": 24,
     "data": {
-        "total": 30,
-        "alerts": [...],
-        "summary": {...}
+        "total": 500,
+        "returned": 500,
+        "logs": [
+            {
+                "timestamp": "2024-01-15T10:30:00Z",
+                "message": "ET SCAN Nmap...",
+                "event_category": "intrusion_detection",
+                "source_ip": "192.168.1.100",
+                "destination_ip": "10.0.0.5",
+                "rule_name": "ET SCAN Nmap TCP",
+                "ml_prediction": "WARN",
+                "ml_probability": 0.85
+            }
+        ],
+        "summary": {
+            "source": "suricata",
+            "index_pattern": "*suricata*",
+            "time_range": "...",
+            "top_event_types": [...],
+            "severity_distribution": {...}
+        }
     }
 }
 ```
+
+### GET /api/triage/sources
+List all available log sources from configuration.
+
+This endpoint reads from `app/config/sources.json` which can be modified to add new sources without code changes.
+
+**Query Params:**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| reload | string | false | Set to "true" to reload config from file |
+
+**Example:**
+```
+GET /api/triage/sources
+GET /api/triage/sources?reload=true
+```
+
+**Response:**
+```json
+{
+    "status": "success",
+    "sources": {
+        "aggregated": ["all", "elastalert", "kibana", "ml"],
+        "log_sources": {
+            "pfsense": "*pfsense*",
+            "suricata": "*suricata*",
+            "zeek": "*zeek*",
+            "windows": "*winlogbeat*",
+            "modsecurity": "*modsecurity*",
+            "wazuh": "wazuh-alerts-*"
+        },
+        "categories": {
+            "firewall": "Network firewall logs",
+            "ids": "Intrusion Detection System alerts",
+            "network": "Network monitoring and analysis"
+        }
+    },
+    "usage": {
+        "aggregated": "GET /api/triage/alerts/raw?source=elastalert&hours=24",
+        "log_source": "GET /api/triage/alerts/raw?source=suricata&hours=24",
+        "custom": "GET /api/triage/alerts/raw?source=custom-index&hours=24",
+        "reload_config": "GET /api/triage/sources?reload=true"
+    }
+}
+```
+
+**Adding New Sources:**
+
+Edit `app/config/sources.json`:
+```json
+{
+    "log_sources": {
+        "my_custom_source": {
+            "index_pattern": "custom-logs-*",
+            "description": "My custom log source",
+            "category": "custom"
+        }
+    }
+}
+```
+
+Then reload: `GET /api/triage/sources?reload=true`
 
 ### GET /api/triage/alerts/statistics
 Get aggregated statistics from Elasticsearch logs.

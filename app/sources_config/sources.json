@@ -1,0 +1,110 @@
+{
+  "_description": "Log source definitions - Map source names to Elasticsearch index patterns",
+  "_usage": "Add new sources by defining: source_name -> index_pattern",
+  "_updated": "2025-11-25",
+  
+  "aggregated_sources": {
+    "_comment": "Special aggregated data sources (handled by specific methods)",
+    "all": {
+      "description": "Combined data from all sources",
+      "method": "get_combined_alerts_for_daily_report"
+    },
+    "elastalert": {
+      "description": "ElastAlert2 critical alerts",
+      "method": "get_elastalert_alerts"
+    },
+    "kibana": {
+      "description": "Kibana Security alerts", 
+      "method": "get_kibana_security_alerts"
+    },
+    "ml": {
+      "description": "ML log classification predictions",
+      "method": "get_ml_predictions"
+    }
+  },
+  
+  "log_sources": {
+    "_comment": "Log sources mapped to ES index patterns. Add new sources here.",
+    
+    "pfsense": {
+      "index_pattern": "*pfsense*",
+      "description": "pfSense firewall logs",
+      "category": "firewall"
+    },
+    "suricata": {
+      "index_pattern": "*suricata*",
+      "description": "Suricata IDS/IPS alerts",
+      "category": "ids"
+    },
+    "zeek": {
+      "index_pattern": "*zeek*",
+      "description": "Zeek network security monitor logs",
+      "category": "network"
+    },
+    "windows": {
+      "index_pattern": "*winlogbeat*",
+      "description": "Windows Event logs via Winlogbeat",
+      "category": "endpoint"
+    },
+    "modsecurity": {
+      "index_pattern": "*modsecurity*",
+      "description": "ModSecurity WAF logs",
+      "category": "waf"
+    },
+    "wazuh": {
+      "index_pattern": "wazuh-alerts-*",
+      "description": "Wazuh HIDS alerts",
+      "category": "hids"
+    },
+    "syslog": {
+      "index_pattern": "syslog-*",
+      "description": "Generic syslog messages",
+      "category": "system"
+    },
+    "filebeat": {
+      "index_pattern": "filebeat-*",
+      "description": "Filebeat collected logs",
+      "category": "collector"
+    },
+    "packetbeat": {
+      "index_pattern": "packetbeat-*",
+      "description": "Packetbeat network data",
+      "category": "network"
+    },
+    "auditbeat": {
+      "index_pattern": "auditbeat-*",
+      "description": "Auditbeat audit logs",
+      "category": "audit"
+    },
+    "nginx": {
+      "index_pattern": "nginx-*",
+      "description": "Nginx web server logs",
+      "category": "webserver"
+    },
+    "apache": {
+      "index_pattern": "apache-*",
+      "description": "Apache web server logs",
+      "category": "webserver"
+    }
+  },
+  
+  "categories": {
+    "_comment": "Category definitions for grouping sources",
+    "firewall": "Network firewall logs",
+    "ids": "Intrusion Detection System alerts",
+    "network": "Network monitoring and analysis",
+    "endpoint": "Endpoint/host-based logs",
+    "waf": "Web Application Firewall logs",
+    "hids": "Host-based Intrusion Detection",
+    "system": "System and service logs",
+    "collector": "Log collector/shipper data",
+    "audit": "Audit and compliance logs",
+    "webserver": "Web server access/error logs"
+  },
+  
+  "default_settings": {
+    "max_results": 500,
+    "default_hours": 24,
+    "max_hours": 240
+  }
+}

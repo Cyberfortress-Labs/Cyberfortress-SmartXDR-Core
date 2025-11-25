@@ -2,12 +2,12 @@
   "key_findings": [],
   "metadata": {
     "elastalert_count": 0,
-    "generated_at": "2025-11-25T09:56:15.512901",
-    "kibana_count": 0,
-    "ml_eror_count": 26786,
-    "ml_warn_count": 103537,
+    "generated_at": "2025-11-25T10:34:32.191538",
+    "kibana_count": 6,
+    "ml_eror_count": 27439,
+    "ml_warn_count": 112263,
     "time_range_hours": 240,
-    "total_alerts": 130323
+    "total_alerts": 139708
   },
   "recommended_actions": [],
   "severity_level": "MEDIUM",
