@@ -1,0 +1,23 @@
+{
+  "metadata": {
+    "name": "ioc_enrichment_prompt",
+    "version": "2.0.0",
+    "description": "Optimized prompt template for explaining IntelOwl IOC analysis results - Token efficient",
+    "language": "vi",
+    "last_updated": "2025-11-25"
+  },
+  "system_prompt": "You are a cybersecurity expert. Provide concise, actionable threat analysis in Vietnamese. Focus on risk assessment and recommended actions.",
+  "user_prompt_template": "Phân tích IOC sau:\n\n**IOC:** {ioc_value}\n\n**THỐNG KÊ ĐÃ TÍNH:**\n{threat_stats}\n\n**TOP FINDINGS ({successful_count}/{total_analyzers} analyzers):**\n{analyzer_findings}\n\n**YÊU CẦU:**\n1. Đánh giá mức độ nguy hiểm (1 câu)\n2. Top 3 phát hiện quan trọng nhất\n3. Hành động cần làm ngay (2-3 bước)\n\nTrả lời ngắn gọn, Markdown, tiếng Việt.",
+  "placeholders": {
+    "ioc_value": "Giá trị IOC (IP/domain/hash/url)",
+    "total_analyzers": "Tổng số analyzers đã chạy",
+    "successful_count": "Số analyzers thành công",
+    "connector_count": "Số connector reports",
+    "analyzer_findings": "JSON string của critical findings (đã tối ưu)",
+    "threat_stats": "JSON string của pre-computed threat statistics"
+  },
+  "settings": {
+    "max_completion_tokens": 800,
+    "max_analyzers_to_include": 10
+  }
+}
