@@ -36,8 +36,8 @@ COLLECTION_NAME = "soc_ecosystem"
 
 # OpenAI model settings
 EMBEDDING_MODEL = "text-embedding-3-small"
-CHAT_MODEL = "gpt-5-mini"
-# Note: gpt-5-mini only supports temperature=1 (default), custom values not allowed
+CHAT_MODEL = "gpt-5-mini"  # OpenAI's efficient small model
+# Note: gpt-4o-mini supports temperature 0-2
 
 # OpenAI client configuration (following best practices)
 # https://platform.openai.com/docs/api-reference

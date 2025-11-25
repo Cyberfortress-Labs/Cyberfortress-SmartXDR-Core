@@ -692,6 +692,11 @@ class LLMService:
         
         # Call OpenAI
         try:
+            if DEBUG_LLM:
+                print(f"[DEBUG LLM] Calling OpenAI for alert summary...")
+                print(f"[DEBUG LLM] System prompt length: {len(system_prompt)}")
+                print(f"[DEBUG LLM] User prompt length: {len(user_prompt)}")
+            
             response = self.openai_client.chat.completions.create(
                 model=self.chat_model,
                 messages=[
@@ -702,6 +707,36 @@ class LLMService:
             )
             
             ai_text = response.choices[0].message.content or ""
+            
+            if DEBUG_LLM:
+                print(f"[DEBUG LLM] Response received, length: {len(ai_text)}")
+                print(f"[DEBUG LLM] Finish reason: {response.choices[0].finish_reason}")
+                if not ai_text:
+                    print(f"[DEBUG LLM] WARNING: Empty response from OpenAI!")
+                    print(f"[DEBUG LLM] Full response: {response}")
+            
+            # Check for empty response
+            if not ai_text:
+                # Log the issue and return calculated severity
+                print(f"[WARNING] OpenAI returned empty content. Finish reason: {response.choices[0].finish_reason}")
+                severity_level = self._calculate_alert_severity(elastalert, kibana, ml_predictions)
+                return {
+                    "status": "success",
+                    "summary": f"[Không thể tạo tóm tắt - API response trống]\n\nDữ liệu thống kê:\n- ElastAlert2: {metadata.get('elastalert_count', 0)} alerts\n- Kibana Security: {metadata.get('kibana_alert_count', 0)} alerts\n- ML ERROR: {metadata.get('ml_eror_count', 0)}\n- ML WARNING: {metadata.get('ml_warn_count', 0)}",
+                    "severity_level": severity_level,
+                    "key_findings": [],
+                    "recommended_actions": [],
+                    "metadata": {
+                        "time_range_hours": metadata.get('time_range_hours', 24),
+                        "total_alerts": metadata.get('total_alert_count', 0),
+                        "elastalert_count": metadata.get('elastalert_count', 0),
+                        "kibana_count": metadata.get('kibana_alert_count', 0),
+                        "ml_eror_count": metadata.get('ml_eror_count', 0),
+                        "ml_warn_count": metadata.get('ml_warn_count', 0),
+                        "generated_at": metadata.get('generated_at', ''),
+                        "api_issue": "empty_response"
+                    }
+                }
             
             # Extract severity level from response
             severity_level = self._extract_severity_from_summary(ai_text)
@@ -770,21 +805,21 @@ class LLMService:
         
         # ML Predictions Summary
         ml_by_severity = ml_predictions.get('by_severity', {})
-        ml_eror = ml_by_severity.get('EROR', {})
+        ml_error = ml_by_severity.get('ERROR', {})  # ES uses ERROR not EROR
         ml_warn = ml_by_severity.get('WARNING', {})  # ES uses WARNING not WARN
         ml_info = ml_by_severity.get('INFO', {})
         
         ml_predictions_summary = (
-            f"EROR (cần xử lý gấp): {ml_eror.get('count', 0)} logs (avg prob: {ml_eror.get('avg_probability', 0):.2f})\n"
+            f"ERROR (cần xử lý gấp): {ml_error.get('count', 0)} logs (avg prob: {ml_error.get('avg_probability', 0):.2f})\n"
             f"  WARNING (cần xem xét): {ml_warn.get('count', 0)} logs (avg prob: {ml_warn.get('avg_probability', 0):.2f})\n"
             f"  INFO (bình thường): {ml_info.get('count', 0)} logs"
         )
         
-        # Add sample EROR logs if available (top 3)
-        eror_samples = ml_eror.get('samples', [])[:3]
-        if eror_samples:
-            ml_predictions_summary += "\n  Top EROR logs:"
-            for s in eror_samples:
+        # Add sample ERROR logs if available (top 3)
+        error_samples = ml_error.get('samples', [])[:3]
+        if error_samples:
+            ml_predictions_summary += "\n  Top ERROR logs:"
+            for s in error_samples:
                 msg = s.get('message', '')[:100]
                 prob = s.get('probability', 0)
                 ml_predictions_summary += f"\n    - [{prob:.2f}] {msg}..."
@@ -875,23 +910,23 @@ class LLMService:
         critical_count = severity_dist.get('critical', 0)
         high_count = severity_dist.get('high', 0)
         
-        # ML predictions - EROR is critical priority
-        ml_eror_count = 0
+        # ML predictions - ERROR is critical priority
+        ml_error_count = 0
         ml_warn_count = 0
         if ml_predictions:
             ml_by_severity = ml_predictions.get('by_severity', {})
-            ml_eror_count = ml_by_severity.get('EROR', {}).get('count', 0)
+            ml_error_count = ml_by_severity.get('ERROR', {}).get('count', 0)  # ES uses ERROR
             ml_warn_count = ml_by_severity.get('WARNING', {}).get('count', 0)  # ES uses WARNING
         
         # Logic: 
-        # - Any critical alert or ML EROR > 5 = CRITICAL
-        # - ElastAlert2 > 10 or High > 20 or ML EROR > 0 = HIGH
+        # - Any critical alert or ML ERROR > 5 = CRITICAL
+        # - ElastAlert2 > 10 or High > 20 or ML ERROR > 0 = HIGH
         # - ElastAlert2 > 0 or High > 5 or ML WARNING > 10 = MEDIUM
         # - Otherwise = LOW
         
-        if critical_count > 0 or ml_eror_count > 5:
+        if critical_count > 0 or ml_error_count > 5:
             return "CRITICAL"
-        elif ea_count > 10 or high_count > 20 or ml_eror_count > 0:
+        elif ea_count > 10 or high_count > 20 or ml_error_count > 0:
             return "HIGH"
         elif ea_count > 0 or high_count > 5 or ml_warn_count > 10:
             return "MEDIUM"
