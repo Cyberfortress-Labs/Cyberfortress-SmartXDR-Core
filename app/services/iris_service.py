@@ -152,7 +152,57 @@ class IRISService:
             print(f"[DEBUG] No 'intelowl_raw_ace' div found in HTML")
         
         return None
-    
+    def get_case_iocs(self, case_id: int) -> list:
+        """
+        Lấy tất cả IOCs từ một case
+        
+        Args:
+            case_id: Case ID
+        
+        Returns:
+            List of IOC objects with ioc_id, ioc_value, ioc_type
+        """
+        verify = self.ca_cert if self.ca_cert else self.verify_ssl
+        
+        response = requests.get(
+            f"{self.iris_url}/case/ioc/list",
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            },
+            params={"cid": case_id},
+            verify=verify
+        )
+        
+        if response.status_code != 200:
+            raise Exception(f"Failed to get case IOCs: {response.text}")
+        
+        data = response.json()
+        
+        # Handle IRIS API response
+        if isinstance(data, dict) and 'data' in data:
+            ioc_data = data['data'] 
+            if isinstance(ioc_data, dict) and 'ioc' in ioc_data:
+                ioc_list = ioc_data['ioc']
+            elif isinstance(ioc_data, list):
+                ioc_list = ioc_data
+            else:
+                ioc_list = []
+        else:
+            ioc_list = []
+        
+        # Extract relevant fields
+        result = []
+        for ioc in ioc_list:
+            result.append({
+                "ioc_id": ioc.get('ioc_id'),
+                "ioc_value": ioc.get('ioc_value'),
+                "ioc_type": ioc.get('ioc_type', {}).get('type_name', 'unknown'),
+                "ioc_description": ioc.get('ioc_description', '')
+            })
+        
+        return result
+        
     def add_ioc_comment(self, case_id: int, ioc_id: int, comment: str) -> Dict[str, Any]:
         """
         Thêm comment vào IOC trên IRIS

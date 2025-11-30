@@ -71,3 +71,127 @@ def explain_intelowl():
         "risk_level": ai_analysis['risk_level'],
         "recommendations": ai_analysis['recommendations']
     })
+
+
+@ioc_bp.route('/api/enrich/explain_case_iocs', methods=['POST'])
+def explain_case_iocs():
+    """
+    Phân tích tất cả IOCs trong một case với AI
+    
+    Request:
+    {
+        "case_id": 1,
+        "skip_already_analyzed": true  // optional, default: true
+    }
+    
+    Response:
+    {
+        "status": "success",
+        "case_id": 1,
+        "total_iocs": 5,
+        "processed": 4,
+        "skipped": 1,
+        "failed": 0,
+        "results": [...]
+    }
+    """
+    data = request.json
+    case_id = data.get('case_id')
+    skip_already_analyzed = data.get('skip_already_analyzed', True)
+    
+    if not case_id:
+        return jsonify({
+            "status": "error",
+            "message": "Missing required field: case_id"
+        }), 400
+    
+    # Initialize services
+    iris_svc = IRISService()
+    llm_svc = LLMService()
+    
+    try:
+        # 1. Get all IOCs from case
+        iocs = iris_svc.get_case_iocs(case_id)
+        
+        if not iocs:
+            return jsonify({
+                "status": "success",
+                "case_id": case_id,
+                "total_iocs": 0,
+                "processed": 0,
+                "skipped": 0,
+                "failed": 0,
+                "results": [],
+                "message": "No IOCs found in this case"
+            }), 200
+        
+        # 2. Process each IOC
+        results = []
+        processed_count = 0
+        skipped_count = 0
+        failed_count = 0
+        
+        for ioc in iocs:
+            ioc_id = ioc['ioc_id']
+            ioc_value = ioc['ioc_value']
+            
+            result_entry = {
+                "ioc_id": ioc_id,
+                "ioc_value": ioc_value,
+                "ioc_type": ioc['ioc_type']
+            }
+            
+            try:
+                # Get IntelOwl report
+                intelowl_data = iris_svc.get_ioc_intelowl_report(case_id, ioc_id)
+                
+                if not intelowl_data or not intelowl_data.get('raw_data'):
+                    result_entry['status'] = 'skipped'
+                    result_entry['reason'] = 'No IntelOwl report found'
+                    skipped_count += 1
+                    results.append(result_entry)
+                    continue
+                
+                # AI analysis
+                ai_analysis = llm_svc.explain_intelowl_results(
+                    ioc_value=ioc_value,
+                    raw_results=intelowl_data['raw_data']
+                )
+                
+                # Add comment to IRIS
+                comment_text = f"[SmartXDR AI Analysis]\n\n{ai_analysis['summary']}"
+                
+                iris_svc.add_ioc_comment(
+                    case_id=case_id,
+                    ioc_id=ioc_id,
+                    comment=comment_text
+                )
+                
+                result_entry['status'] = 'success'
+                result_entry['risk_level'] = ai_analysis['risk_level']
+                result_entry['summary'] = ai_analysis['summary'][:200] + "..."  # Truncate for response
+                processed_count += 1
+                results.append(result_entry)
+                
+            except Exception as e:
+                result_entry['status'] = 'failed'
+                result_entry['error'] = str(e)
+                failed_count += 1
+                results.append(result_entry)
+                print(f"[ERROR] Failed to process IOC {ioc_id} ({ioc_value}): {e}")
+        
+        return jsonify({
+            "status": "success",
+            "case_id": case_id,
+            "total_iocs": len(iocs),
+            "processed": processed_count,
+            "skipped": skipped_count,
+            "failed": failed_count,
+            "results": results
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": f"Failed to process case IOCs: {str(e)}"
+        }), 500
