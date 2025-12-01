@@ -35,10 +35,12 @@ def create_app():
     from app.routes.ai import ai_bp
     from app.routes.ioc import ioc_bp
     from app.routes.triage import triage_bp
+    from app.routes.telegram import telegram_bp
     
     app.register_blueprint(ai_bp, url_prefix='/api/ai')
     app.register_blueprint(ioc_bp)
     app.register_blueprint(triage_bp, url_prefix='/api/triage')
+    app.register_blueprint(telegram_bp, url_prefix='/api/telegram')
     
     @app.route('/health', methods=['GET'])
     def health():

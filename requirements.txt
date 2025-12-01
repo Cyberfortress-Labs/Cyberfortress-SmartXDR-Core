@@ -16,3 +16,7 @@ numpy>=1.24.0
 
 # HTTP Client (if needed)
 requests>=2.31.0
+
+# Microsoft Teams Integration
+msal>=1.24.0
+beautifulsoup4>=4.12.0
