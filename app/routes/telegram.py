@@ -11,14 +11,19 @@ from app.services.telegram_middleware_service import TelegramMiddlewareService
 
 telegram_bp = Blueprint('telegram', __name__)
 
-# Singleton instance
+# Singleton instance - initialized once at module load
 _middleware_instance = None
+_initialized = False
 
 def get_telegram_middleware() -> TelegramMiddlewareService:
     """Get or create singleton middleware instance"""
-    global _middleware_instance
+    global _middleware_instance, _initialized
     if _middleware_instance is None:
         _middleware_instance = TelegramMiddlewareService()
+        # Pre-fetch bot info on first init
+        _middleware_instance.get_bot_info()
+        _initialized = True
+        print(f"[Telegram] Middleware initialized, bot: @{_middleware_instance._bot_info.get('username') if _middleware_instance._bot_info else 'unknown'}")
     return _middleware_instance
 
 

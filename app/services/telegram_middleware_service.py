@@ -430,15 +430,20 @@ class TelegramMiddlewareService:
         # For groups: only respond if bot is mentioned or replied to
         is_group = chat_type in ("group", "supergroup")
         if is_group:
-            bot_username = self._bot_info.get("username", "") if self._bot_info else ""
-            is_mentioned = f"@{bot_username}" in text if bot_username else False
+            # Get bot username - fetch if not cached
+            if not self._bot_info:
+                self.get_bot_info()
+            bot_username = self._bot_info.get("username", "smartxdr_bot") if self._bot_info else "smartxdr_bot"
+            bot_id = self._bot_info.get("id") if self._bot_info else None
+            
+            is_mentioned = f"@{bot_username}" in text.lower() if bot_username else False
             is_reply_to_bot = False
             
             # Check if this is a reply to bot's message
             reply_to = message.get("reply_to_message", {})
-            if reply_to:
+            if reply_to and bot_id:
                 reply_from = reply_to.get("from", {})
-                if reply_from.get("id") == self._bot_info.get("id") if self._bot_info else False:
+                if reply_from.get("id") == bot_id:
                     is_reply_to_bot = True
             
             # Skip if not mentioned and not replied to (except commands)
@@ -448,7 +453,10 @@ class TelegramMiddlewareService:
             
             # Remove bot mention from text for cleaner processing
             if is_mentioned and bot_username:
-                text = text.replace(f"@{bot_username}", "").strip()
+                import re
+                text = re.sub(rf'@{bot_username}\s*', '', text, flags=re.IGNORECASE).strip()
+                
+            logger.info(f"Group message (mentioned={is_mentioned}, reply={is_reply_to_bot}): {text[:50]}...")
         
         logger.info(f"Message from @{username} ({first_name}) in chat {chat_id}: {text[:50]}...")
         
