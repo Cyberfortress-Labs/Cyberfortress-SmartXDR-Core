@@ -195,3 +195,60 @@ def explain_case_iocs():
             "status": "error",
             "message": f"Failed to process case IOCs: {str(e)}"
         }), 500
+
+
+@ioc_bp.route('/api/enrich/case_ioc_comments', methods=['GET'])
+def get_case_ioc_comments():
+    """
+    Lấy comment mới nhất của SmartXDR cho mỗi IOC trong case
+    
+    Request:
+    {
+        "case_id": 52
+    }
+    
+    Response:
+    {
+        "status": "success",
+        "case_id": 52,
+        "total_iocs": 4,
+        "iocs_with_analysis": 4,
+        "iocs": [
+            {
+                "ioc_id": 147,
+                "ioc_value": "/root/eicar.com",
+                "ioc_type": "filename",
+                "smartxdr_comment": {
+                    "comment_id": 123,
+                    "comment_text": "[SmartXDR AI Analysis]\\n\\n...",
+                    "comment_date": "2025-12-01T14:30:00",
+                    "comment_user": "SmartXDR"
+                }
+            },
+            ...
+        ]
+    }
+    """
+    data = request.json
+    case_id = data.get('case_id')
+    
+    if not case_id:
+        return jsonify({
+            "status": "error",
+            "message": "Missing required field: case_id"
+        }), 400
+    
+    try:
+        iris_svc = IRISService()
+        result = iris_svc.get_case_ioc_smartxdr_comments(case_id)
+        
+        return jsonify({
+            "status": "success",
+            **result
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": f"Failed to get case IOC comments: {str(e)}"
+        }), 500

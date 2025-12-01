@@ -416,6 +416,11 @@ class LLMService:
             threat_stats=json.dumps(stats, indent=2, ensure_ascii=False)
         )
         
+        if DEBUG_LLM:
+            print(f"[DEBUG LLM] IOC Enrichment prompt length: {len(prompt)}")
+            print(f"[DEBUG LLM] System prompt: {system_prompt[:100]}...")
+            print(f"[DEBUG LLM] User prompt preview: {prompt[:500]}...")
+        
         # Call OpenAI
         try:
             response = self.openai_client.chat.completions.create(
@@ -428,6 +433,17 @@ class LLMService:
             )
             
             ai_text = response.choices[0].message.content or ""
+            
+            if DEBUG_LLM:
+                print(f"[DEBUG LLM] IOC Response length: {len(ai_text)}")
+                print(f"[DEBUG LLM] IOC Response preview: {ai_text[:200]}...")
+                print(f"[DEBUG LLM] Finish reason: {response.choices[0].finish_reason}")
+            
+            # Check for empty response
+            if not ai_text:
+                print(f"[WARNING LLM] Empty response for IOC {ioc_value}")
+                print(f"[WARNING LLM] Full response object: {response}")
+                ai_text = f"Không thể phân tích IOC {ioc_value} - API trả về rỗng"
             
             # Determine risk level from original reports
             risk_level = self._determine_risk_level(analyzer_reports)

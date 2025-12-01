@@ -256,3 +256,116 @@ class IRISService:
             raise Exception(f"Failed to add comment: {response.text}")
         
         return response.json()
+    
+    def get_ioc_comments(self, case_id: int, ioc_id: int) -> list:
+        """
+        Lấy danh sách comments của một IOC
+        
+        Args:
+            case_id: Case ID
+            ioc_id: IOC ID
+        
+        Returns:
+            List of comments
+        """
+        verify = self.ca_cert if self.ca_cert else self.verify_ssl
+        
+        response = requests.get(
+            f"{self.iris_url}/case/ioc/{ioc_id}/comments/list",
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            },
+            params={"cid": case_id},
+            verify=verify
+        )
+        
+        if response.status_code != 200:
+            raise Exception(f"Failed to get IOC comments: {response.text}")
+        
+        data = response.json()
+        
+        # Handle IRIS API response structure
+        if isinstance(data, dict) and 'data' in data:
+            return data['data'] if isinstance(data['data'], list) else []
+        
+        return []
+    
+    def get_case_ioc_smartxdr_comments(self, case_id: int) -> Dict[str, Any]:
+        """
+        Lấy comment mới nhất của SmartXDR cho mỗi IOC trong case
+        
+        Args:
+            case_id: Case ID
+        
+        Returns:
+            {
+                "case_id": 52,
+                "total_iocs": 4,
+                "iocs_with_analysis": 4,
+                "iocs": [
+                    {
+                        "ioc_id": 147,
+                        "ioc_value": "/root/eicar.com",
+                        "ioc_type": "filename",
+                        "smartxdr_comment": {
+                            "comment_id": 123,
+                            "comment_text": "...",
+                            "comment_date": "2025-12-01T..."
+                        }
+                    },
+                    ...
+                ]
+            }
+        """
+        # 1. Get all IOCs from case
+        iocs = self.get_case_iocs(case_id)
+        
+        result = {
+            "case_id": case_id,
+            "total_iocs": len(iocs),
+            "iocs_with_analysis": 0,
+            "iocs": []
+        }
+        
+        # 2. For each IOC, get comments and find SmartXDR's latest
+        for ioc in iocs:
+            ioc_id = ioc['ioc_id']
+            ioc_entry = {
+                "ioc_id": ioc_id,
+                "ioc_value": ioc['ioc_value'],
+                "ioc_type": ioc['ioc_type'],
+                "smartxdr_comment": None
+            }
+            
+            try:
+                comments = self.get_ioc_comments(case_id, ioc_id)
+                
+                # Find SmartXDR comments (contains "[SmartXDR AI Analysis]")
+                smartxdr_comments = [
+                    c for c in comments
+                    if '[SmartXDR AI Analysis]' in c.get('comment_text', '')
+                ]
+                
+                if smartxdr_comments:
+                    # Sort by date descending and get the latest
+                    smartxdr_comments.sort(
+                        key=lambda x: x.get('comment_date', ''),
+                        reverse=True
+                    )
+                    latest = smartxdr_comments[0]
+                    
+                    ioc_entry['smartxdr_comment'] = {
+                        "comment_id": latest.get('comment_id'),
+                        "comment_text": latest.get('comment_text', ''),
+                        "comment_date": latest.get('comment_date'),
+                        "comment_user": latest.get('comment_user', {}).get('user_name', 'SmartXDR')
+                    }
+                    result['iocs_with_analysis'] += 1
+                    
+            except Exception as e:
+                print(f"[WARNING] Failed to get comments for IOC {ioc_id}: {e}")
+            
+            result['iocs'].append(ioc_entry)
+        
+        return result

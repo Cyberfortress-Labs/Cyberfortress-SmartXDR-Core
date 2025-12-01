@@ -17,7 +17,7 @@
     "threat_stats": "JSON string của pre-computed threat statistics"
   },
   "settings": {
-    "max_completion_tokens": 800,
+    "max_completion_tokens": 2500,
     "max_analyzers_to_include": 10
   }
 }

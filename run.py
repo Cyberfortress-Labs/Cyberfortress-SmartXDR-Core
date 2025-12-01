@@ -171,6 +171,7 @@ if __name__ == '__main__':
     print("  IOC Enrichment:")
     print("    - POST /api/enrich/explain_intelowl - Explain IntelOwl results with AI (single IOC)")
     print("    - POST /api/enrich/explain_case_iocs - Analyze all IOCs in a case with AI")
+    print("    - GET /api/enrich/case_ioc_comments - Get SmartXDR comments for case IOCs")
     print("  Telegram:")
     print("    - POST /api/telegram/webhook - Telegram webhook (auto-configured)")
     print("  Health:")
@@ -179,9 +180,12 @@ if __name__ == '__main__':
     
     # Start Cloudflare Tunnel for Telegram webhook
     print("\n🔗 Telegram Integration:")
+    bot_enabled = os.getenv("TELEGRAM_BOT_ENABLED", "true").lower() == "true"
     use_tunnel = os.getenv("TELEGRAM_WEBHOOK_ENABLED", "true").lower() == "true"
     
-    if use_tunnel and os.getenv("TELEGRAM_BOT_TOKEN"):
+    if not bot_enabled:
+        print("  ⏸️  Telegram bot DISABLED (set TELEGRAM_BOT_ENABLED=true to enable)")
+    elif bot_enabled and os.getenv("TELEGRAM_BOT_TOKEN") and use_tunnel:
         def setup_tunnel_async():
             time.sleep(2)  # Wait for Flask to start
             tunnel_url = start_tunnel(PORT)
