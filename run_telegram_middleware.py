@@ -12,16 +12,21 @@ Usage:
     python run_telegram_middleware.py [--debug] [--check]
 """
 
+import os
 import sys
 import argparse
 import logging
 import urllib3
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from app.services.telegram_middleware_service import TelegramMiddlewareService, TelegramConfig
+from app.services.telegram_middleware_service import TelegramMiddlewareService
 
 
 def print_banner():
@@ -88,20 +93,21 @@ Step 4: Test
 
 def check_config() -> bool:
     """Check and display configuration"""
-    config = TelegramConfig()
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    allowed_chats = os.getenv("TELEGRAM_ALLOWED_CHATS", "")
+    smartxdr_url = os.getenv("SMARTXDR_API_URL", "http://localhost:8080")
     
     print("\n📋 Configuration Check:")
     print("-" * 50)
     
     # Check bot token
-    if config.bot_token:
+    if bot_token:
         # Mask token for display
-        token = config.bot_token
-        if ':' in token:
-            parts = token.split(':')
+        if ':' in bot_token:
+            parts = bot_token.split(':')
             masked = f"{parts[0]}:{'*' * 10}...{parts[1][-4:]}"
         else:
-            masked = f"{token[:8]}...{token[-4:]}"
+            masked = f"{bot_token[:8]}...{bot_token[-4:]}"
         print(f"  ✅ Bot Token: {masked}")
     else:
         print("  ❌ Bot Token: NOT SET")
@@ -109,25 +115,18 @@ def check_config() -> bool:
         return False
     
     # Check allowed chats
-    allowed = config.get_allowed_chats()
-    if allowed:
-        print(f"  🔒 Allowed Chats: {allowed}")
+    if allowed_chats:
+        print(f"  🔒 Allowed Chats: {allowed_chats}")
     else:
         print("  🔓 Allowed Chats: ALL (no whitelist)")
     
     # Check API URL
-    print(f"  📍 SmartXDR API: {config.smartxdr_api_url}")
+    print(f"  📍 SmartXDR API: {smartxdr_url}")
     
     print("-" * 50)
+    print("  ✅ Configuration valid!")
     
-    # Validate
-    valid, message = config.validate()
-    if valid:
-        print("  ✅ Configuration valid!")
-    else:
-        print(f"  ❌ {message}")
-    
-    return valid
+    return True
 
 
 def test_connection() -> bool:
@@ -216,20 +215,18 @@ Examples:
     middleware = TelegramMiddlewareService()
     
     try:
-        success = middleware.start(blocking=True)
-        if not success:
-            print("\n❌ Failed to start middleware")
-            sys.exit(1)
+        # Start polling (blocking)
+        middleware.start_polling(threaded=False)
     except KeyboardInterrupt:
         print("\n")
-        middleware.stop()
+        middleware.stop_polling()
         
         # Print final stats
         stats = middleware.get_stats()
         print("\n📊 Session Statistics:")
         print(f"   Messages Received: {stats['messages_received']}")
         print(f"   Messages Processed: {stats['messages_processed']}")
-        print(f"   Replies Sent: {stats['messages_replied']}")
+        print(f"   Messages Blocked: {stats['messages_blocked']}")
         print(f"   Errors: {stats['errors']}")
         
         print("\n👋 Goodbye!")

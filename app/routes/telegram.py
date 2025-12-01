@@ -2,10 +2,21 @@
 Telegram Bot API Routes
 Provides REST endpoints to manage the Telegram middleware service
 """
+import os
 from flask import Blueprint, jsonify
-from app.services.telegram_middleware_service import get_telegram_middleware, TelegramConfig
+from app.services.telegram_middleware_service import TelegramMiddlewareService
 
 telegram_bp = Blueprint('telegram', __name__)
+
+# Singleton instance
+_middleware_instance = None
+
+def get_telegram_middleware() -> TelegramMiddlewareService:
+    """Get or create singleton middleware instance"""
+    global _middleware_instance
+    if _middleware_instance is None:
+        _middleware_instance = TelegramMiddlewareService()
+    return _middleware_instance
 
 
 @telegram_bp.route('/status', methods=['GET'])
@@ -46,26 +57,19 @@ def start_middleware():
     try:
         mw = get_telegram_middleware()
         
-        stats = mw.get_stats()
-        if stats.get('running'):
+        if mw.is_running():
             return jsonify({
                 'status': 'warning',
                 'message': 'Middleware is already running'
             }), 200
         
-        success = mw.start(blocking=False)
+        mw.start_polling(threaded=True)
         
-        if success:
-            return jsonify({
-                'status': 'success',
-                'message': 'Telegram middleware started',
-                'bot': mw._bot_info.get('username') if mw._bot_info else None
-            }), 200
-        else:
-            return jsonify({
-                'status': 'error',
-                'message': 'Failed to start. Check TELEGRAM_BOT_TOKEN.'
-            }), 500
+        return jsonify({
+            'status': 'success',
+            'message': 'Telegram middleware started',
+            'bot': mw._bot_info.get('username') if mw._bot_info else None
+        }), 200
             
     except Exception as e:
         return jsonify({
@@ -79,7 +83,7 @@ def stop_middleware():
     """Stop Telegram middleware"""
     try:
         mw = get_telegram_middleware()
-        mw.stop()
+        mw.stop_polling()
         
         return jsonify({
             'status': 'success',
@@ -97,10 +101,10 @@ def stop_middleware():
 def get_config():
     """Get configuration (sanitized)"""
     try:
-        config = TelegramConfig()
+        mw = get_telegram_middleware()
         
         # Mask token
-        token = config.bot_token
+        token = mw.bot_token
         if token and ':' in token:
             parts = token.split(':')
             masked = f"{parts[0]}:****...{parts[1][-4:]}"
@@ -112,11 +116,11 @@ def get_config():
         return jsonify({
             'status': 'success',
             'config': {
-                'bot_token_set': bool(config.bot_token),
+                'bot_token_set': bool(mw.bot_token),
                 'bot_token_masked': masked,
-                'allowed_chats': config.get_allowed_chats() or 'all',
-                'polling_timeout': config.polling_timeout,
-                'smartxdr_api_url': config.smartxdr_api_url
+                'allowed_chats': list(mw.allowed_chats) if mw.allowed_chats else 'all',
+                'polling_timeout': mw.polling_timeout,
+                'smartxdr_api_url': mw.smartxdr_api_url
             }
         }), 200
         
