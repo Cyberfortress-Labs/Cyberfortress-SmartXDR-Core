@@ -179,9 +179,14 @@ class IRISService:
         
         data = response.json()
         
+        # Debug: print response structure
+        print(f"[DEBUG get_case_iocs] Response data type: {type(data)}")
+        print(f"[DEBUG get_case_iocs] Response data: {str(data)[:500]}")
+        
         # Handle IRIS API response
         if isinstance(data, dict) and 'data' in data:
-            ioc_data = data['data'] 
+            ioc_data = data['data']
+            print(f"[DEBUG get_case_iocs] ioc_data type: {type(ioc_data)}")
             if isinstance(ioc_data, dict) and 'ioc' in ioc_data:
                 ioc_list = ioc_data['ioc']
             elif isinstance(ioc_data, list):
@@ -191,13 +196,30 @@ class IRISService:
         else:
             ioc_list = []
         
+        print(f"[DEBUG get_case_iocs] ioc_list type: {type(ioc_list)}, len: {len(ioc_list) if isinstance(ioc_list, list) else 'N/A'}")
+        if ioc_list and len(ioc_list) > 0:
+            print(f"[DEBUG get_case_iocs] First IOC type: {type(ioc_list[0])}")
+            print(f"[DEBUG get_case_iocs] First IOC: {ioc_list[0]}")
+        
         # Extract relevant fields
         result = []
         for ioc in ioc_list:
+            # Skip if ioc is not a dict (could be string key from dict iteration)
+            if not isinstance(ioc, dict):
+                print(f"[DEBUG get_case_iocs] Skipping non-dict IOC: {ioc}")
+                continue
+                
+            # Handle ioc_type as string or dict
+            ioc_type_raw = ioc.get('ioc_type', 'unknown')
+            if isinstance(ioc_type_raw, dict):
+                ioc_type = ioc_type_raw.get('type_name', 'unknown')
+            else:
+                ioc_type = str(ioc_type_raw) if ioc_type_raw else 'unknown'
+            
             result.append({
                 "ioc_id": ioc.get('ioc_id'),
                 "ioc_value": ioc.get('ioc_value'),
-                "ioc_type": ioc.get('ioc_type', {}).get('type_name', 'unknown'),
+                "ioc_type": ioc_type,
                 "ioc_description": ioc.get('ioc_description', '')
             })
         
