@@ -412,7 +412,9 @@ class TelegramMiddlewareService:
         if not message:
             return
         
-        chat_id = message.get("chat", {}).get("id")
+        chat = message.get("chat", {})
+        chat_id = chat.get("id")
+        chat_type = chat.get("type")  # 'private', 'group', 'supergroup', 'channel'
         user_id = message.get("from", {}).get("id")
         text = message.get("text", "")
         message_id = message.get("message_id")
@@ -424,6 +426,29 @@ class TelegramMiddlewareService:
         user = message.get("from", {})
         username = user.get("username", "unknown")
         first_name = user.get("first_name", "unknown")
+        
+        # For groups: only respond if bot is mentioned or replied to
+        is_group = chat_type in ("group", "supergroup")
+        if is_group:
+            bot_username = self._bot_info.get("username", "") if self._bot_info else ""
+            is_mentioned = f"@{bot_username}" in text if bot_username else False
+            is_reply_to_bot = False
+            
+            # Check if this is a reply to bot's message
+            reply_to = message.get("reply_to_message", {})
+            if reply_to:
+                reply_from = reply_to.get("from", {})
+                if reply_from.get("id") == self._bot_info.get("id") if self._bot_info else False:
+                    is_reply_to_bot = True
+            
+            # Skip if not mentioned and not replied to (except commands)
+            if not is_mentioned and not is_reply_to_bot and not text.startswith("/"):
+                logger.debug(f"Skipping group message (not mentioned): {text[:30]}...")
+                return
+            
+            # Remove bot mention from text for cleaner processing
+            if is_mentioned and bot_username:
+                text = text.replace(f"@{bot_username}", "").strip()
         
         logger.info(f"Message from @{username} ({first_name}) in chat {chat_id}: {text[:50]}...")
         
@@ -442,11 +467,12 @@ class TelegramMiddlewareService:
             )
             return
         
-        # Check rate limit
-        if self.is_rate_limited(user_id):
-            logger.warning(f"Rate limited user {user_id} (@{username})")
+        # Check rate limit (use chat_id for groups to allow multiple users)
+        rate_limit_id = chat_id if is_group else user_id
+        if self.is_rate_limited(rate_limit_id):
+            logger.warning(f"Rate limited {'chat' if is_group else 'user'} {rate_limit_id}")
             self._stats["messages_blocked"] += 1
-            rate_info = self.get_rate_limit_info(user_id)
+            rate_info = self.get_rate_limit_info(rate_limit_id)
             
             if rate_info.get("is_blocked"):
                 self.send_message(
