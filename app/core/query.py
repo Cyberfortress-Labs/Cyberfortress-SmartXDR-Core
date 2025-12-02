@@ -22,6 +22,7 @@ from app.config import (
     MAX_DAILY_COST,
     CACHE_ENABLED,
     CACHE_TTL,
+    SEMANTIC_CACHE_ENABLED,
     DEBUG_MODE
 )
 from app.services.prompt_builder_service import PromptBuilder
@@ -48,7 +49,7 @@ usage_tracker = APIUsageTracker(
     max_calls_per_minute=MAX_CALLS_PER_MINUTE,
     max_daily_cost=MAX_DAILY_COST
 )
-response_cache = ResponseCache(ttl=CACHE_TTL, enabled=CACHE_ENABLED)
+response_cache = ResponseCache(ttl=CACHE_TTL, enabled=CACHE_ENABLED, use_semantic_cache=SEMANTIC_CACHE_ENABLED)
 
 
 def _search_and_build_context(collection, query: str, n_results: int, filter_metadata: Optional[Dict[str, Any]] = None) -> tuple[str, set[str], list[str]]:
@@ -243,10 +244,10 @@ def ask(collection, query: str, n_results: int = DEFAULT_RESULTS, filter_metadat
     # Search and build context
     context_text, sources, context_list = _search_and_build_context(collection, query, n_results, filter_metadata)
     
-    # Check cache
-    context_hash = hashlib.sha256(context_text.encode()).hexdigest()
-    cache_key = response_cache.get_cache_key(query, context_hash)
-    cached_response = response_cache.get(cache_key)
+    # Check cache - use query normalization only (ignore context_hash)
+    # This allows queries with different contexts but same semantic meaning to hit cache
+    cache_key = response_cache.get_cache_key(query, "")  # Empty context_hash to focus on query similarity
+    cached_response = response_cache.get(cache_key, query)  # Pass query for semantic matching
     
     if cached_response:
         return cached_response
@@ -274,8 +275,8 @@ def ask(collection, query: str, n_results: int = DEFAULT_RESULTS, filter_metadat
         if sources:
             answer += f"\n\nSources: {', '.join(sorted(sources))}"
         
-        # Cache the response
-        response_cache.set(cache_key, answer)
+        # Cache the response (with query for semantic matching)
+        response_cache.set(cache_key, answer, query)
         
         return answer
         

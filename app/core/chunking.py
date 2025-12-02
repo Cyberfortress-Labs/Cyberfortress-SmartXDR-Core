@@ -34,6 +34,28 @@ Source: {filename}
 Keywords: {name}, {device_id}, IP {ip}, {category}, {zone}, {role}"""
     texts.append(overview)
     
+    # 1a. IP-first chunk for reverse lookup (IP -> Device name)
+    # This helps when users ask "What device has IP X?" or "IP X belongs to which machine?"
+    if ip and ip != "N/A" and ip != "multiple":
+        ip_lookup = f"""IP Address Lookup:
+IP {ip} belongs to: {name}
+The IP address {ip} is assigned to device: {name} (ID: {device_id})
+Device with IP {ip}: {name}
+{ip} is the IP of: {name}
+What device has IP {ip}? Answer: {name} ({device_id})
+IP {ip} -> {name}
+Máy có IP {ip} là: {name}
+IP {ip} thuộc về máy: {name}
+IP {ip} là của máy: {name}
+
+Device Details:
+- Name: {name}
+- ID: {device_id}
+- Category: {category}
+- Role: {role}
+- Zone: {zone}"""
+        texts.append(ip_lookup)
+    
     # 1b. Zone/Category chunk for better filtering
     if zone == "SOC Subnet" or "SOC" in category:
         zone_chunk = f"""{name} ({device_id}) is a SOC component

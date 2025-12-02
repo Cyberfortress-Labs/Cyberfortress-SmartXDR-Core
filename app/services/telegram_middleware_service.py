@@ -96,10 +96,7 @@ class TelegramMiddlewareService:
         
         # Custom message handler (optional)
         self._custom_handler: Optional[Callable] = None
-        
-        # Initialize anonymizer for query anonymization
-        self.anonymizer = SecureLogAnonymizer()
-        
+                
         logger.info(f"TelegramMiddlewareService initialized")
         logger.info(f"SmartXDR API URL: {self.smartxdr_api_url}")
         logger.info(f"SmartXDR API Key: {'Configured ✓' if self.smartxdr_api_key else 'NOT SET ⚠️'}")

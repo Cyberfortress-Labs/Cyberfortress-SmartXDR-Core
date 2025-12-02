@@ -78,8 +78,14 @@ class LLMService:
             )
             logger.info("✓ APIUsageTracker initialized")
             
-            self.response_cache = ResponseCache(ttl=CACHE_TTL, enabled=CACHE_ENABLED)
-            logger.info("✓ ResponseCache initialized")
+            # Enable semantic cache for better hit rate on similar questions
+            from app.config import SEMANTIC_CACHE_ENABLED
+            self.response_cache = ResponseCache(
+                ttl=CACHE_TTL, 
+                enabled=CACHE_ENABLED,
+                use_semantic_cache=SEMANTIC_CACHE_ENABLED
+            )
+            logger.info(f"✓ ResponseCache initialized (semantic_cache={SEMANTIC_CACHE_ENABLED})")
             
             self.prompt_builder = PromptBuilder(prompt_file='rag_system.json')
             logger.info("✓ PromptBuilder initialized")
@@ -135,10 +141,10 @@ class LLMService:
             collection, query, n_results, filter_metadata
         )
         
-        # Check cache
-        context_hash = hashlib.sha256(context_text.encode()).hexdigest()
-        cache_key = self.response_cache.get_cache_key(query, context_hash)
-        cached_response = self.response_cache.get(cache_key)
+        # Check cache - ignore context_hash to improve hit rate on similar questions
+        # Query normalization + semantic matching will handle variations
+        cache_key = self.response_cache.get_cache_key(query, "")
+        cached_response = self.response_cache.get(cache_key, query)  # Pass query for semantic matching
         
         if cached_response:
             return {
@@ -166,8 +172,8 @@ class LLMService:
             if sources:
                 answer += f"\n\nSources: {', '.join(sorted(sources))}"
             
-            # Cache the response
-            self.response_cache.set(cache_key, answer)
+            # Cache the response with query for semantic matching
+            self.response_cache.set(cache_key, answer, query)
             
             return {
                 "status": "success",
