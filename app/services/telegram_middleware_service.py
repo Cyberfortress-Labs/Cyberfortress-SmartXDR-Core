@@ -14,6 +14,8 @@ import html
 import re
 
 from app.utils.logger import setup_logger
+from app.core.anonymizer import SecureLogAnonymizer
+from app.config import DEBUG_ANONYMIZATION
 
 logger = setup_logger("telegram_middleware")
 
@@ -95,6 +97,9 @@ class TelegramMiddlewareService:
         
         # Custom message handler (optional)
         self._custom_handler: Optional[Callable] = None
+        
+        # Initialize anonymizer for query anonymization
+        self.anonymizer = SecureLogAnonymizer()
         
         logger.info(f"TelegramMiddlewareService initialized")
         logger.info(f"SmartXDR API URL: {self.smartxdr_api_url}")
@@ -620,6 +625,7 @@ class TelegramMiddlewareService:
     def _process_smartxdr_query(self, query: str, chat_id: int, message_id: int, user: Dict) -> None:
         """
         Send query to SmartXDR API and return response
+        Anonymizes sensitive data before sending to AI
         
         Args:
             query: User's question/query
@@ -630,15 +636,43 @@ class TelegramMiddlewareService:
         # Send typing indicator in background (non-blocking)
         threading.Thread(target=self.send_typing_action, args=(chat_id,), daemon=True).start()
         
+        start_time = time.time()
+        
         try:
-            # Call SmartXDR API with session (connection reuse)
-            logger.info(f"Sending query to SmartXDR: {query[:50]}...")
+            # Anonymize query before sending to AI
+            if DEBUG_ANONYMIZATION:
+                print("\n" + "="*100)
+                print(f"[TELEGRAM] QUERY BEFORE ANONYMIZATION:")
+                print("="*100)
+                print(query)
+            
+            anonymized_query = self.anonymizer.anonymize_text(
+                query,
+                anonymize_ips=True,
+                anonymize_emails=True,
+                anonymize_urls=True,
+                anonymize_macs=True,
+                anonymize_domains=False
+            )
+            
+            if DEBUG_ANONYMIZATION:
+                print("\n" + "="*100)
+                print(f"[TELEGRAM] QUERY AFTER ANONYMIZATION (sent to AI):")
+                print("="*100)
+                print(anonymized_query)
+                print("\n[TELEGRAM] WARNING: NO REAL IPs/EMAILS/URLs IN ABOVE TEXT")
+                print("="*100 + "\n")
+            
+            # Call SmartXDR API with anonymized query
+            logger.info(f"Sending anonymized query to SmartXDR: {anonymized_query[:50]}...")
             
             response = self._session.post(
                 f"{self.smartxdr_api_url}/api/ai/ask",
-                json={"query": query},
-                timeout=60  # Reduced timeout
+                json={"query": anonymized_query},
+                timeout=60
             )
+            
+            elapsed = time.time() - start_time
             
             if response.status_code == 200:
                 data = response.json()
@@ -649,12 +683,12 @@ class TelegramMiddlewareService:
                 
                 self.send_message(
                     chat_id,
-                    f"🤖 <b>SmartXDR Analysis</b>\n\n{formatted_response}",
+                    f"🤖 <b>SmartXDR Analysis</b> ({elapsed:.1f}s)\n\n{formatted_response}",
                     reply_to_message_id=message_id
                 )
                 
                 self._stats["messages_processed"] += 1
-                logger.info(f"Successfully processed query for @{user.get('username')}")
+                logger.info(f"Successfully processed query for @{user.get('username')} in {elapsed:.2f}s")
                 
             else:
                 error_msg = f"API returned status {response.status_code}"
@@ -673,15 +707,17 @@ class TelegramMiddlewareService:
                 logger.error(f"SmartXDR API error: {error_msg}")
                 
         except requests.exceptions.Timeout:
+            elapsed = time.time() - start_time
             self.send_message(
                 chat_id,
-                "⏱️ <b>Timeout</b>\n\nThe request took too long. Please try again.",
+                f"⏱️ <b>Timeout</b>\n\nThe request took too long ({elapsed:.1f}s). Please try again.",
                 reply_to_message_id=message_id
             )
             self._stats["errors"] += 1
             logger.error("SmartXDR API timeout")
             
         except requests.exceptions.ConnectionError:
+            elapsed = time.time() - start_time
             self.send_message(
                 chat_id,
                 "🔌 <b>Connection Error</b>\n\n"
@@ -692,6 +728,7 @@ class TelegramMiddlewareService:
             logger.error("SmartXDR API connection error")
             
         except Exception as e:
+            elapsed = time.time() - start_time
             self.send_message(
                 chat_id,
                 f"❌ <b>Error</b>\n\nAn unexpected error occurred: {html.escape(str(e))}",
