@@ -4,11 +4,13 @@ IOC Enrichment API Routes
 from flask import Blueprint, request, jsonify
 from app.services.iris_service import IRISService
 from app.services.llm_service import LLMService
+from app.middleware.auth import require_api_key
 
 ioc_bp = Blueprint('ioc', __name__)
 
 
 @ioc_bp.route('/api/enrich/explain_intelowl', methods=['POST'])
+@require_api_key('enrich:explain')
 def explain_intelowl():
     """
     Lấy IntelOwl results từ IRIS và dùng AI giải thích
@@ -74,6 +76,7 @@ def explain_intelowl():
 
 
 @ioc_bp.route('/api/enrich/explain_case_iocs', methods=['POST'])
+@require_api_key('enrich:explain')
 def explain_case_iocs():
     """
     Phân tích tất cả IOCs trong một case với AI
@@ -198,6 +201,7 @@ def explain_case_iocs():
 
 
 @ioc_bp.route('/api/enrich/case_ioc_comments', methods=['GET'])
+@require_api_key('enrich:read')
 def get_case_ioc_comments():
     """
     Lấy comment mới nhất của SmartXDR cho mỗi IOC trong case

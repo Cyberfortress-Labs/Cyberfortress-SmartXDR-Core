@@ -4,6 +4,7 @@ AI/LLM API Routes - RAG Query Endpoint
 from flask import Blueprint, request, jsonify
 from app import get_collection
 from app.services.llm_service import LLMService
+from app.middleware.auth import require_api_key
 
 ai_bp = Blueprint('ai', __name__)
 
@@ -12,6 +13,7 @@ llm_service = LLMService()
 
 
 @ai_bp.route('/ask', methods=['POST'])
+@require_api_key('ai:ask')
 def ask_llm():
     """
     Ask LLM a question using RAG (Retrieval-Augmented Generation)
@@ -122,6 +124,7 @@ def ask_llm():
 
 
 @ai_bp.route('/stats', methods=['GET'])
+@require_api_key('ai:stats')
 def get_stats():
     """
     Get API usage statistics
@@ -152,6 +155,7 @@ def get_stats():
 
 
 @ai_bp.route('/cache/clear', methods=['POST'])
+@require_api_key('ai:admin')
 def clear_cache():
     """
     Clear response cache

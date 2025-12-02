@@ -4,6 +4,7 @@ Security Triage & Alert Summarization Routes
 from flask import Blueprint, request, jsonify
 from app.services.llm_service import LLMService
 from app.services.elasticsearch_service import ElasticsearchService
+from app.middleware.auth import require_api_key
 
 # Try to import source config
 try:
@@ -21,6 +22,7 @@ es_service = ElasticsearchService()
 
 
 @triage_bp.route('/alerts/summary', methods=['GET', 'POST'])
+@require_api_key('triage:summary')
 def summarize_alerts():
     """
     Summarize security alerts from ElastAlert2 and Kibana Security
@@ -93,6 +95,7 @@ def summarize_alerts():
 
 
 @triage_bp.route('/alerts/raw', methods=['GET'])
+@require_api_key('triage:read')
 def get_raw_alerts():
     """
     Get raw alert data without AI summarization
@@ -165,6 +168,7 @@ def get_raw_alerts():
 
 
 @triage_bp.route('/sources', methods=['GET'])
+@require_api_key('triage:read')
 def list_available_sources():
     """
     List all available log sources from configuration
@@ -219,6 +223,7 @@ def list_available_sources():
 
 
 @triage_bp.route('/alerts/statistics', methods=['GET'])
+@require_api_key('triage:read')
 def get_alert_statistics():
     """
     Get aggregated statistics from Elasticsearch
@@ -268,6 +273,7 @@ def get_alert_statistics():
 
 
 @triage_bp.route('/ml/predictions', methods=['GET'])
+@require_api_key('triage:read')
 def get_ml_predictions():
     """
     Get ML log classification predictions

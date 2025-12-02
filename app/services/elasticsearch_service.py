@@ -18,8 +18,6 @@ import os
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from elasticsearch import Elasticsearch
-from elasticsearch.exceptions import ConnectionError, NotFoundError
 
 # Load environment variables
 load_dotenv()
@@ -39,6 +37,15 @@ except ImportError:
 class ElasticsearchService:
     """Service for querying alerts from Elasticsearch indices"""
     
+    # Singleton instance
+    _instance = None
+    _initialized = False
+    
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+    
     def __init__(
         self,
         hosts: Optional[List[str]] = None,
@@ -51,9 +58,10 @@ class ElasticsearchService:
         Initialize Elasticsearch client
         
         Loads configuration from environment variables (.env file):
+        - ELASTICSEARCH_ENABLED: Enable/disable Elasticsearch connection (default: true)
         - ELASTICSEARCH_HOSTS: Comma-separated list of ES nodes (default: https://192.168.100.128:9200)
         - ELASTICSEARCH_USERNAME: Auth username (default: elastic)
-        - ELASTICSEARCH_PASSWORD: Auth password (required)
+        - ELASTICSEARCH_PASSWORD: Auth password (required if enabled)
         - ELASTICSEARCH_CA_CERT: Path to CA certificate for self-signed certs (optional)
         
         Args:
@@ -63,6 +71,29 @@ class ElasticsearchService:
             verify_certs: Whether to verify SSL certificates (auto-detected from ca_certs)
             ca_certs: Path to CA certificate file (overrides env var)
         """
+        # Skip if already initialized (singleton pattern)
+        if ElasticsearchService._initialized:
+            return
+        
+        # Check if Elasticsearch is enabled
+        self.enabled = os.getenv('ELASTICSEARCH_ENABLED', 'true').lower() == 'true'
+        self.client = None
+        
+        if not self.enabled:
+            logger.warning("⚠️  Elasticsearch is DISABLED. Triage/alert features will not work.")
+            ElasticsearchService._initialized = True
+            return
+        
+        # Import Elasticsearch only when enabled
+        try:
+            from elasticsearch import Elasticsearch
+            from elasticsearch.exceptions import ConnectionError, NotFoundError
+        except ImportError:
+            logger.error("elasticsearch package not installed. Run: pip install elasticsearch")
+            self.enabled = False
+            ElasticsearchService._initialized = True
+            return
+        
         # Load from environment variables with fallbacks
         if hosts is None:
             hosts_env = os.getenv('ELASTICSEARCH_HOSTS', 'https://192.168.100.128:9200')
@@ -74,10 +105,13 @@ class ElasticsearchService:
         if password is None:
             password = os.getenv('ELASTICSEARCH_PASSWORD')
             if not password:
-                raise ValueError(
+                logger.warning(
                     "Elasticsearch password not provided. "
-                    "Set ELASTICSEARCH_PASSWORD in .env file or pass as argument."
+                    "Set ELASTICSEARCH_PASSWORD in .env file or disable with ELASTICSEARCH_ENABLED=false"
                 )
+                self.enabled = False
+                ElasticsearchService._initialized = True
+                return
         
         # Handle CA certificate for self-signed certs
         if ca_certs is None:
@@ -121,10 +155,26 @@ class ElasticsearchService:
         # Test connection
         try:
             info = self.client.info()
-            logger.info(f"Connected to Elasticsearch cluster: {info['cluster_name']}")
+            logger.info(f"✓ Connected to Elasticsearch cluster: {info['cluster_name']}")
         except Exception as e:
             logger.error(f"Failed to connect to Elasticsearch: {e}")
-            raise
+            self.enabled = False
+            self.client = None
+        
+        ElasticsearchService._initialized = True
+    
+    def _check_enabled(self) -> Optional[Dict[str, Any]]:
+        """Check if Elasticsearch is enabled and return error response if not"""
+        if not self.enabled or self.client is None:
+            return {
+                "status": "error",
+                "error": "Elasticsearch is disabled. Enable with ELASTICSEARCH_ENABLED=true in .env",
+                "total": 0,
+                "alerts": [],
+                "logs": [],
+                "summary": {}
+            }
+        return None
     
     def get_elastalert_alerts(
         self,
@@ -156,7 +206,13 @@ class ElasticsearchService:
                 }
             }
         """
+        # Check if enabled
+        disabled_response = self._check_enabled()
+        if disabled_response:
+            return disabled_response
+        
         try:
+            from elasticsearch.exceptions import NotFoundError
             # Calculate time range
             end_time = datetime.utcnow()
             start_time = end_time - timedelta(hours=hours)
@@ -285,7 +341,16 @@ class ElasticsearchService:
                 }
             }
         """
+        # Check if enabled
+        disabled_response = self._check_enabled()
+        if disabled_response:
+            disabled_response["total_by_severity"] = {}
+            disabled_response["sampled_alerts"] = []
+            return disabled_response
+        
         try:
+            from elasticsearch.exceptions import NotFoundError
+            
             # Default severity filter
             if severity_filter is None:
                 severity_filter = ["critical", "high", "medium"]
@@ -487,6 +552,18 @@ class ElasticsearchService:
                 "traffic_stats": Dict[str, Any]
             }
         """
+        # Check if enabled
+        disabled_response = self._check_enabled()
+        if disabled_response:
+            return {
+                "top_attacked_ips": [],
+                "top_attacker_ips": [],
+                "event_distribution": {},
+                "traffic_stats": {},
+                "status": "error",
+                "error": disabled_response["error"]
+            }
+        
         try:
             # Default indices - common ECS log sources
             if indices is None:
@@ -620,7 +697,18 @@ class ElasticsearchService:
                 }
             }
         """
+        # Check if enabled
+        disabled_response = self._check_enabled()
+        if disabled_response:
+            return {
+                "total": 0,
+                "by_severity": {},
+                "summary": {"error": disabled_response["error"]}
+            }
+        
         try:
+            from elasticsearch.exceptions import NotFoundError
+            
             if indices is None:
                 indices = ["logs-*", "filebeat-*", "winlogbeat-*"]
             
@@ -867,6 +955,23 @@ class ElasticsearchService:
                 }
             }
         """
+        # Check if enabled
+        disabled_response = self._check_enabled()
+        if disabled_response:
+            return {
+                "elastalert": {"total": 0, "alerts": []},
+                "kibana_alerts": {"total_by_severity": {}, "sampled_alerts": []},
+                "ml_predictions": {"total": 0, "by_severity": {}},
+                "statistics": {},
+                "metadata": {
+                    "generated_at": datetime.utcnow().isoformat(),
+                    "time_range_hours": hours,
+                    "total_alert_count": 0,
+                    "error": disabled_response["error"]
+                },
+                "status": "error"
+            }
+        
         logger.info(f"Generating combined alert data for {hours}h daily report")
         
         # Query all data sources
@@ -942,6 +1047,20 @@ class ElasticsearchService:
                 }
             }
         """
+        # Check if enabled
+        disabled_response = self._check_enabled()
+        if disabled_response:
+            return {
+                "total": 0,
+                "returned": 0,
+                "logs": [],
+                "summary": {
+                    "source": source_name,
+                    "error": disabled_response["error"]
+                },
+                "status": "error"
+            }
+        
         try:
             from datetime import datetime, timedelta
             
@@ -1210,6 +1329,8 @@ class ElasticsearchService:
     
     def health_check(self) -> bool:
         """Check Elasticsearch connection health"""
+        if not self.enabled or self.client is None:
+            return False
         try:
             return self.client.ping()
         except Exception:
@@ -1217,6 +1338,8 @@ class ElasticsearchService:
     
     def close(self):
         """Close Elasticsearch client connection"""
+        if self.client is None:
+            return
         try:
             self.client.close()
             logger.info("Elasticsearch connection closed")
