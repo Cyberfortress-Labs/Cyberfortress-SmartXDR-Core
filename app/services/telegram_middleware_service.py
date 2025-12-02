@@ -27,21 +27,31 @@ class TelegramMiddlewareService:
     - Supports whitelist, rate limiting, and auto-block for spam protection
     """
     
-    def __init__(self, bot_token: str = None, smartxdr_api_url: str = None):
+    def __init__(self, bot_token: str = None, smartxdr_api_url: str = None, smartxdr_api_key: str = None):
         """
         Initialize Telegram middleware service
         
         Args:
             bot_token: Telegram Bot token from BotFather
             smartxdr_api_url: SmartXDR API base URL
+            smartxdr_api_key: SmartXDR API key for authentication
         """
         self.bot_token = bot_token or os.getenv("TELEGRAM_BOT_TOKEN")
         self.smartxdr_api_url = smartxdr_api_url or os.getenv("SMARTXDR_API_URL", "http://localhost:8080")
+        self.smartxdr_api_key = smartxdr_api_key or os.getenv("SMARTXDR_MASTER_API_KEY", "")
         
         if not self.bot_token:
             raise ValueError("TELEGRAM_BOT_TOKEN is required")
         
         self.api_base = f"https://api.telegram.org/bot{self.bot_token}"
+        
+        # HTTP Session for connection reuse (performance optimization)
+        self._session = requests.Session()
+        if self.smartxdr_api_key:
+            self._session.headers.update({"X-API-Key": self.smartxdr_api_key})
+        
+        # Telegram session for faster API calls
+        self._tg_session = requests.Session()
         
         # Polling settings
         self.polling_timeout = int(os.getenv("TELEGRAM_POLLING_TIMEOUT", "30"))
@@ -88,6 +98,7 @@ class TelegramMiddlewareService:
         
         logger.info(f"TelegramMiddlewareService initialized")
         logger.info(f"SmartXDR API URL: {self.smartxdr_api_url}")
+        logger.info(f"SmartXDR API Key: {'Configured ✓' if self.smartxdr_api_key else 'NOT SET ⚠️'}")
         logger.info(f"Allowed chats: {self.allowed_chats if self.allowed_chats else 'ALL (no whitelist)'}")
         logger.info(f"Rate limit: {self.rate_limit_messages} messages per {self.rate_limit_window}s")
     
@@ -105,7 +116,7 @@ class TelegramMiddlewareService:
             return self._bot_info
         
         try:
-            response = requests.get(
+            response = self._tg_session.get(
                 f"{self.api_base}/getMe",
                 timeout=10
             )
@@ -301,7 +312,7 @@ class TelegramMiddlewareService:
             payload["reply_to_message_id"] = reply_to_message_id
         
         try:
-            response = requests.post(
+            response = self._tg_session.post(
                 f"{self.api_base}/sendMessage",
                 json=payload,
                 timeout=30
@@ -313,7 +324,7 @@ class TelegramMiddlewareService:
             if "can't parse" in str(e).lower() or response.status_code == 400:
                 payload["parse_mode"] = None
                 payload["text"] = self._strip_html(text)
-                response = requests.post(
+                response = self._tg_session.post(
                     f"{self.api_base}/sendMessage",
                     json=payload,
                     timeout=30
@@ -348,7 +359,7 @@ class TelegramMiddlewareService:
     def send_typing_action(self, chat_id: int) -> bool:
         """Send typing indicator to chat"""
         try:
-            requests.post(
+            self._tg_session.post(
                 f"{self.api_base}/sendChatAction",
                 json={"chat_id": chat_id, "action": "typing"},
                 timeout=5
@@ -379,7 +390,7 @@ class TelegramMiddlewareService:
             params["offset"] = offset
         
         try:
-            response = requests.get(
+            response = self._tg_session.get(
                 f"{self.api_base}/getUpdates",
                 params=params,
                 timeout=params["timeout"] + 10  # Add buffer for network
@@ -616,17 +627,17 @@ class TelegramMiddlewareService:
             message_id: Original message ID for reply
             user: User info dict
         """
-        # Send typing indicator
-        self.send_typing_action(chat_id)
+        # Send typing indicator in background (non-blocking)
+        threading.Thread(target=self.send_typing_action, args=(chat_id,), daemon=True).start()
         
         try:
-            # Call SmartXDR API
-            logger.info(f"Sending query to SmartXDR: {query[:100]}...")
+            # Call SmartXDR API with session (connection reuse)
+            logger.info(f"Sending query to SmartXDR: {query[:50]}...")
             
-            response = requests.post(
+            response = self._session.post(
                 f"{self.smartxdr_api_url}/api/ai/ask",
                 json={"query": query},
-                timeout=120  # AI can take time
+                timeout=60  # Reduced timeout
             )
             
             if response.status_code == 200:
