@@ -188,9 +188,13 @@ class ResponseCache:
         Get cached response if available and not expired
         Supports both exact match and semantic similarity matching
         
+        Flow:
+        1. Try exact cache key match first (FREE - no API call)
+        2. If miss AND semantic cache enabled → call embedding API for similarity search
+        
         Args:
             cache_key: Cache key to lookup
-            query: Original query string (for semantic matching)
+            query: Original query string (for semantic matching - only used if exact match fails)
             
         Returns:
             Cached response or None if not found/expired
@@ -198,7 +202,7 @@ class ResponseCache:
         if not self.enabled:
             return None
         
-        # Try exact cache key match first (fastest)
+        # Step 1: Try exact cache key match first (fastest, FREE)
         if cache_key in self.cache:
             cached_data = self.cache[cache_key]
             if time.time() - cached_data['timestamp'] < self.ttl:
@@ -208,15 +212,16 @@ class ResponseCache:
                 # Expired, remove from cache
                 del self.cache[cache_key]
         
-        # Try semantic similarity matching if enabled and query provided
-        if self.use_semantic_cache and query:
+        # Step 2: Only try semantic similarity if exact match failed
+        # This costs 1 embedding API call (~$0.00002)
+        if self.use_semantic_cache and query and len(self.cache) > 0:
             query_embedding = self._get_embedding(query)
             if query_embedding:
                 similar_key, similarity = self._find_similar_cached_query(query_embedding)
                 if similar_key:
                     cached_data = self.cache[similar_key]
                     if time.time() - cached_data['timestamp'] < self.ttl:
-                        print(f"\n✓ Cache hit! (semantic match {similarity:.1%} - saved API call)")
+                        print(f"\n✓ Cache hit! (semantic match {similarity:.1%} - saved LLM call)")
                         return cached_data['response']
                     else:
                         del self.cache[similar_key]
