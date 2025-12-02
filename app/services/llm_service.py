@@ -52,30 +52,49 @@ class LLMService:
     def __init__(self):
         if self._initialized:
             return
+        
+        import logging
+        logger = logging.getLogger('smartxdr.llm')
+        
+        try:
+            self.openai_client = OpenAI(
+                api_key=os.environ.get("OPENAI_API_KEY"),
+                timeout=OPENAI_TIMEOUT,
+                max_retries=OPENAI_MAX_RETRIES
+            )
+            self.chat_model = CHAT_MODEL
+            self.prompts_dir = PROJECT_ROOT / "prompts"
             
-        self.openai_client = OpenAI(
-            api_key=os.environ.get("OPENAI_API_KEY"),
-            timeout=OPENAI_TIMEOUT,
-            max_retries=OPENAI_MAX_RETRIES
-        )
-        self.chat_model = CHAT_MODEL
-        self.prompts_dir = PROJECT_ROOT / "prompts"
-        
-        # Initialize utilities
-        from app.utils.rate_limit import APIUsageTracker
-        from app.utils.cache import ResponseCache
-        from app.core.anonymizer import DataAnonymizer
-        from app.services.prompt_builder_service import PromptBuilder
-        
-        self.usage_tracker = APIUsageTracker(
-            max_calls_per_minute=MAX_CALLS_PER_MINUTE,
-            max_daily_cost=MAX_DAILY_COST
-        )
-        self.response_cache = ResponseCache(ttl=CACHE_TTL, enabled=CACHE_ENABLED)
-        self.anonymizer = DataAnonymizer()
-        self.prompt_builder = PromptBuilder(prompt_file='rag_system.json')
-        
-        self._initialized = True
+            # Initialize utilities
+            from app.utils.rate_limit import APIUsageTracker
+            from app.utils.cache import ResponseCache
+            from app.core.anonymizer import DataAnonymizer
+            from app.services.prompt_builder_service import PromptBuilder
+            
+            logger.info("Initializing LLM Service components...")
+            
+            self.usage_tracker = APIUsageTracker(
+                max_calls_per_minute=MAX_CALLS_PER_MINUTE,
+                max_daily_cost=MAX_DAILY_COST
+            )
+            logger.info("✓ APIUsageTracker initialized")
+            
+            self.response_cache = ResponseCache(ttl=CACHE_TTL, enabled=CACHE_ENABLED)
+            logger.info("✓ ResponseCache initialized")
+            
+            self.anonymizer = DataAnonymizer()
+            logger.info("✓ DataAnonymizer initialized")
+            
+            self.prompt_builder = PromptBuilder(prompt_file='rag_system.json')
+            logger.info("✓ PromptBuilder initialized")
+            
+            self._initialized = True
+            logger.info("✓ LLMService fully initialized")
+            
+        except Exception as e:
+            logger.error(f"✗ Failed to initialize LLMService: {e}", exc_info=True)
+            self._initialized = False
+            raise
     
     # ==================== RAG Query Methods ====================
     
@@ -241,26 +260,51 @@ class LLMService:
     
     def _anonymize_context(self, text: str) -> str:
         """Anonymize sensitive information in text"""
-        # Anonymize IP addresses
-        ip_pattern = r'\b(?:\d{1,3}\.){3}\d{1,3}\b'
-        text = re.sub(ip_pattern, lambda m: self.anonymizer.anonymize_ip(m.group(), method='token'), text)
-        
-        # Anonymize device IDs
-        device_pattern = r'\b([a-z]+-(?:[a-z]+-)?\d+)\b'
-        text = re.sub(device_pattern, lambda m: self.anonymizer.anonymize_hostname(m.group(1), method='token'), text)
-        
-        return text
+        # Use the SecureLogAnonymizer's anonymize_text method which handles all types
+        try:
+            return self.anonymizer.anonymize_text(
+                text,
+                anonymize_ips=True,
+                anonymize_emails=True,
+                anonymize_urls=False,
+                anonymize_macs=True,
+                anonymize_domains=False
+            )
+        except Exception as e:
+            import logging
+            logging.getLogger('smartxdr.llm').warning(f"Anonymization failed: {e}")
+            return text
     
     def _deanonymize_text(self, text: str) -> str:
-        """De-anonymize text by replacing tokens with original values"""
-        token_pattern = r'(TKN-IP-[a-f0-9]+|HOST-[a-f0-9]+|USER-[a-f0-9]+|MAC-[a-f0-9]+)'
-        
-        def replace_token(match):
-            token = match.group(1)
-            original = self.anonymizer.deanonymize(token)
-            return original if original else token
-        
-        return re.sub(token_pattern, replace_token, text)
+        """De-anonymize text using reverse mapping"""
+        # The new anonymizer supports get_reverse_mapping for deanonymization
+        try:
+            # This is a best-effort approach - only tokens in the mapping will be replaced
+            import re
+            
+            # Look for anonymized values and try to reverse them
+            def replace_anon(match):
+                anon_val = match.group(0)
+                result = self.anonymizer.get_reverse_mapping(anon_val)
+                return result[0] if result else anon_val
+            
+            # Pattern for anonymized values (format: type_hash or domain-hash.tld or host_hash, etc.)
+            patterns = [
+                r'\b(?:user|host|domain)-[a-f0-9]+\b',  # user_xxx, host_xxx
+                r'\b(?:\d{1,3}\.){3}\d{1,3}\b',  # IP addresses
+                r'(?:[a-f0-9]{2}:){5}[a-f0-9]{2}',  # MAC addresses
+            ]
+            
+            result = text
+            for pattern in patterns:
+                result = re.sub(pattern, replace_anon, result)
+            
+            return result
+            
+        except Exception as e:
+            import logging
+            logging.getLogger('smartxdr.llm').warning(f"De-anonymization failed: {e}")
+            return text
     
     def _build_rag_user_input(self, context: str, query: str) -> str:
         """Build user input for RAG query"""

@@ -1273,3 +1273,22 @@ def get_anonymizer(hmac_key: Optional[bytes] = None) -> SecureLogAnonymizer:
         if _default_anonymizer is None:
             _default_anonymizer = SecureLogAnonymizer(hmac_key=hmac_key)
         return _default_anonymizer
+
+
+# =============================================================================
+# Backward Compatibility Aliases
+# =============================================================================
+# These aliases maintain compatibility with code using the old class names
+
+DataAnonymizer = SecureLogAnonymizer
+"""
+DEPRECATED: Use SecureLogAnonymizer instead.
+
+DataAnonymizer is an alias for SecureLogAnonymizer for backward compatibility.
+This alias will be removed in a future version.
+"""
+
+LogAnonymizer = SecureLogAnonymizer
+"""
+DEPRECATED: Use SecureLogAnonymizer instead.
+"""

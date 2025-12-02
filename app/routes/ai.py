@@ -1,15 +1,25 @@
 """
 AI/LLM API Routes - RAG Query Endpoint
 """
+import traceback
+import logging
 from flask import Blueprint, request, jsonify
 from app import get_collection
 from app.services.llm_service import LLMService
 from app.middleware.auth import require_api_key
 
+# Get logger
+logger = logging.getLogger('smartxdr.ai')
+
 ai_bp = Blueprint('ai', __name__)
 
 # Initialize LLM Service (singleton)
-llm_service = LLMService()
+try:
+    llm_service = LLMService()
+    logger.info("✓ LLM Service initialized")
+except Exception as e:
+    logger.error(f"✗ Failed to initialize LLM Service: {e}", exc_info=True)
+    llm_service = None
 
 
 @ai_bp.route('/ask', methods=['POST'])
@@ -40,6 +50,14 @@ def ask_llm():
         }
     """
     try:
+        # Check if LLM service initialized
+        if llm_service is None:
+            logger.error("LLM Service not initialized")
+            return jsonify({
+                'status': 'error',
+                'message': 'LLM Service not initialized'
+            }), 503
+        
         # Validate request
         if not request.is_json:
             return jsonify({
@@ -77,10 +95,13 @@ def ask_llm():
         # Get collection
         collection = get_collection()
         if collection is None:
+            logger.error("Database collection not initialized")
             return jsonify({
                 'status': 'error',
                 'message': 'Database not initialized'
             }), 500
+        
+        logger.info(f"Processing query: {query[:100]}...")
         
         # Call LLM Service
         result = llm_service.ask_rag(
@@ -95,11 +116,15 @@ def ask_llm():
             error_type = result.get('error_type', 'unknown')
             status_code = 429 if error_type == 'rate_limit' else 500
             
+            logger.error(f"LLM query failed: {result['error']}")
+            
             return jsonify({
                 'status': 'error',
                 'query': query,
                 'message': result['error']
             }), status_code
+        
+        logger.info(f"Query successful: {len(result.get('answer', ''))} chars")
         
         return jsonify({
             'status': 'success',
@@ -111,12 +136,16 @@ def ask_llm():
         }), 200
         
     except ValueError as e:
+        logger.error(f"Validation error: {e}")
         return jsonify({
             'status': 'error',
             'message': str(e)
         }), 400
         
     except Exception as e:
+        logger.error(f"Exception in ask_llm: {e}", exc_info=True)
+        logger.debug(f"Traceback: {traceback.format_exc()}")
+        
         return jsonify({
             'status': 'error',
             'message': f'Internal server error: {str(e)}'
@@ -140,6 +169,13 @@ def get_stats():
         }
     """
     try:
+        if llm_service is None:
+            logger.error("LLM Service not initialized")
+            return jsonify({
+                'status': 'error',
+                'message': 'LLM Service not initialized'
+            }), 503
+        
         stats = llm_service.get_stats()
         
         return jsonify({
@@ -148,6 +184,7 @@ def get_stats():
         }), 200
         
     except Exception as e:
+        logger.error(f"Failed to get stats: {e}", exc_info=True)
         return jsonify({
             'status': 'error',
             'message': f'Failed to get stats: {str(e)}'
@@ -167,6 +204,13 @@ def clear_cache():
         }
     """
     try:
+        if llm_service is None:
+            logger.error("LLM Service not initialized")
+            return jsonify({
+                'status': 'error',
+                'message': 'LLM Service not initialized'
+            }), 503
+        
         llm_service.clear_cache()
         
         return jsonify({
@@ -175,6 +219,7 @@ def clear_cache():
         }), 200
         
     except Exception as e:
+        logger.error(f"Failed to clear cache: {e}", exc_info=True)
         return jsonify({
             'status': 'error',
             'message': f'Failed to clear cache: {str(e)}'

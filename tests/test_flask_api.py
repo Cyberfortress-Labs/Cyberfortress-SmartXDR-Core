@@ -20,7 +20,8 @@ def test_ask_endpoint():
     response = requests.post(
         f"{BASE_URL}/api/ai/ask",
         json=payload,
-        headers={'Content-Type': 'application/json'}
+        headers={'Content-Type': 'application/json',
+            'X-API-Key':' test_analyst_key'}
     )
     
     print(f"Status Code: {response.status_code}")

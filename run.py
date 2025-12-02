@@ -62,6 +62,9 @@ def start_tunnel(port):
         bufsize=1
     )
     
+    # Give tunnel time to initialize
+    time.sleep(2)
+    
     # Wait for tunnel URL
     start_time = time.time()
     while time.time() - start_time < 30:
@@ -70,11 +73,17 @@ def start_tunnel(port):
             time.sleep(0.1)
             continue
         
-        match = re.search(r'(https://[a-z0-9-]+\.trycloudflare\.com)', line)
+        # Regex: URL must start with letter, then alphanumeric/hyphen, NOT start with hyphen
+        match = re.search(r'(https://[a-z][a-z0-9-]*\.trycloudflare\.com)', line)
         if match:
             _tunnel_url = match.group(1)
-            print(f"  ✅ Tunnel URL: {_tunnel_url}")
-            return _tunnel_url
+            # Validate URL doesn't have consecutive hyphens or hyphen at weird places
+            if '--' not in _tunnel_url and not _tunnel_url.startswith('https://-'):
+                print(f"  ✅ Tunnel URL: {_tunnel_url}")
+                return _tunnel_url
+            else:
+                print(f"  ⚠️  Invalid tunnel URL detected, retrying...")
+                continue
     
     print("  ❌ Failed to get tunnel URL")
     return None

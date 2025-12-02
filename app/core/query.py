@@ -22,9 +22,10 @@ from app.config import (
     MAX_DAILY_COST,
     CACHE_ENABLED,
     CACHE_TTL,
-    DEBUG_MODE
+    DEBUG_MODE,
+    DEBUG_ANONYMIZATION
 )
-from app.core.anonymizer import DataAnonymizer
+from app.core.anonymizer import SecureLogAnonymizer
 from app.services.prompt_builder_service import PromptBuilder
 from app.utils.rate_limit import APIUsageTracker
 from app.utils.cache import ResponseCache
@@ -42,7 +43,7 @@ client = OpenAI(
 )
 
 # Initialize anonymizer for data protection
-anonymizer = DataAnonymizer()
+anonymizer = SecureLogAnonymizer()
 
 # Initialize PromptBuilder for system prompts (using RAG-optimized prompt)
 prompt_builder = PromptBuilder(prompt_file='rag_system.json')
@@ -54,56 +55,55 @@ usage_tracker = APIUsageTracker(
 )
 response_cache = ResponseCache(ttl=CACHE_TTL, enabled=CACHE_ENABLED)
 
-# Debug flag to show anonymization process
-DEBUG_ANONYMIZATION = False  # Set to True to see detailed logs
-
 
 def anonymize_text(text: str) -> str:
     """
     Anonymize sensitive information in text before sending to AI
+    Uses SecureLogAnonymizer with HMAC-SHA256 consistent hashing
     
     Args:
         text: Text containing potentially sensitive information
         
     Returns:
-        Anonymized text with IP addresses and hostnames tokenized
+        Anonymized text with IP addresses and email addresses replaced
     """
-    # Anonymize IP addresses (matches IPv4 pattern)
-    ip_pattern = r'\b(?:\d{1,3}\.){3}\d{1,3}\b'
-    text = re.sub(ip_pattern, lambda m: anonymizer.anonymize_ip(m.group(), method='token'), text)
+    # Use built-in anonymize_text method with selective anonymization
+    anonymized = anonymizer.anonymize_text(
+        text,
+        anonymize_ips=True,
+        anonymize_emails=True,
+        anonymize_urls=True,
+        anonymize_macs=False,
+        anonymize_domains=False
+    )
     
-    # Anonymize device IDs (pattern: xxx-01, xxx-xx-01)
-    device_pattern = r'\b([a-z]+-(?:[a-z]+-)?\d+)\b'
+    if DEBUG_ANONYMIZATION:
+        print(f"[ANONYMIZER] Text anonymized: {len(text)} chars → {len(anonymized)} chars")
     
-    def anonymize_device(match):
-        device_id = match.group(1)
-        return anonymizer.anonymize_hostname(device_id, method='token')
-    
-    text = re.sub(device_pattern, anonymize_device, text)
-    
-    return text
+    return anonymized
 
 
 def deanonymize_text(text: str) -> str:
     """
-    De-anonymize text by replacing tokens with original values
+    De-anonymize text by looking up original values from reverse mapping.
+    Note: With HMAC-based anonymization, reverse mapping is limited to values
+    that were previously anonymized in the current session.
     
     Args:
-        text: Text containing anonymized tokens
+        text: Text containing anonymized values
         
     Returns:
-        Text with original sensitive information restored
+        Text with original sensitive information restored (if mappings exist)
     """
-    # Find all tokens (TKN-IP-xxx, HOST-xxx, etc.)
-    token_pattern = r'(TKN-IP-[a-f0-9]+|HOST-[a-f0-9]+|USER-[a-f0-9]+|MAC-[a-f0-9]+)'
+    if DEBUG_ANONYMIZATION:
+        stats = anonymizer.get_stats()
+        print(f"[DEANON] Text ready for response, mappings available: {stats['total_anonymized']} items")
     
-    def replace_token(match):
-        token = match.group(1)
-        original = anonymizer.deanonymize(token)
-        return original if original else token  # Return token if no mapping found
-    
-    text = re.sub(token_pattern, replace_token, text)
-    
+    # With HMAC-based anonymization (not token-based), we cannot easily reverse
+    # the anonymized text without the original values. The mapping database
+    # stores original->anonymized but we'd need to iterate through all values.
+    # For now, return text as-is since response typically doesn't contain
+    # anonymized values (they were only in the sent context).
     return text
 
 

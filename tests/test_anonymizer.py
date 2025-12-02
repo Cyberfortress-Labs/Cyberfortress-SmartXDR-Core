@@ -1,339 +1,590 @@
 """
-Test Data Anonymization Layer
-Demo: Tokenization, Hashing, Private Mapping
+Comprehensive tests for SecureLogAnonymizer
+Tests HMAC consistency, encryption, IPv4/IPv6, email, URL, MAC, and JSON anonymization
 """
 
 import sys
-from pathlib import Path
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+import pytest
+
 import json
-
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
+import secrets
+from pathlib import Path
 from app.core.anonymizer import (
-    DataAnonymizer, 
+    SecureLogAnonymizer,
+    DataAnonymizer,  # Test backward compatibility
+    KeyManager,
     get_anonymizer,
-    anonymize_suricata_alert,
-    anonymize_zeek_log,
-    anonymize_wazuh_alert
+    anonymize_log,
+    get_key_manager
 )
 
 
-def test_ip_anonymization():
-    """Test different IP anonymization methods"""
-    print("=" * 80)
-    print("TEST 1: IP ADDRESS ANONYMIZATION")
-    print("=" * 80)
-    
-    anonymizer = DataAnonymizer()
-    
-    test_ips = [
-        "192.168.85.112",  # Internal DVWA
-        "192.168.100.171",  # Suricata
-        "8.8.8.8",  # Public DNS
-        "192.168.71.100"  # External Attacker
-    ]
-    
-    print("\n1. Tokenization (reversible):")
-    for ip in test_ips:
-        token = anonymizer.anonymize_ip(ip, method='token')
-        original = anonymizer.deanonymize(token)
-        print(f"  {ip:20} -> {token:20} (reverse: {original})")
-    
-    print("\n2. Hashing (one-way, consistent):")
-    for ip in test_ips:
-        hashed = anonymizer.anonymize_ip(ip, method='hash')
-        print(f"  {ip:20} -> {hashed}")
-    
-    print("\n3. Subnet-preserving (for network analysis):")
-    for ip in test_ips:
-        subnet = anonymizer.anonymize_ip(ip, method='subnet')
-        print(f"  {ip:20} -> {subnet}")
+def dump_mappings(anon: SecureLogAnonymizer, limit_per_cat: int = 5):
+    """Helper to print a brief summary of mapping DB and stats (not full dump)."""
+    stats = anon.get_stats()
+    print("=== MAPPING SUMMARY ===")
+    print(f"Total anonymized: {stats.get('total_anonymized')}")
+    print("Counts by category:")
+    for k, v in stats.get('mapping_counts', {}).items():
+        print(f"  - {k}: {v}")
+    print("Sample mappings (up to {} each):".format(limit_per_cat))
+    for cat, mapping in anon._mapping_db.items():
+        if not mapping:
+            continue
+        print(f"  [{cat}] ({len(mapping)} items) -> sample:")
+        i = 0
+        for orig, anonv in mapping.items():
+            print(f"    {orig!r} => {anonv!r}")
+            i += 1
+            if i >= limit_per_cat:
+                break
+    print("=======================\n")
 
 
-def test_user_hostname_anonymization():
-    """Test username and hostname anonymization"""
-    print("\n" + "=" * 80)
-    print("TEST 2: USERNAME & HOSTNAME ANONYMIZATION")
-    print("=" * 80)
+class TestKeyManager:
+    """Test KeyManager for secure key handling"""
     
-    anonymizer = get_anonymizer()
+    def test_generate_key_for_env(self):
+        """Test key generation for environment variable"""
+        key = KeyManager.generate_key_for_env()
+        print("Generated env key (truncated):", key[:16] + "...")
+        assert isinstance(key, str)
+        assert len(key) == 64  # 32 bytes = 64 hex chars
+        assert all(c in '0123456789abcdef' for c in key)
     
-    users = ["admin", "root", "wazuh", "analyst"]
-    hosts = ["DVWA-SERVER", "ELK-STACK", "WAZUH-01", "pfSense"]
+    def test_get_key_from_env(self, monkeypatch):
+        """Test retrieving key from environment variable"""
+        test_key = KeyManager.generate_key_for_env()
+        monkeypatch.setenv('ANONYMIZER_ENCRYPTION_KEY', test_key)
+        
+        km = KeyManager()
+        key = km.get_key(auto_generate=False)
+        
+        print("KeyManager returned key (hex truncated):", key.hex()[:16] + "...")
+        assert key is not None
+        assert len(key) == 32
+        assert key.hex() == test_key
     
-    print("\nUsernames:")
-    for user in users:
-        token = anonymizer.anonymize_username(user, method='token')
-        hashed = anonymizer.anonymize_username(user, method='hash')
-        print(f"  {user:15} -> Token: {token:20} Hash: {hashed}")
+    def test_auto_generate_key(self, tmp_path, monkeypatch):
+        """Test auto-generation and saving of key"""
+        # Use temporary directory
+        key_file = tmp_path / "test.key"
+        monkeypatch.delenv('ANONYMIZER_ENCRYPTION_KEY', raising=False)
+        
+        km = KeyManager(key_file_path=key_file)
+        key1 = km.get_key(auto_generate=True)
+        
+        print("Auto-generated key saved to:", str(key_file))
+        assert key1 is not None
+        assert len(key1) == 32
+        assert key_file.exists()
+        
+        # Second call should return cached key
+        key2 = km.get_key(auto_generate=True)
+        assert key1 == key2
     
-    print("\nHostnames:")
-    for host in hosts:
-        token = anonymizer.anonymize_hostname(host, method='token')
-        print(f"  {host:15} -> {token}")
+    def test_key_rotation(self, tmp_path, monkeypatch):
+        """Test key rotation"""
+        key_file = tmp_path / "test.key"
+        monkeypatch.delenv('ANONYMIZER_ENCRYPTION_KEY', raising=False)
+        
+        km = KeyManager(key_file_path=key_file)
+        key1 = km.get_key(auto_generate=True)
+        
+        # Rotate key
+        key2 = km.rotate_key()
+        
+        print("Rotated key: before (trunc) ->", key1.hex()[:8] + "...", "after (trunc) ->", key2.hex()[:8] + "...")
+        assert key1 != key2
+        assert len(key2) == 32
 
 
-def test_suricata_alert():
-    """Test Suricata alert anonymization"""
-    print("\n" + "=" * 80)
-    print("TEST 3: SURICATA ALERT ANONYMIZATION")
-    print("=" * 80)
+class TestHMACConsistency:
+    """Test HMAC-based consistent hashing"""
     
-    # Sample Suricata EVE-JSON alert
-    raw_alert = {
-        "timestamp": "2025-01-19T10:30:45.123456+0000",
-        "flow_id": 123456789,
-        "event_type": "alert",
-        "src_ip": "192.168.71.100",
-        "src_port": 54321,
-        "dest_ip": "192.168.85.112",
-        "dest_port": 80,
-        "proto": "TCP",
-        "alert": {
-            "action": "allowed",
-            "gid": 1,
-            "signature_id": 2100498,
-            "rev": 7,
-            "signature": "GPL ATTACK_RESPONSE id check returned root",
-            "category": "Potentially Bad Traffic",
-            "severity": 2
-        },
-        "http": {
-            "hostname": "dvwa.local",
-            "url": "/vulnerabilities/sqli/",
-            "http_user_agent": "Mozilla/5.0",
-            "http_method": "GET",
-            "protocol": "HTTP/1.1",
-            "status": 200
-        },
-        "flow": {
-            "pkts_toserver": 5,
-            "pkts_toclient": 4,
-            "bytes_toserver": 450,
-            "bytes_toclient": 3200
+    def test_hmac_consistent_hash(self):
+        """Test that same input produces same hash"""
+        key = secrets.token_bytes(32)
+        anon1 = SecureLogAnonymizer(hmac_key=key)
+        anon2 = SecureLogAnonymizer(hmac_key=key)
+        
+        # Same input should produce same hash
+        ip1 = anon1.anonymize_ip("192.168.1.100")
+        ip2 = anon2.anonymize_ip("192.168.1.100")
+        
+        print("HMAC consistency test -> ip1:", ip1, "ip2:", ip2)
+        assert ip1 == ip2
+    
+    def test_different_keys_different_hashes(self):
+        """Test that different keys produce different hashes"""
+        anon1 = SecureLogAnonymizer(hmac_key=secrets.token_bytes(32))
+        anon2 = SecureLogAnonymizer(hmac_key=secrets.token_bytes(32))
+        
+        ip1 = anon1.anonymize_ip("192.168.1.100")
+        ip2 = anon2.anonymize_ip("192.168.1.100")
+        
+        print("Different-keys test -> ip1:", ip1, "ip2:", ip2)
+        assert ip1 != ip2
+    
+    def test_singleton_consistency(self):
+        """Test singleton anonymizer maintains consistency"""
+        anon1 = get_anonymizer()
+        
+        ip1 = anon1.anonymize_ip("10.0.0.1")
+        ip2 = anon1.anonymize_ip("10.0.0.1")
+        
+        print("Singleton outputs:", ip1, ip2)
+        assert ip1 == ip2
+
+
+class TestIPv4Anonymization:
+    """Test IPv4 address anonymization"""
+    
+    def test_ipv4_subnet_preservation(self):
+        """Test IPv4 subnet preservation (/16)"""
+        anon = SecureLogAnonymizer(preserve_subnet_prefix=16)
+        
+        ip1 = anon.anonymize_ip("192.168.1.100")
+        ip2 = anon.anonymize_ip("192.168.2.100")
+        
+        print("IPv4 preserve example ->", ip1, ip2)
+        # First two octets should match (same subnet)
+        assert ip1.split('.')[0] == ip2.split('.')[0]
+        assert ip1.split('.')[1] == ip2.split('.')[1]
+    
+    def test_ipv4_different_subnet_different_hash(self):
+        """Test different subnets produce different hashes"""
+        anon = SecureLogAnonymizer(preserve_subnet_prefix=16)
+        
+        ip1 = anon.anonymize_ip("192.168.1.100")
+        ip2 = anon.anonymize_ip("192.167.1.100")  # Different /16
+        
+        print("IPv4 different-subnet ->", ip1, ip2)
+        # At least last two octets should differ
+        octets1 = ip1.split('.')
+        octets2 = ip2.split('.')
+        
+        assert not (octets1[2] == octets2[2] and octets1[3] == octets2[3])
+    
+    def test_reserved_ipv4_not_anonymized(self):
+        """Test reserved IPv4 addresses are not anonymized"""
+        anon = SecureLogAnonymizer()
+        
+        print("Reserved checks:", anon.anonymize_ip("127.0.0.1"), anon.anonymize_ip("0.0.0.0"))
+        assert anon.anonymize_ip("127.0.0.1") == "127.0.0.1"
+        assert anon.anonymize_ip("0.0.0.0") == "0.0.0.0"
+        assert anon.anonymize_ip("255.255.255.255") == "255.255.255.255"
+    
+    def test_invalid_ipv4_returned_as_is(self):
+        """Test invalid IPv4 addresses are returned unchanged"""
+        anon = SecureLogAnonymizer()
+        
+        print("Invalid IPs:", anon.anonymize_ip("not-an-ip"), anon.anonymize_ip("999.999.999.999"))
+        assert anon.anonymize_ip("not-an-ip") == "not-an-ip"
+        assert anon.anonymize_ip("999.999.999.999") == "999.999.999.999"
+
+
+class TestIPv6Anonymization:
+    """Test IPv6 address anonymization"""
+    
+    def test_ipv6_anonymization(self):
+        """Test IPv6 address anonymization"""
+        anon = SecureLogAnonymizer(preserve_subnet_prefix_v6=48)
+        
+        ip = anon.anonymize_ip("2001:0db8:85a3:0000:0000:8a2e:0370:7334")
+        
+        print("IPv6 anon example:", ip)
+        assert ip != "2001:0db8:85a3:0000:0000:8a2e:0370:7334"
+        assert ':' in ip  # Should still be IPv6 format
+    
+    def test_reserved_ipv6_not_anonymized(self):
+        """Test reserved IPv6 addresses are not anonymized"""
+        anon = SecureLogAnonymizer()
+        
+        print("Reserved IPv6 check:", anon.anonymize_ip("::1"), anon.anonymize_ip("::"))
+        assert anon.anonymize_ip("::1") == "::1"  # loopback
+        assert anon.anonymize_ip("::") == "::"    # all zeros
+
+
+class TestEmailAnonymization:
+    """Test email address anonymization"""
+    
+    def test_email_anonymization(self):
+        """Test email anonymization preserves structure"""
+        anon = SecureLogAnonymizer()
+        
+        anon_email = anon.anonymize_email("user@example.com")
+        
+        print("Email anon:", anon_email)
+        # Should contain @
+        assert '@' in anon_email
+        # Should have user-xxx format
+        assert anon_email.startswith("user-")
+        # Should preserve TLD
+        assert anon_email.endswith(".com")
+    
+    def test_email_consistency(self):
+        """Test same email produces same anonymized result"""
+        key = secrets.token_bytes(32)
+        anon1 = SecureLogAnonymizer(hmac_key=key)
+        anon2 = SecureLogAnonymizer(hmac_key=key)
+        
+        email = "alice@company.com"
+        anon_email1 = anon1.anonymize_email(email)
+        anon_email2 = anon2.anonymize_email(email)
+        
+        print("Email consistency:", anon_email1, anon_email2)
+        assert anon_email1 == anon_email2
+    
+    def test_invalid_email_returned_as_is(self):
+        """Test invalid email is returned unchanged"""
+        anon = SecureLogAnonymizer()
+        
+        assert anon.anonymize_email("not-an-email") == "not-an-email"
+
+
+class TestMACAnonymization:
+    """Test MAC address anonymization"""
+    
+    def test_mac_oui_preservation(self):
+        """Test MAC OUI (manufacturer prefix) is preserved"""
+        anon = SecureLogAnonymizer()
+        
+        mac = anon.anonymize_mac("AA:BB:CC:DD:EE:FF")
+        parts = mac.split(':')
+        
+        print("MAC anon:", mac)
+        # OUI preserved (first 3 octets)
+        assert parts[0] == "aa"
+        assert parts[1] == "bb"
+        assert parts[2] == "cc"
+    
+    def test_mac_normalization(self):
+        """Test MAC address normalization"""
+        anon = SecureLogAnonymizer()
+        
+        # Different formats should normalize
+        mac1 = anon.anonymize_mac("AA-BB-CC-DD-EE-FF")
+        mac2 = anon.anonymize_mac("aabbccddeeff")
+        mac3 = anon.anonymize_mac("AABB.CCDD.EEFF")
+        
+        print("MAC variants ->", mac1, mac2, mac3)
+        # All should normalize to same key internally
+        assert anon.anonymize_mac("AA:BB:CC:DD:EE:FF") == mac1
+
+
+class TestURLAnonymization:
+    """Test URL anonymization"""
+    
+    def test_url_anonymization(self):
+        """Test URL is anonymized while preserving structure"""
+        anon = SecureLogAnonymizer()
+        
+        url = "https://user@example.com:8080/api/users/123?id=456&email=test@test.com"
+        anon_url = anon.anonymize_url(url)
+        
+        print("URL anon:", anon_url)
+        # Should still be a URL
+        assert "://" in anon_url
+        # Hostname should be anonymized
+        assert "example.com" not in anon_url
+    
+    def test_url_consistency(self):
+        """Test same URL produces same anonymized result"""
+        key = secrets.token_bytes(32)
+        anon1 = SecureLogAnonymizer(hmac_key=key)
+        anon2 = SecureLogAnonymizer(hmac_key=key)
+        
+        url = "https://api.github.com/users/alice"
+        anon_url1 = anon1.anonymize_url(url)
+        anon_url2 = anon2.anonymize_url(url)
+        
+        print("URL consistency:", anon_url1, anon_url2)
+        assert anon_url1 == anon_url2
+
+
+class TestDomainAnonymization:
+    """Test domain name anonymization"""
+    
+    def test_domain_tld_preservation(self):
+        """Test TLD is preserved"""
+        anon = SecureLogAnonymizer()
+        
+        dom1 = anon.anonymize_domain("example.com")
+        dom2 = anon.anonymize_domain("test.org")
+        
+        print("Domains anon:", dom1, dom2)
+        # TLDs preserved
+        assert dom1.endswith(".com")
+        assert dom2.endswith(".org")
+    
+    def test_domain_consistency(self):
+        """Test same domain produces same result"""
+        key = secrets.token_bytes(32)
+        anon1 = SecureLogAnonymizer(hmac_key=key)
+        anon2 = SecureLogAnonymizer(hmac_key=key)
+        
+        domain = "api.example.com"
+        dom1 = anon1.anonymize_domain(domain)
+        dom2 = anon2.anonymize_domain(domain)
+        
+        print("Domain consistency:", dom1, dom2)
+        assert dom1 == dom2
+
+
+class TestTextAnonymization:
+    """Test text anonymization with multiple types"""
+    
+    def test_anonymize_text_with_ips(self):
+        """Test IP anonymization in text"""
+        anon = SecureLogAnonymizer()
+        
+        text = "Connection from 192.168.1.100 to 10.0.0.1"
+        anon_text = anon.anonymize_text(text, anonymize_ips=True)
+        
+        print("Text anon (IPs):", anon_text)
+        assert "192.168.1.100" not in anon_text
+        assert "10.0.0.1" not in anon_text
+    
+    def test_anonymize_text_with_emails(self):
+        """Test email anonymization in text"""
+        anon = SecureLogAnonymizer()
+        
+        text = "Contact admin@example.com or support@test.org"
+        anon_text = anon.anonymize_text(text, anonymize_emails=True)
+        
+        print("Text anon (emails):", anon_text)
+        assert "admin@example.com" not in anon_text
+        assert "support@test.org" not in anon_text
+    
+    def test_anonymize_text_selective(self):
+        """Test selective anonymization"""
+        anon = SecureLogAnonymizer()
+        
+        text = "IP: 192.168.1.1, Email: user@test.com, MAC: AA:BB:CC:DD:EE:FF"
+        
+        # Only anonymize IPs
+        anon_text = anon.anonymize_text(
+            text,
+            anonymize_ips=True,
+            anonymize_emails=False,
+            anonymize_macs=False
+        )
+        
+        print("Text selective anon:", anon_text)
+        assert "192.168.1.1" not in anon_text
+        assert "user@test.com" in anon_text
+        assert "AA:BB:CC:DD:EE:FF" in anon_text or "aa:bb:cc:dd:ee:ff" in anon_text
+
+
+class TestJSONAnonymization:
+    """Test JSON structure anonymization"""
+    
+    def test_anonymize_json_dict(self):
+        """Test JSON dict anonymization"""
+        anon = SecureLogAnonymizer()
+        
+        data = {
+            "source_ip": "192.168.1.1",
+            "dest_ip": "10.0.0.1",
+            "user": "admin",
+            "email": "admin@example.com"
         }
-    }
+        
+        anon_data = anon.anonymize_json(data)
+        
+        print("Anon JSON dict:", anon_data)
+        dump_mappings(anon)
+        # Values should be anonymized
+        assert anon_data["source_ip"] != "192.168.1.1"
+        assert anon_data["dest_ip"] != "10.0.0.1"
+        assert anon_data["user"] != "admin"
+        assert anon_data["email"] != "admin@example.com"
     
-    print("\n[ORIGINAL ALERT]")
-    print(json.dumps(raw_alert, indent=2))
-    
-    anonymized = anonymize_suricata_alert(raw_alert)
-    
-    print("\n[ANONYMIZED ALERT]")
-    print(json.dumps(anonymized, indent=2))
-    
-    print("\n[KEY CHANGES]")
-    print(f"  src_ip:        {raw_alert['src_ip']} -> {anonymized['src_ip']}")
-    print(f"  dest_ip:       {raw_alert['dest_ip']} -> {anonymized['dest_ip']}")
-    print(f"  http.hostname: {raw_alert['http']['hostname']} -> {anonymized['http']['hostname']}")
-
-
-def test_zeek_log():
-    """Test Zeek conn.log anonymization"""
-    print("\n" + "=" * 80)
-    print("TEST 4: ZEEK CONN.LOG ANONYMIZATION")
-    print("=" * 80)
-    
-    raw_log = {
-        "ts": 1642598445.123456,
-        "uid": "CAbcd1234efgh5678",
-        "id.orig_h": "192.168.95.100",
-        "id.orig_p": 49152,
-        "id.resp_h": "192.168.85.115",
-        "id.resp_p": 445,
-        "proto": "tcp",
-        "service": "smb",
-        "duration": 12.456,
-        "orig_bytes": 1024,
-        "resp_bytes": 2048,
-        "conn_state": "SF",
-        "missed_bytes": 0,
-        "history": "ShADadFf",
-        "orig_pkts": 15,
-        "resp_pkts": 12
-    }
-    
-    print("\n[ORIGINAL LOG]")
-    print(json.dumps(raw_log, indent=2))
-    
-    anonymized = anonymize_zeek_log(raw_log)
-    
-    print("\n[ANONYMIZED LOG]")
-    print(json.dumps(anonymized, indent=2))
-
-
-def test_wazuh_alert():
-    """Test Wazuh alert anonymization"""
-    print("\n" + "=" * 80)
-    print("TEST 5: WAZUH ALERT ANONYMIZATION")
-    print("=" * 80)
-    
-    raw_alert = {
-        "timestamp": "2025-01-19T10:35:20.456Z",
-        "rule": {
-            "level": 7,
-            "description": "Attempt to login using a non-existent user",
-            "id": "5710",
-            "mitre": {
-                "id": ["T1110"],
-                "tactic": ["Credential Access"],
-                "technique": ["Brute Force"]
-            }
-        },
-        "agent": {
-            "id": "001",
-            "name": "WINDOWS-SERVER-01",
-            "ip": "192.168.85.115"
-        },
-        "data": {
-            "srcip": "192.168.95.100",
-            "srcuser": "attacker",
-            "dstuser": "Administrator",
-            "win": {
-                "eventdata": {
-                    "targetUserName": "Administrator",
-                    "workstationName": "KALI-ATTACKER",
-                    "ipAddress": "192.168.95.100"
-                }
-            }
-        },
-        "decoder": {
-            "name": "windows-security"
+    def test_anonymize_json_nested(self):
+        """Test nested JSON anonymization"""
+        anon = SecureLogAnonymizer()
+        
+        data = {
+            "user": {
+                "username": "alice",
+                "email": "alice@test.com"
+            },
+            "source_ip": "192.168.1.100"
         }
-    }
+        
+        anon_data = anon.anonymize_json(data)
+        
+        print("Anon nested JSON:", anon_data)
+        dump_mappings(anon)
+        assert anon_data["user"]["username"] != "alice"
+        assert anon_data["user"]["email"] != "alice@test.com"
+        assert anon_data["source_ip"] != "192.168.1.100"
     
-    print("\n[ORIGINAL ALERT]")
-    print(json.dumps(raw_alert, indent=2))
-    
-    anonymized = anonymize_wazuh_alert(raw_alert)
-    
-    print("\n[ANONYMIZED ALERT]")
-    print(json.dumps(anonymized, indent=2))
+    def test_anonymize_json_list(self):
+        """Test JSON list anonymization"""
+        anon = SecureLogAnonymizer()
+        
+        data = {
+            "ips": ["192.168.1.1", "10.0.0.1"],
+            "emails": ["user1@test.com", "user2@test.com"]
+        }
+        
+        anon_data = anon.anonymize_json(data)
+        
+        print("Anon JSON list:", anon_data)
+        dump_mappings(anon)
+        assert "192.168.1.1" not in anon_data["ips"]
+        assert "10.0.0.1" not in anon_data["ips"]
 
 
-def test_mapping_stats():
-    """Display mapping database statistics"""
-    print("\n" + "=" * 80)
-    print("MAPPING DATABASE STATISTICS")
-    print("=" * 80)
+class TestExportImport:
+    """Test mapping database export/import"""
     
-    anonymizer = get_anonymizer()
-    stats = anonymizer.get_mapping_stats()
+    def test_export_unencrypted(self):
+        """Test unencrypted export"""
+        anon = SecureLogAnonymizer()
+        anon.anonymize_ip("192.168.1.1")
+        anon.anonymize_email("user@test.com")
+        
+        data = anon.export_mapping_db(use_key_manager=False)
+        
+        print("Export (unencrypted) length:", len(data))
+        assert isinstance(data, bytes)
+        # Should be JSON
+        json_data = json.loads(data.decode('utf-8'))
+        print("Export JSON keys:", list(json_data.keys()))
+        assert "mappings" in json_data
+        assert "ip" in json_data["mappings"]
     
-    print("\nAnonymized entities:")
-    for entity_type, count in stats.items():
-        print(f"  {entity_type:30} {count}")
+    def test_export_import_roundtrip(self):
+        """Test export and import roundtrip"""
+        key = secrets.token_bytes(32)
+        anon1 = SecureLogAnonymizer(hmac_key=key)
+        
+        # Create some mappings
+        ip1 = anon1.anonymize_ip("192.168.1.1")
+        email1 = anon1.anonymize_email("user@test.com")
+        print("anon1 sample ->", ip1, email1)
+        
+        # Export with password
+        exported = anon1.export_mapping_db(password="test123", use_key_manager=False)
+        print("Exported encrypted length:", len(exported), "version byte:", exported[0])
+        
+        # Create new instance and import
+        anon2 = SecureLogAnonymizer(hmac_key=key)
+        anon2.import_mapping_db(exported, password="test123")
+        
+        # Mappings should be restored
+        ip2 = anon2.anonymize_ip("192.168.1.1")
+        email2 = anon2.anonymize_email("user@test.com")
+        print("anon2 sample after import ->", ip2, email2)
+        
+        assert ip1 == ip2
+        assert email1 == email2
     
-    # Export mapping for backup
-    export_path = Path(__file__).parent / "anonymizer_mapping.json"
-    anonymizer.export_mapping_db(str(export_path))
-    print(f"\n[INFO] Mapping database exported to: {export_path}")
+    def test_import_wrong_password_fails(self):
+        """Test import with wrong password fails"""
+        anon1 = SecureLogAnonymizer()
+        anon1.anonymize_ip("192.168.1.1")
+        
+        exported = anon1.export_mapping_db(password="correct123", use_key_manager=False)
+        
+        anon2 = SecureLogAnonymizer()
+        
+        with pytest.raises(ValueError) as excinfo:
+            anon2.import_mapping_db(exported, password="wrong123")
+        # print the exception message for debug visibility
+        print("Import failed as expected:", str(excinfo.value))
+        assert "wrong password" in str(excinfo.value).lower()
 
 
-def test_real_suricata_log():
-    """Test with real Suricata log from production system"""
-    print("\n" + "=" * 80)
-    print("TEST 6: REAL SURICATA LOG ANONYMIZATION")
-    print("=" * 80)
+class TestReverseMapping:
+    """Test reverse mapping functionality"""
     
-    # Load real log file
-    log_path = Path(__file__).parent.parent / "logs" / "test-logs" / "suricata-nmap.json"
+    def test_get_reverse_mapping(self):
+        """Test retrieving original from anonymized value"""
+        anon = SecureLogAnonymizer()
+        
+        original_ip = "192.168.1.1"
+        anon_ip = anon.anonymize_ip(original_ip)
+        print("Reverse mapping lookup for:", anon_ip)
+        
+        result = anon.get_reverse_mapping(anon_ip)
+        print("Reverse mapping result:", result)
+        
+        assert result is not None
+        assert result[0] == original_ip
+        assert result[1] == "ip"
     
-    if not log_path.exists():
-        print(f"\n[ERROR] Log file not found: {log_path}")
-        return
+    def test_reverse_mapping_not_found(self):
+        """Test reverse mapping for unknown value"""
+        anon = SecureLogAnonymizer()
+        
+        result = anon.get_reverse_mapping("unknown_value")
+        print("Reverse mapping unknown ->", result)
+        
+        assert result is None
+
+
+class TestBackwardCompatibility:
+    """Test backward compatibility"""
     
-    print(f"\n[INFO] Loading log from: {log_path}")
-    with open(log_path, 'r', encoding='utf-8') as f:
-        raw_log = json.load(f)
+    def test_data_anonymizer_alias(self):
+        """Test DataAnonymizer alias works"""
+        # Should be able to import and use old class name
+        anon = DataAnonymizer()
+        
+        ip = anon.anonymize_ip("192.168.1.1")
+        print("DataAnonymizer alias ->", ip)
+        assert ip != "192.168.1.1"
     
-    # Show original sensitive data
-    print("\n[ORIGINAL SENSITIVE DATA]")
-    if '_source' in raw_log:
-        source = raw_log['_source']
-        if 'source' in source:
-            print(f"  Source IP:      {source['source'].get('ip', 'N/A')}")
-        if 'destination' in source:
-            print(f"  Dest IP:        {source['destination'].get('ip', 'N/A')}")
-            print(f"  Dest Domain:    {source['destination'].get('domain', 'N/A')}")
-        if 'observer' in source:
-            print(f"  Observer IPs:   {source['observer'].get('ip', [])}")
-            print(f"  Observer MACs:  {source['observer'].get('mac', [])}")
+    def test_anonymize_log_function(self):
+        """Test convenience anonymize_log function"""
+        data = {"source_ip": "192.168.1.1", "message": "test"}
+        
+        anon_data = anonymize_log(data)
+        print("anonymize_log output:", anon_data)
+        assert anon_data["source_ip"] != "192.168.1.1"
+
+
+class TestStatistics:
+    """Test statistics tracking"""
     
-    # Anonymize the entire log
-    anonymizer = get_anonymizer()
+    def test_get_stats(self):
+        """Test statistics retrieval"""
+        anon = SecureLogAnonymizer()
+        
+        anon.anonymize_ip("192.168.1.1")
+        anon.anonymize_email("user@test.com")
+        anon.anonymize_ip("10.0.0.1")
+        
+        stats = anon.get_stats()
+        print("Stats:", stats)
+        
+        assert stats["total_anonymized"] == 3
+        assert stats["by_type"]["ip"] == 2
+        assert stats["by_type"]["email"] == 1
     
-    # Custom field list for Elasticsearch Suricata logs
-    fields_to_anonymize = [
-        # Source/Dest IPs
-        '_source.source.ip', '_source.source.address',
-        '_source.destination.ip', '_source.destination.address', 
-        '_source.destination.domain',
-        # Observer data (includes arrays)
-        '_source.observer.ip', '_source.observer.hostname',
-        '_source.observer.mac',
-        # Related IPs
-        '_source.related.ip', '_source.related.hosts',
-        # URL domains
-        '_source.url.domain'
-    ]
-    
-    anonymized_log = anonymizer.anonymize_log_event(raw_log, fields_to_anonymize)
-    
-    # Show anonymized data
-    print("\n[ANONYMIZED SENSITIVE DATA]")
-    if '_source' in anonymized_log:
-        source = anonymized_log['_source']
-        if 'source' in source:
-            print(f"  Source IP:      {source['source'].get('ip', 'N/A')}")
-        if 'destination' in source:
-            print(f"  Dest IP:        {source['destination'].get('ip', 'N/A')}")
-            print(f"  Dest Domain:    {source['destination'].get('domain', 'N/A')}")
-        if 'observer' in source:
-            print(f"  Observer IPs:   {source['observer'].get('ip', [])}")
-            print(f"  Observer MACs:  {source['observer'].get('mac', [])}")
-    
-    # Save anonymized log
-    output_dir = Path(__file__).parent.parent / "logs" / "anonymizer-logs"
-    output_dir.mkdir(parents=True, exist_ok=True)
-    
-    output_path = output_dir / "anonymizer-suricata-nmap.json"
-    with open(output_path, 'w', encoding='utf-8') as f:
-        json.dump(anonymized_log, f, indent=2, ensure_ascii=False)
-    
-    print(f"\n[SUCCESS] Anonymized log saved to: {output_path}")
-    print(f"[INFO] Original size: {log_path.stat().st_size:,} bytes")
-    print(f"[INFO] Anonymized size: {output_path.stat().st_size:,} bytes")
+    def test_clear_mappings(self):
+        """Test clearing mappings"""
+        anon = SecureLogAnonymizer()
+        
+        anon.anonymize_ip("192.168.1.1")
+        anon.anonymize_email("user@test.com")
+        
+        # Clear IP mappings only
+        anon.clear_mappings(["ip"])
+        
+        stats = anon.get_stats()
+        print("Stats after clear:", stats)
+        assert stats["by_type"]["ip"] == 0
+        assert stats["by_type"]["email"] == 1
 
 
 if __name__ == "__main__":
-    print("\n" + "=" * 80)
-    print("SMARTXDR DATA ANONYMIZATION LAYER TEST")
-    print("Zero-Knowledge Approach: Tokenization + Hashing + Private Mapping")
-    print("=" * 80)
-    
-    # Run all tests
-    test_ip_anonymization()
-    test_user_hostname_anonymization()
-    test_suricata_alert()
-    test_zeek_log()
-    test_wazuh_alert()
-    test_real_suricata_log()  # NEW: Test with real log
-    test_mapping_stats()
-    
-    print("\n" + "=" * 80)
-    print("ALL TESTS COMPLETED")
-    print("=" * 80)
-    print("\n[SUMMARY]")
-    print("[PASS] IP anonymization (token/hash/subnet-preserving)")
-    print("[PASS] Username/Hostname tokenization")
-    print("[PASS] Suricata alert sanitization")
-    print("[PASS] Zeek log sanitization")
-    print("[PASS] Wazuh alert sanitization")
-    print("[PASS] Real Suricata log from production (Elasticsearch)")
-    print("[PASS] Private mapping database (reversible)")
-    print("\n[SECURITY]")
-    print("- All sensitive data replaced with tokens before sending to AI")
-    print("- Original values stored only in local mapping database")
-    print("- Zero-Knowledge: External services never see real IPs/users")
+    # Run with -s to see prints: pytest -s <this_file>
+    pytest.main([__file__, "-q"])
