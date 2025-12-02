@@ -18,7 +18,7 @@
                     "role": "Internet Gateway/Linux Router",
                     "interfaces": [
                         {
-                            "name": "eth0",
+                            "name": "ens33",
                             "vmnet": "VMnet 8",
                             "ip": "192.168.71.5",
                             "subnet": "192.168.71.0/24",

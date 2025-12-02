@@ -12,7 +12,7 @@
     "description": "Linux-based NAT gateway and router providing Internet connectivity and routing between Internet (VMnet 8) and WAN network (VMnet 2). Acts as upstream router for pfSense.",
     "interfaces": [
         {
-            "name": "eth0",
+            "name": "ens33",
             "vmnet": "VMnet 8",
             "ip": "192.168.71.5",
             "subnet": "192.168.71.0/24",
@@ -20,7 +20,7 @@
             "description": "NAT interface providing Internet connectivity via VMware NAT"
         },
         {
-            "name": "eth1",
+            "name": "ens33",
             "vmnet": "VMnet 2",
             "ip": "10.81.85.3",
             "subnet": "10.81.85.0/24",

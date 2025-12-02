@@ -14,7 +14,6 @@ import html
 import re
 
 from app.utils.logger import setup_logger
-from app.core.anonymizer import SecureLogAnonymizer
 from app.config import DEBUG_ANONYMIZATION
 
 logger = setup_logger("telegram_middleware")
@@ -639,36 +638,24 @@ class TelegramMiddlewareService:
         start_time = time.time()
         
         try:
-            # Anonymize query before sending to AI
+            # ANONYMIZATION DISABLED: Send query as-is without anonymization
+            # Previous feature accidentally anonymized user's own IP, breaking query context
             if DEBUG_ANONYMIZATION:
                 print("\n" + "="*100)
-                print(f"[TELEGRAM] QUERY BEFORE ANONYMIZATION:")
+                print(f"[TELEGRAM] QUERY SENT TO AI (ANONYMIZATION DISABLED):")
                 print("="*100)
                 print(query)
-            
-            anonymized_query = self.anonymizer.anonymize_text(
-                query,
-                anonymize_ips=True,
-                anonymize_emails=True,
-                anonymize_urls=True,
-                anonymize_macs=True,
-                anonymize_domains=False
-            )
-            
-            if DEBUG_ANONYMIZATION:
-                print("\n" + "="*100)
-                print(f"[TELEGRAM] QUERY AFTER ANONYMIZATION (sent to AI):")
-                print("="*100)
-                print(anonymized_query)
-                print("\n[TELEGRAM] WARNING: NO REAL IPs/EMAILS/URLs IN ABOVE TEXT")
                 print("="*100 + "\n")
             
-            # Call SmartXDR API with anonymized query
-            logger.info(f"Sending anonymized query to SmartXDR: {anonymized_query[:50]}...")
+            # Send query as-is (no anonymization)
+            query_to_send = query
+            
+            # Call SmartXDR API with original query
+            logger.info(f"Sending query to SmartXDR: {query_to_send[:50]}...")
             
             response = self._session.post(
                 f"{self.smartxdr_api_url}/api/ai/ask",
-                json={"query": anonymized_query},
+                json={"query": query_to_send},
                 timeout=60
             )
             

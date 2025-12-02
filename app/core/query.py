@@ -22,10 +22,8 @@ from app.config import (
     MAX_DAILY_COST,
     CACHE_ENABLED,
     CACHE_TTL,
-    DEBUG_MODE,
-    DEBUG_ANONYMIZATION
+    DEBUG_MODE
 )
-from app.core.anonymizer import SecureLogAnonymizer
 from app.services.prompt_builder_service import PromptBuilder
 from app.utils.rate_limit import APIUsageTracker
 from app.utils.cache import ResponseCache
@@ -42,9 +40,6 @@ client = OpenAI(
     max_retries=OPENAI_MAX_RETRIES,
 )
 
-# Initialize anonymizer for data protection
-anonymizer = SecureLogAnonymizer()
-
 # Initialize PromptBuilder for system prompts (using RAG-optimized prompt)
 prompt_builder = PromptBuilder(prompt_file='rag_system.json')
 
@@ -54,57 +49,6 @@ usage_tracker = APIUsageTracker(
     max_daily_cost=MAX_DAILY_COST
 )
 response_cache = ResponseCache(ttl=CACHE_TTL, enabled=CACHE_ENABLED)
-
-
-def anonymize_text(text: str) -> str:
-    """
-    Anonymize sensitive information in text before sending to AI
-    Uses SecureLogAnonymizer with HMAC-SHA256 consistent hashing
-    
-    Args:
-        text: Text containing potentially sensitive information
-        
-    Returns:
-        Anonymized text with IP addresses and email addresses replaced
-    """
-    # Use built-in anonymize_text method with selective anonymization
-    anonymized = anonymizer.anonymize_text(
-        text,
-        anonymize_ips=True,
-        anonymize_emails=True,
-        anonymize_urls=True,
-        anonymize_macs=False,
-        anonymize_domains=False
-    )
-    
-    if DEBUG_ANONYMIZATION:
-        print(f"[ANONYMIZER] Text anonymized: {len(text)} chars → {len(anonymized)} chars")
-    
-    return anonymized
-
-
-def deanonymize_text(text: str) -> str:
-    """
-    De-anonymize text by looking up original values from reverse mapping.
-    Note: With HMAC-based anonymization, reverse mapping is limited to values
-    that were previously anonymized in the current session.
-    
-    Args:
-        text: Text containing anonymized values
-        
-    Returns:
-        Text with original sensitive information restored (if mappings exist)
-    """
-    if DEBUG_ANONYMIZATION:
-        stats = anonymizer.get_stats()
-        print(f"[DEANON] Text ready for response, mappings available: {stats['total_anonymized']} items")
-    
-    # With HMAC-based anonymization (not token-based), we cannot easily reverse
-    # the anonymized text without the original values. The mapping database
-    # stores original->anonymized but we'd need to iterate through all values.
-    # For now, return text as-is since response typically doesn't contain
-    # anonymized values (they were only in the sent context).
-    return text
 
 
 def _search_and_build_context(collection, query: str, n_results: int, filter_metadata: Optional[Dict[str, Any]] = None) -> tuple[str, set[str], list[str]]:
@@ -193,37 +137,12 @@ def _anonymize_context(context_text: str) -> str:
     Anonymize sensitive information in context
     
     Returns:
-        Anonymized context text
+        Context text
     """
-    if DEBUG_ANONYMIZATION:
-        print("\n" + "="*80)
-        print("ANONYMIZATION DEBUG - CONTEXT BEFORE:")
-        print("="*80)
-        preview = context_text[:500] + "..." if len(context_text) > 500 else context_text
-        print(preview)
-        print("\n" + "="*80)
-    
-    context_text_anonymized = anonymize_text(context_text)
-    
-    ip_count = len(re.findall(r'TKN-IP-[a-f0-9]+', context_text_anonymized))
-    host_count = len(re.findall(r'HOST-[a-f0-9]+', context_text_anonymized))
-    if DEBUG_MODE:
-        print(f"Anonymization: {ip_count} IPs, {host_count} hostnames protected")
-    
-    if DEBUG_ANONYMIZATION:
-        print("\n" + "="*80)
-        print("ANONYMIZATION DEBUG - CONTEXT AFTER (sent to OpenAI):")
-        print("="*80)
-        preview = context_text_anonymized[:500] + "..." if len(context_text_anonymized) > 500 else context_text_anonymized
-        print(preview)
-        print("\n" + "="*80)
-        print("\nWARNING: NO REAL IPs OR DEVICE NAMES IN ABOVE TEXT - All replaced with tokens!")
-        print("="*80)
-    
-    return context_text_anonymized
+    return context_text
 
 
-def _build_user_input(context_text_anonymized: str, query: str) -> str:
+def _build_user_input(context_text: str, query: str) -> str:
     """
     Build user input for API call using PromptBuilder
     """
@@ -232,12 +151,12 @@ def _build_user_input(context_text_anonymized: str, query: str) -> str:
     
     # Format with context and query
     return user_prompt_template.format(
-        context=context_text_anonymized,
+        context=context_text,
         query=query
     )
 
 
-def _call_openai_api(system_instructions: str, user_input: str, context_text_anonymized: str, query: str) -> tuple[str, float]:
+def _call_openai_api(system_instructions: str, user_input: str, context_text: str, query: str) -> tuple[str, float]:
     """
     Call OpenAI API and return response
     
@@ -245,7 +164,7 @@ def _call_openai_api(system_instructions: str, user_input: str, context_text_ano
         Tuple of (answer_text, actual_cost)
     """
     # Estimate cost
-    estimated_prompt_tokens = len(context_text_anonymized) // 3 + len(query) // 3
+    estimated_prompt_tokens = len(context_text) // 3 + len(query) // 3
     estimated_completion_tokens = 500
     estimated_cost = (estimated_prompt_tokens / 1_000_000) * INPUT_PRICE_PER_1M + \
                     (estimated_completion_tokens / 1_000_000) * OUTPUT_PRICE_PER_1M
@@ -292,13 +211,6 @@ def _call_openai_api(system_instructions: str, user_input: str, context_text_ano
             print(f"   - Cache entries: {cache_stats['cache_size']}")
     
     answer_with_tokens = response.output_text or "No answer generated"
-    
-    if DEBUG_ANONYMIZATION:
-        print("\n" + "="*80)
-        print("AI RESPONSE (with anonymized tokens):")
-        print("="*80)
-        print(answer_with_tokens)
-        print("\n" + "="*80)
     
     return answer_with_tokens, actual_cost
 
@@ -351,19 +263,12 @@ def ask(collection, query: str, n_results: int = DEFAULT_RESULTS, filter_metadat
         answer_with_tokens, actual_cost = _call_openai_api(
             system_instructions, 
             user_input, 
-            context_text_anonymized, 
+            context_text, 
             query
         )
         
-        # De-anonymize response
-        answer = deanonymize_text(answer_with_tokens)
-        
-        if DEBUG_ANONYMIZATION:
-            print("\n" + "="*80)
-            print("FINAL ANSWER (de-anonymized for user):")
-            print("="*80)
-            print(answer)
-            print("\n" + "="*80)
+        # Use response as-is (no de-anonymization needed)
+        answer = answer_with_tokens
         
         # Add source citations
         if sources:

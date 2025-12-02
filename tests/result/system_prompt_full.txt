@@ -37,7 +37,7 @@ You operate within a sophisticated multi-segmented VMware Workstation Pro lab en
           "role": "Internet Gateway/Linux Router",
           "interfaces": [
             {
-              "name": "eth0",
+              "name": "ens33",
               "vmnet": "VMnet 8",
               "ip": "192.168.71.5",
               "subnet": "192.168.71.0/24",
@@ -417,7 +417,7 @@ You operate within a sophisticated multi-segmented VMware Workstation Pro lab en
       "description": "Linux-based NAT gateway and router providing Internet connectivity and routing between Internet (VMnet 8) and WAN network (VMnet 2). Acts as upstream router for pfSense.",
       "interfaces": [
         {
-          "name": "eth0",
+          "name": "ens33",
           "vmnet": "VMnet 8",
           "ip": "192.168.71.5",
           "subnet": "192.168.71.0/24",

@@ -68,7 +68,6 @@ class LLMService:
             # Initialize utilities
             from app.utils.rate_limit import APIUsageTracker
             from app.utils.cache import ResponseCache
-            from app.core.anonymizer import DataAnonymizer
             from app.services.prompt_builder_service import PromptBuilder
             
             logger.info("Initializing LLM Service components...")
@@ -81,9 +80,6 @@ class LLMService:
             
             self.response_cache = ResponseCache(ttl=CACHE_TTL, enabled=CACHE_ENABLED)
             logger.info("✓ ResponseCache initialized")
-            
-            self.anonymizer = DataAnonymizer()
-            logger.info("✓ DataAnonymizer initialized")
             
             self.prompt_builder = PromptBuilder(prompt_file='rag_system.json')
             logger.info("✓ PromptBuilder initialized")
@@ -152,12 +148,9 @@ class LLMService:
                 "sources": list(sources)
             }
         
-        # Anonymize context
-        context_text_anonymized = self._anonymize_context(context_text)
-        
         # Build API request
         system_instructions = self.prompt_builder.build_rag_prompt()
-        user_input = self._build_rag_user_input(context_text_anonymized, query)
+        user_input = self._build_rag_user_input(context_text, query)
         
         # Call API
         try:
@@ -166,8 +159,8 @@ class LLMService:
                 user_input
             )
             
-            # De-anonymize response
-            answer = self._deanonymize_text(answer_with_tokens)
+            # Use answer directly (no deanonymization needed)
+            answer = answer_with_tokens
             
             # Add source citations
             if sources:
@@ -257,54 +250,6 @@ class LLMService:
         context_text = "\n\n---\n\n".join(context_parts) if context_parts else "Limited relevant context found."
         
         return context_text, sources, context_list
-    
-    def _anonymize_context(self, text: str) -> str:
-        """Anonymize sensitive information in text"""
-        # Use the SecureLogAnonymizer's anonymize_text method which handles all types
-        try:
-            return self.anonymizer.anonymize_text(
-                text,
-                anonymize_ips=True,
-                anonymize_emails=True,
-                anonymize_urls=False,
-                anonymize_macs=True,
-                anonymize_domains=False
-            )
-        except Exception as e:
-            import logging
-            logging.getLogger('smartxdr.llm').warning(f"Anonymization failed: {e}")
-            return text
-    
-    def _deanonymize_text(self, text: str) -> str:
-        """De-anonymize text using reverse mapping"""
-        # The new anonymizer supports get_reverse_mapping for deanonymization
-        try:
-            # This is a best-effort approach - only tokens in the mapping will be replaced
-            import re
-            
-            # Look for anonymized values and try to reverse them
-            def replace_anon(match):
-                anon_val = match.group(0)
-                result = self.anonymizer.get_reverse_mapping(anon_val)
-                return result[0] if result else anon_val
-            
-            # Pattern for anonymized values (format: type_hash or domain-hash.tld or host_hash, etc.)
-            patterns = [
-                r'\b(?:user|host|domain)-[a-f0-9]+\b',  # user_xxx, host_xxx
-                r'\b(?:\d{1,3}\.){3}\d{1,3}\b',  # IP addresses
-                r'(?:[a-f0-9]{2}:){5}[a-f0-9]{2}',  # MAC addresses
-            ]
-            
-            result = text
-            for pattern in patterns:
-                result = re.sub(pattern, replace_anon, result)
-            
-            return result
-            
-        except Exception as e:
-            import logging
-            logging.getLogger('smartxdr.llm').warning(f"De-anonymization failed: {e}")
-            return text
     
     def _build_rag_user_input(self, context: str, query: str) -> str:
         """Build user input for RAG query"""
