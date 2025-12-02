@@ -521,17 +521,21 @@ class LLMService:
             # Tìm handler cho analyzer này
             handler = get_handler(name)
             if handler:
-                # Extract stats using handler
-                analyzer_stats = handler.extract_stats(report)
-                stats["analyzer_stats"][handler.display_name] = analyzer_stats
-                
-                # Update risk score
-                risk_score = handler.get_risk_score(report)
-                stats["max_risk_score"] = max(stats["max_risk_score"], risk_score)
-                
-                # Count malicious
-                if handler.is_malicious(report):
-                    stats["malicious_count"] += 1
+                try:
+                    # Extract stats using handler
+                    analyzer_stats = handler.extract_stats(report)
+                    stats["analyzer_stats"][handler.display_name] = analyzer_stats
+                    
+                    # Update risk score
+                    risk_score = handler.get_risk_score(report)
+                    stats["max_risk_score"] = max(stats["max_risk_score"], risk_score)
+                    
+                    # Count malicious
+                    if handler.is_malicious(report):
+                        stats["malicious_count"] += 1
+                except Exception as e:
+                    # Log error but continue processing other analyzers
+                    stats["analyzer_stats"][handler.display_name] = {"error": str(e)}
         
         return stats
     
@@ -552,12 +556,16 @@ class LLMService:
             # Tìm handler cho analyzer này
             handler = get_handler(name)
             if handler:
-                summary = handler.summarize(analyzer)
-                if summary:
-                    findings_with_priority.append({
-                        "priority": handler.priority,
-                        "finding": summary
-                    })
+                try:
+                    summary = handler.summarize(analyzer)
+                    if summary:
+                        findings_with_priority.append({
+                            "priority": handler.priority,
+                            "finding": summary
+                        })
+                except Exception as e:
+                    # Log error but continue processing
+                    pass
         
         # Sort by priority (cao hơn = quan trọng hơn)
         findings_with_priority.sort(key=lambda x: x["priority"], reverse=True)

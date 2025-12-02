@@ -21,6 +21,10 @@ class VirusTotalHandler(BaseAnalyzerHandler):
         if not report:
             return {"error": "Empty report"}
         
+        # Handle case when report is a string (error message or raw response)
+        if isinstance(report, str):
+            return {"error": f"Invalid report format: {report[:100]}"}
+        
         # VT v3 API format
         if 'data' in report:
             attributes = report.get('data', {}).get('attributes', {})
@@ -53,6 +57,10 @@ class VirusTotalHandler(BaseAnalyzerHandler):
         report = analyzer.get('report', {})
         
         if not report:
+            return None
+        
+        # Handle case when report is a string
+        if isinstance(report, str):
             return None
         
         summary: dict = {
@@ -104,6 +112,10 @@ class VirusTotalHandler(BaseAnalyzerHandler):
         - >10 detections = 80-100
         """
         if not report:
+            return 0
+        
+        # Handle case when report is a string
+        if isinstance(report, str):
             return 0
         
         # VT v3

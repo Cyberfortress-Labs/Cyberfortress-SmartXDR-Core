@@ -21,6 +21,10 @@ class MISPHandler(BaseAnalyzerHandler):
         if not report:
             return {"found": False}
         
+        # Handle case when report is a string (error message or raw response)
+        if isinstance(report, str):
+            return {"found": False, "error": f"Invalid report format: {report[:100]}"}
+        
         events = []
         tags = set()
         
@@ -73,6 +77,12 @@ class MISPHandler(BaseAnalyzerHandler):
         if not report:
             summary["found"] = False
             summary["verdict"] = "clean"
+            return summary
+        
+        # Handle case when report is a string
+        if isinstance(report, str):
+            summary["found"] = False
+            summary["verdict"] = "unknown"
             return summary
         
         # Parse MISP response
