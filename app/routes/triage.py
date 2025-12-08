@@ -4,6 +4,7 @@ Security Triage & Alert Summarization Routes
 from flask import Blueprint, request, jsonify
 from app.services.llm_service import LLMService
 from app.services.elasticsearch_service import ElasticsearchService
+from app.services.alert_summarization_service import get_alert_summarization_service
 from app.middleware.auth import require_api_key
 
 # Try to import source config
@@ -19,6 +20,66 @@ triage_bp = Blueprint('triage', __name__)
 # Initialize services (singleton)
 llm_service = LLMService()
 es_service = ElasticsearchService()
+alert_summarization_service = get_alert_summarization_service()
+
+
+@triage_bp.route('/summarize-alerts', methods=['POST'])
+@require_api_key('triage:summary')
+def summarize_ml_alerts():
+    """
+    Summarize ML-classified alerts from Elasticsearch with risk scoring
+    
+    Request Body (POST):
+        {
+            "time_window_minutes": 10,  # Optional, uses config default if not provided
+            "source_ip": "192.168.1.1"  # Optional, filter by source IP
+        }
+    
+    Response:
+        {
+            "success": true,
+            "status": "completed",
+            "count": 25,
+            "time_window_minutes": 10,
+            "grouped_alerts": [
+                {
+                    "group_key": "192.168.1.1_reconnaissance_WARNING",
+                    "source_ip": "192.168.1.1",
+                    "pattern": "reconnaissance",
+                    "severity": "WARNING",
+                    "alert_count": 5,
+                    "avg_probability": 0.92,
+                    "agents": ["suricata", "zeek"],
+                    "sample_alerts": [...]
+                }
+            ],
+            "summary": "Detailed summary with risk assessment and MITRE tags...",
+            "risk_score": 65.5,
+            "timestamp": "2024-..."
+        }
+    """
+    try:
+        # Get parameters from request body
+        data = request.get_json() or {}
+        time_window_minutes = data.get('time_window_minutes')
+        source_ip = data.get('source_ip')
+        
+        # Call alert summarization service
+        result = alert_summarization_service.summarize_alerts(
+            time_window_minutes=time_window_minutes,
+            source_ip=source_ip
+        )
+        
+        # Return appropriate status code
+        status_code = 200 if result.get('success') else 400
+        return jsonify(result), status_code
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'status': 'error',
+            'error': str(e)
+        }), 500
 
 
 @triage_bp.route('/alerts/summary', methods=['GET', 'POST'])

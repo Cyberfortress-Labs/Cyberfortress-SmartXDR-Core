@@ -57,3 +57,36 @@ MAX_DAILY_COST = 1.0  # Maximum spend per day in USD
 CACHE_ENABLED = True  # Enable response caching to reduce duplicate calls
 CACHE_TTL = 3600  # Cache time-to-live in seconds (1 hour)
 SEMANTIC_CACHE_ENABLED = True  # Enable embedding-based semantic similarity for cache lookup
+
+# ===== Smart Alert Summarization Settings =====
+# Time window for alert grouping (in minutes)
+# Default: 10080 minutes = 7 days, configurable via environment variable
+# Supports: plain number (10080) or with suffix (7d, 10h, 60m)
+def _parse_time_window(value_str: str) -> int:
+    """Parse time window with optional suffix (d=days, h=hours, m=minutes)"""
+    value_str = value_str.strip().lower()
+    
+    # Handle suffixes
+    if value_str.endswith('d'):
+        return int(value_str[:-1]) * 1440  # days to minutes
+    elif value_str.endswith('h'):
+        return int(value_str[:-1]) * 60    # hours to minutes
+    elif value_str.endswith('m'):
+        return int(value_str[:-1])          # already in minutes
+    else:
+        return int(value_str)               # assume minutes
+
+ALERT_TIME_WINDOW = _parse_time_window(os.environ.get('ALERT_TIME_WINDOW', '7d'))
+
+# Risk Score Formula: risk_score = (alert_count * COUNT_WEIGHT) + (avg_probability * PROBABILITY_WEIGHT) + (severity_level * SEVERITY_WEIGHT) + (escalation_level * ESCALATION_WEIGHT)
+# Where severity_level: INFO=1, WARNING=2, ERROR=3
+# And escalation_level: 0=none, 1=single pattern, 2=sequence (scan→brute-force→lateral movement)
+RISK_SCORE_COUNT_WEIGHT = 0.3  # Weight for alert count
+RISK_SCORE_PROBABILITY_WEIGHT = 0.35  # Weight for ML prediction probability
+RISK_SCORE_SEVERITY_WEIGHT = 0.25  # Weight for severity level
+RISK_SCORE_ESCALATION_WEIGHT = 0.1  # Weight for attack pattern escalation
+
+# Elasticsearch settings for alert summarization
+ALERT_MIN_PROBABILITY = 0.7  # Minimum ML prediction probability threshold
+ALERT_MIN_SEVERITY = "WARNING"  # Minimum severity level (INFO, WARNING, ERROR)
+ALERT_SOURCE_TYPES = ["suricata", "zeek", "pfsense", "modsecurity", "apache", "nginx", "mysql", "windows", "wazuh"]

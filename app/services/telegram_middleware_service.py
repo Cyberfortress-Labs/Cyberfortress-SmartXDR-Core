@@ -14,7 +14,7 @@ import html
 import re
 
 from app.utils.logger import setup_logger
-from app.config import DEBUG_ANONYMIZATION
+from app.config import DEBUG_ANONYMIZATION, ALERT_TIME_WINDOW
 
 logger = setup_logger("telegram_middleware")
 
@@ -535,6 +535,7 @@ class TelegramMiddlewareService:
                 "/help - Show this help message\n"
                 "/status - Check bot and API status\n"
                 "/stats - Show usage statistics\n"
+                "/summary - Summarize recent ML-classified alerts\n"
                 "/id - Show your chat ID\n\n"
                 "🔒 This bot is protected by whitelist and rate limiting.",
                 reply_to_message_id=message_id
@@ -548,11 +549,17 @@ class TelegramMiddlewareService:
                 "• Analyze security alerts and logs\n"
                 "• Map threats to MITRE ATT&CK framework\n"
                 "• Provide incident response recommendations\n"
-                "• Generate threat intelligence reports\n\n"
+                "• Generate threat intelligence reports\n"
+                "• Summarize recent ML-classified alerts\n\n"
                 "<b>Example queries:</b>\n"
                 "• <i>Analyze this Suricata alert: ET MALWARE Win32/Emotet...</i>\n"
                 "• <i>What is the MITRE technique for credential dumping?</i>\n"
                 "• <i>How to respond to a ransomware incident?</i>\n\n"
+                "<b>Alert Summary Command:</b>\n"
+                "• <code>/summary</code> - Last 7 days, all indices\n"
+                "• <code>/summary --time 24h</code> - Last 24 hours\n"
+                "• <code>/summary --time 3d</code> - Last 3 days\n"
+                "• <code>/summary --time 7d --index suricata,zeek</code> - Custom filter\n\n"
                 "<b>Tips:</b>\n"
                 "• Be specific in your questions\n"
                 "• Include relevant log data for analysis\n"
@@ -577,6 +584,30 @@ class TelegramMiddlewareService:
                 f"• Polling Timeout: {self.polling_timeout}s",
                 reply_to_message_id=message_id
             )
+        
+        elif command == "/summary":
+            # Parse command arguments: /summary --time 7d --index suricata,zeek
+            args = text.split()[1:]  # Skip /summary
+            time_arg = None
+            index_arg = None
+            
+            i = 0
+            while i < len(args):
+                if args[i] == "--time" and i + 1 < len(args):
+                    time_arg = args[i + 1]
+                    i += 2
+                elif args[i] == "--index" and i + 1 < len(args):
+                    index_arg = args[i + 1]
+                    i += 2
+                else:
+                    i += 1
+            
+            # Handle alert summarization (async via threading)
+            threading.Thread(
+                target=self._handle_alert_summary,
+                args=(chat_id, message_id, time_arg, index_arg),
+                daemon=True
+            ).start()
         
         elif command == "/stats":
             uptime = ""
@@ -720,6 +751,185 @@ class TelegramMiddlewareService:
             )
             self._stats["errors"] += 1
             logger.error(f"Unexpected error: {e}")
+    
+    def _handle_alert_summary(self, chat_id: int, message_id: int, time_arg: str = None, index_arg: str = None) -> None:
+        """
+        Handle /summary command - fetch and summarize ML-classified alerts
+        Runs asynchronously in background thread
+        
+        Args:
+            chat_id: Telegram chat ID
+            message_id: Message ID to reply to
+            time_arg: Time window (e.g., "7d", "24h", "60m")
+            index_arg: Comma-separated index patterns (e.g., "suricata,zeek")
+        """
+        try:
+            # Send typing indicator
+            self.send_typing_action(chat_id)
+            
+            # Parse time argument
+            time_window_minutes = ALERT_TIME_WINDOW  # Default from config
+            if time_arg:
+                try:
+                    # Parse time format: 7d, 24h, 60m
+                    time_str = time_arg.strip().lower()
+                    if time_str.endswith('d'):
+                        time_window_minutes = int(time_str[:-1]) * 1440
+                    elif time_str.endswith('h'):
+                        time_window_minutes = int(time_str[:-1]) * 60
+                    elif time_str.endswith('m'):
+                        time_window_minutes = int(time_str[:-1])
+                    else:
+                        time_window_minutes = int(time_str)  # Assume minutes
+                except ValueError:
+                    self.send_message(
+                        chat_id,
+                        f"⚠️ Invalid time format: {time_arg}\nUse: 7d, 24h, 60m",
+                        reply_to_message_id=message_id
+                    )
+                    return
+            
+            # Show processing message
+            time_display = f"{time_window_minutes // 1440}d" if time_window_minutes >= 1440 else f"{time_window_minutes // 60}h" if time_window_minutes >= 60 else f"{time_window_minutes}m"
+            index_display = index_arg if index_arg else "all indices"
+            
+            processing_msg = self.send_message(
+                chat_id,
+                f"⏳ <b>Processing Alert Summary...</b>\n\n"
+                f"Time: {time_display}\n"
+                f"Indices: {index_display}\n\n"
+                "Querying Elasticsearch for ML-classified alerts...",
+                reply_to_message_id=message_id
+            )
+            
+            # Call SmartXDR API for alert summarization
+            # Use parsed time or ALERT_TIME_WINDOW from config (supports 7d/14d/28d format)
+            response = self._session.post(
+                f"{self.smartxdr_api_url}/api/triage/summarize-alerts",
+                json={"time_window_minutes": time_window_minutes},
+                timeout=30
+            )
+            
+            result = response.json()
+            
+            if not result.get('success'):
+                error_msg = result.get('error', 'Unknown error')
+                self.send_message(
+                    chat_id,
+                    f"❌ <b>Alert Summary Failed</b>\n\n{html.escape(error_msg)}",
+                    reply_to_message_id=message_id
+                )
+                return
+            
+            # Check if there are alerts to summarize
+            if result.get('status') == 'no_alerts':
+                time_window_mins = result.get('time_window_minutes', 10)
+                time_display = f"{time_window_mins // 1440} days" if time_window_mins >= 1440 else f"{time_window_mins} minutes"
+                self.send_message(
+                    chat_id,
+                    "ℹ️ <b>No Alerts Found</b>\n\n"
+                    f"No ML-classified alerts detected in the last {time_display}.",
+                    reply_to_message_id=message_id
+                )
+                return
+            
+            # Prepare formatted response
+            alerts_count = result.get('count', 0)
+            risk_score = result.get('risk_score', 0)
+            summary = result.get('summary', 'No summary available')
+            grouped = result.get('grouped_alerts', [])
+            
+            # Send summary card
+            summary_text = (
+                f"🚨 <b>ML Alert Summary</b>\n\n"
+                f"<b>Risk Score:</b> {risk_score}/100 "
+            )
+            
+            # Color-code risk score
+            if risk_score >= 70:
+                summary_text += "🔴 CRITICAL\n"
+            elif risk_score >= 50:
+                summary_text += "🟠 HIGH\n"
+            elif risk_score >= 30:
+                summary_text += "🟡 MEDIUM\n"
+            else:
+                summary_text += "🟢 LOW\n"
+            
+            summary_text += (
+                f"<b>Total Alerts:</b> {alerts_count}\n"
+                f"<b>Time Window:</b> {result.get('time_window_minutes', 10)} minutes\n"
+                f"<b>Timestamp:</b> {result.get('timestamp', 'N/A')}\n\n"
+            )
+            
+            summary_text += f"<b>Summary:</b>\n{self._format_response(summary)}\n\n"
+            
+            # Add grouped alerts summary
+            if grouped:
+                summary_text += "<b>Top Alert Groups:</b>\n"
+                for i, group in enumerate(grouped[:3], 1):
+                    summary_text += (
+                        f"\n{i}. <b>{group['pattern'].upper()}</b>\n"
+                        f"   • Source IP: <code>{group['source_ip']}</code>\n"
+                        f"   • Severity: {group['severity']}\n"
+                        f"   • Count: {group['alert_count']}\n"
+                        f"   • Probability: {group['avg_probability']}\n"
+                    )
+            
+            # Send as inline text (since Telegram card formatting is complex)
+            self.send_message(chat_id, summary_text, reply_to_message_id=message_id)
+            
+            # Send visualization if available
+            if 'visualization' in result and result['visualization']:
+                try:
+                    import base64
+                    import io
+                    
+                    # Decode base64 image
+                    img_data = base64.b64decode(result['visualization'])
+                    
+                    # Send photo to Telegram
+                    photo_url = f"{self.api_base}/sendPhoto"
+                    files = {
+                        'photo': ('alert_summary.png', io.BytesIO(img_data), 'image/png')
+                    }
+                    params = {
+                        'chat_id': chat_id,
+                        'caption': '📊 Alert Statistics Visualization'
+                    }
+                    
+                    photo_response = self._tg_session.post(photo_url, params=params, files=files, timeout=10)
+                    if not photo_response.ok:
+                        logger.warning(f"⚠️ Failed to send visualization: {photo_response.text}")
+                except Exception as e:
+                    logger.error(f"❌ Error sending visualization: {e}")
+            
+            logger.info(f"✓ Alert summary sent to chat {chat_id} ({alerts_count} alerts, risk: {risk_score})")
+            
+        except requests.exceptions.Timeout:
+            self.send_message(
+                chat_id,
+                "⏱️ <b>Timeout</b>\n\n"
+                "Alert summary request timed out. The server might be busy.",
+                reply_to_message_id=message_id
+            )
+            logger.error("Alert summary API timeout")
+            
+        except requests.exceptions.ConnectionError:
+            self.send_message(
+                chat_id,
+                "🔌 <b>Connection Error</b>\n\n"
+                "Cannot connect to SmartXDR API. Please ensure the server is running.",
+                reply_to_message_id=message_id
+            )
+            logger.error("Alert summary API connection error")
+            
+        except Exception as e:
+            self.send_message(
+                chat_id,
+                f"❌ <b>Error Generating Summary</b>\n\n{html.escape(str(e))}",
+                reply_to_message_id=message_id
+            )
+            logger.error(f"Alert summary error: {e}")
     
     def _format_response(self, text: str) -> str:
         """
