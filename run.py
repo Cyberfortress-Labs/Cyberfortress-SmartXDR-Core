@@ -14,7 +14,6 @@ import requests
 from dotenv import load_dotenv
 from app import create_app, get_collection
 from app.config import PORT, HOST
-from app.core.ingestion import ingest_data
 
 # Load environment variables
 load_dotenv()

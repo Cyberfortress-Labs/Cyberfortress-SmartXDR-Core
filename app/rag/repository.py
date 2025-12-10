@@ -11,10 +11,10 @@ from typing import Optional, List, Dict, Any, Tuple
 from pathlib import Path
 import chromadb
 from chromadb.config import Settings
-from chromadb.utils import embedding_functions
 
 from app.rag.models import Document, DocumentMetadata, QueryResult
 from app.config import DEBUG_MODE
+from app.core.embeddings import OpenAIEmbeddingFunction
 
 
 logger = logging.getLogger('smartxdr.rag.repository')
@@ -54,18 +54,8 @@ class RAGRepository:
         
         # Set up embedding function
         if embedding_function is None:
-            import os
-            from dotenv import load_dotenv
-            load_dotenv()
-            
-            api_key = os.environ.get("OPENAI_API_KEY")
-            if not api_key:
-                raise ValueError("OPENAI_API_KEY not found in environment")
-            
-            self.embedding_function = embedding_functions.OpenAIEmbeddingFunction(
-                api_key=api_key,
-                model_name="text-embedding-3-small"
-            )
+            # Use custom OpenAIEmbeddingFunction with timeout/retry config from app.config
+            self.embedding_function = OpenAIEmbeddingFunction()
         else:
             self.embedding_function = embedding_function
         

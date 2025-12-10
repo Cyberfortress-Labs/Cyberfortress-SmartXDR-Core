@@ -21,8 +21,7 @@ from app.config import (
     CACHE_ENABLED,
     CACHE_TTL,
     DEBUG_MODE,
-    DEBUG_LLM,
-    DEBUG_ANONYMIZATION
+    DEBUG_LLM
 )
 
 # Import analyzer registry

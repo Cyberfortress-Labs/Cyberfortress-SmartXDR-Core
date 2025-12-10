@@ -41,7 +41,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from app.config import CHROMA_DB_PATH
 import chromadb
 from chromadb.config import Settings
-from chromadb.utils import embedding_functions
+from app.core.embeddings import OpenAIEmbeddingFunction
+from app.core.chunking import json_to_natural_text, mitre_to_natural_text
 
 
 # Global shutdown flag
@@ -120,19 +121,8 @@ class OptimizedIngester:
             )
         )
         
-        # OpenAI embeddings
-        import os
-        from dotenv import load_dotenv
-        load_dotenv()
-        
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError("OPENAI_API_KEY not set")
-        
-        self.embed_fn = embedding_functions.OpenAIEmbeddingFunction(
-            api_key=api_key,
-            model_name="text-embedding-3-small"
-        )
+        # Use custom OpenAI embeddings with timeout/retry from app.config
+        self.embed_fn = OpenAIEmbeddingFunction()
         
         # Get or create collection
         self.collection = self.client.get_or_create_collection(
@@ -187,10 +177,10 @@ class OptimizedIngester:
             except:
                 return None
     
-    def chunk_text(self, text: str, file_ext: str = '') -> List[str]:
+    def chunk_text(self, text: str, file_ext: str = '', filename: str = '') -> List[str]:
         """
         Smart chunking based on file type
-        - JSON: Parse and chunk by logical objects (keep IP + name together)
+        - JSON: Delegate to app.core.chunking for semantic processing
         - Others: Simple paragraph-based chunking
         """
         if len(text) <= self.chunk_size:
@@ -198,80 +188,31 @@ class OptimizedIngester:
         
         # Special handling for JSON files
         if file_ext.lower() == '.json':
-            return self._chunk_json(text)
+            return self._chunk_json(text, filename)
         
         # Default paragraph-based chunking
-        chunks = []
-        pos = 0
-        while pos < len(text):
-            end = pos + self.chunk_size
-            
-            # Try to break at paragraph
-            if end < len(text):
-                para = text.rfind('\n\n', pos, end)
-                if para > pos:
-                    end = para
-            
-            chunk = text[pos:end].strip()
-            if chunk:
-                chunks.append(chunk)
-            
-            pos = end
-        
-        return chunks
+        return self._simple_chunk(text)
     
-    def _chunk_json(self, text: str) -> List[str]:
+    def _chunk_json(self, text: str, filename: str = "") -> List[str]:
         """
-        Smart JSON chunking - parse and chunk by logical units
-        For topology.json: each device should be in one chunk
+        Smart JSON chunking - delegate to app.core.chunking.json_to_natural_text
+        This reuses the semantic chunking logic with IP-first lookup chunks
         """
         try:
             data = json.loads(text)
-            chunks = []
             
-            # Handle topology.json structure
-            if 'segments' in data:
-                for segment in data.get('segments', []):
-                    zone = segment.get('zone', 'Unknown')
-                    
-                    for device in segment.get('devices', []):
-                        # Create chunk for each device with full context
-                        device_chunk = {
-                            'zone': zone,
-                            'subnet': segment.get('subnet', ''),
-                            'device': device
-                        }
-                        chunk_text = json.dumps(device_chunk, indent=2, ensure_ascii=False)
-                        
-                        # Add readable summary at top
-                        name = device.get('name', 'Unknown')
-                        ip = device.get('ip', 'N/A')
-                        role = device.get('role', 'N/A')
-                        
-                        summary = f"Device: {name}\nIP Address: {ip}\nRole: {role}\nZone: {zone}\n\n"
-                        chunks.append(summary + chunk_text)
+            # Check if it's a device JSON (has id, name, category)
+            if isinstance(data, dict) and 'id' in data and 'name' in data:
+                # Use semantic chunking from app.core.chunking
+                # This creates IP-first lookup chunks automatically
+                return json_to_natural_text(data, filename)
             
-            # Handle ecosystem JSON structure
-            elif 'name' in data and 'category' in data:
-                # Single device description
-                name = data.get('name', 'Unknown')
-                ip = data.get('ip', 'N/A')
-                role = data.get('role', 'N/A')
-                zone = data.get('zone', 'Unknown')
-                
-                summary = f"Device: {name}\nIP Address: {ip}\nRole: {role}\nZone: {zone}\n\n"
-                chunks.append(summary + json.dumps(data, indent=2, ensure_ascii=False))
-            
-            # Fallback: chunk by size
+            # Fallback for non-device JSON (topology, network map, etc.)
+            text_formatted = json.dumps(data, indent=2, ensure_ascii=False)
+            if len(text_formatted) <= self.chunk_size:
+                return [text_formatted]
             else:
-                text_formatted = json.dumps(data, indent=2, ensure_ascii=False)
-                if len(text_formatted) <= self.chunk_size:
-                    chunks.append(text_formatted)
-                else:
-                    # Fallback to simple chunking
-                    return self._simple_chunk(text_formatted)
-            
-            return chunks if chunks else [text[:self.chunk_size]]
+                return self._simple_chunk(text_formatted)
             
         except json.JSONDecodeError:
             # Not valid JSON, use simple chunking
@@ -422,8 +363,8 @@ class OptimizedIngester:
                 
                 category = self.get_category(fpath, directory)
                 
-                # Chunk with file extension context
-                chunks = self.chunk_text(content, fpath.suffix)
+                # Chunk with file extension and filename context
+                chunks = self.chunk_text(content, fpath.suffix, fpath.name)
                 
                 # Progress
                 elapsed = time.time() - self.start_time

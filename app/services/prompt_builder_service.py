@@ -278,10 +278,11 @@ class PromptBuilder:
                     f"{k} ({v})" for k, v in sp['vietnamese_support']['common_tools'].items()
                 ))
             
-            # Add context handling
+            # Context handling rules (if available)
             if 'context_handling' in sp:
-                prompt_parts.append("")
-                prompt_parts.append(f"**Important:** {sp['context_handling']['anonymization']}")
+                if 'relevance' in sp['context_handling']:
+                    prompt_parts.append("")
+                    prompt_parts.append(f"**Context Rules:** {sp['context_handling']['relevance']}")
             
             return "\n".join(prompt_parts)
         else:
@@ -294,8 +295,7 @@ class PromptBuilder:
 **Key Rules:**
 - Match user's language (Vietnamese ↔ English)
 - Use provided context when available
-- Fall back to general cybersecurity knowledge when context is limited
-- The context contains anonymized tokens (TKN-IP-xxx, HOST-xxx) for security"""
+- Fall back to general cybersecurity knowledge when context is limited"""
 
     def build_user_input_prompt(self) -> str:
         """

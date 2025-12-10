@@ -14,7 +14,7 @@ import html
 import re
 
 from app.utils.logger import setup_logger
-from app.config import DEBUG_ANONYMIZATION, ALERT_TIME_WINDOW
+from app.config import ALERT_TIME_WINDOW
 
 logger = setup_logger("telegram_middleware")
 
@@ -652,7 +652,6 @@ class TelegramMiddlewareService:
     def _process_smartxdr_query(self, query: str, chat_id: int, message_id: int, user: Dict) -> None:
         """
         Send query to SmartXDR API and return response
-        Anonymizes sensitive data before sending to AI
         
         Args:
             query: User's question/query
@@ -666,16 +665,7 @@ class TelegramMiddlewareService:
         start_time = time.time()
         
         try:
-            # ANONYMIZATION DISABLED: Send query as-is without anonymization
-            # Previous feature accidentally anonymized user's own IP, breaking query context
-            if DEBUG_ANONYMIZATION:
-                print("\n" + "="*100)
-                print(f"[TELEGRAM] QUERY SENT TO AI:")
-                print("="*100)
-                print(query)
-                print("="*100 + "\n")
-            
-            # Send query as-is (no anonymization)
+            # Send query directly to API
             query_to_send = query
             
             # Call SmartXDR API with original query

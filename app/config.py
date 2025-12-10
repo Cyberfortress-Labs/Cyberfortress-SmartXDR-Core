@@ -12,7 +12,6 @@ load_dotenv()
 # Debug Mode - Configurable via .env
 DEBUG_MODE = os.environ.get('DEBUG', 'false').lower() in ('true', '1', 'yes')
 DEBUG_LLM = os.environ.get('DEBUG_LLM', 'false').lower() in ('true', '1', 'yes')
-DEBUG_ANONYMIZATION = os.environ.get('DEBUG_ANONYMIZATION', 'false').lower() in ('true', '1', 'yes')
 
 
 # Get project root directory (assumes this file is in app/config.py)
