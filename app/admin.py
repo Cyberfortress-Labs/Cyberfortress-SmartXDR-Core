@@ -18,6 +18,12 @@ from app.utils.cryptography import hash_api_key
 class SecureModelView(ModelView):
     """Base ModelView with authentication"""
     
+    # Apply custom dark theme to all views
+    def _template_args(self):
+        args = super()._template_args()
+        args['custom_css'] = True
+        return args
+    
     def is_accessible(self):
         """Only allow access to authenticated users with admin role"""
         return (current_user.is_active and
@@ -43,6 +49,11 @@ class SecureAdminIndexView(AdminIndexView):
 
 class UserAdmin(SecureModelView):
     """Admin view for User model"""
+    
+    # Custom dark theme template
+    list_template = 'admin/custom_list.html'
+    create_template = 'admin/custom_create.html'
+    edit_template = 'admin/custom_edit.html'
     
     # Columns to display in list view
     column_list = ['username', 'email', 'active', 'roles', 'created_at', 'last_login_at', 'login_count']
@@ -81,6 +92,11 @@ class UserAdmin(SecureModelView):
 class RoleAdmin(SecureModelView):
     """Admin view for Role model"""
     
+    # Custom dark theme template
+    list_template = 'admin/custom_list.html'
+    create_template = 'admin/custom_create.html'
+    edit_template = 'admin/custom_edit.html'
+    
     column_list = ['name', 'description']
     column_searchable_list = ['name', 'description']
     
@@ -93,6 +109,11 @@ class RoleAdmin(SecureModelView):
 
 class APIKeyAdmin(SecureModelView):
     """Admin view for API Key model"""
+    
+    # Custom dark theme template
+    list_template = 'admin/custom_list.html'
+    create_template = 'admin/custom_create.html'
+    edit_template = 'admin/custom_edit.html'
     
     # List view columns
     column_list = ['name', 'key_prefix', 'enabled', 'rate_limit', 
@@ -202,6 +223,9 @@ class APIKeyAdmin(SecureModelView):
 class APIKeyUsageAdmin(SecureModelView):
     """Admin view for API Key usage logs"""
     
+    # Custom dark theme template
+    list_template = 'admin/custom_list.html'
+    
     # List view
     column_list = ['created_at', 'key_hash', 'endpoint', 'method', 
                    'status_code', 'response_time_ms', 'client_ip']
@@ -236,7 +260,7 @@ def init_admin(app):
     Args:
         app: Flask application instance
     """
-    # Create admin interface
+    # Create admin interface with custom dark theme
     admin = Admin(
         app,
         name='SmartXDR Admin',

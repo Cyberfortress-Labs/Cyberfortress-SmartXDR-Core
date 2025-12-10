@@ -46,7 +46,7 @@ def create_app():
     
     # SQLAlchemy configuration - use absolute path for Windows compatibility
     base_dir = Path(__file__).parent.parent
-    db_path = base_dir / 'data' / 'admin.db'
+    db_path = base_dir / 'data' / 'smartxdr.db'
     db_path.parent.mkdir(parents=True, exist_ok=True)  # Ensure data directory exists
     app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -63,21 +63,21 @@ def create_app():
     with app.app_context():
         db.create_all()
         
-        # Create roles if they don't exist
-        if not user_datastore.find_role('admin'):
-            user_datastore.create_role(name='admin', description='Administrator')
-        if not user_datastore.find_role('user'):
-            user_datastore.create_role(name='user', description='Regular User')
+        # # Create roles if they don't exist
+        # if not user_datastore.find_role('admin'):
+        #     user_datastore.create_role(name='admin', description='Administrator')
+        # if not user_datastore.find_role('user'):
+        #     user_datastore.create_role(name='user', description='Regular User')
         
-        # Create default admin user if no users exist
-        if not user_datastore.find_user(email='admin@cyberfortress.local'):
-            admin_user = user_datastore.create_user(
-                email='admin@cyberfortress.local',
-                username='admin',
-                password=hash_password('admin123'),
-                active=True
-            )
-            user_datastore.add_role_to_user(admin_user, 'admin')
+        # # Create default admin user if no users exist
+        # if not user_datastore.find_user(email='admin@cyberfortress.local'):
+        #     admin_user = user_datastore.create_user(
+        #         email='admin@cyberfortress.local',
+        #         username='admin',
+        #         password=hash_password('admin123'),
+        #         active=True
+        #     )
+        #     user_datastore.add_role_to_user(admin_user, 'admin')
         
         db.session.commit()
     

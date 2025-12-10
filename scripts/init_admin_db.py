@@ -24,7 +24,12 @@ def init_database():
     app = Flask(__name__)
     app.config['SECRET_KEY'] = 'init-secret-key'
     app.config['SECURITY_PASSWORD_SALT'] = 'init-salt'
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///data/admin.db'
+    
+    # Use absolute path for Windows compatibility
+    base_dir = Path(__file__).parent.parent
+    db_path = base_dir / 'data' / 'smartxdr.db'
+    db_path.parent.mkdir(parents=True, exist_ok=True)  # Ensure data directory exists
+    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     
     # Initialize extensions
@@ -82,7 +87,7 @@ def init_database():
         db.session.commit()
         
         print("\n✅ Database initialization complete!")
-        print(f"Database file: {os.path.abspath('data/admin.db')}")
+        print(f"Database file: {os.path.abspath('data/smartxdr.db')}")
         print("\nYou can now access the admin panel at: http://localhost:5000/admin")
         print("Login with: admin@cyberfortress.local / admin123")
 
