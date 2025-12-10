@@ -3,10 +3,11 @@ Flask application factory for Cyberfortress SmartXDR Core
 """
 from flask import Flask
 from flask_cors import CORS
-from app.core.database import initialize_database
+# Note: Old ChromaDB initialization removed - now using RAGService
+# from app.core.database import initialize_database
 
 
-# Global ChromaDB collection instance
+# Global ChromaDB collection instance (legacy - kept for backward compatibility)
 collection = None
 
 
@@ -27,20 +28,21 @@ def create_app():
     app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
     app.config['JSON_AS_ASCII'] = False  # Để tiếng Việt hiển thị đúng
     
-    # Initialize ChromaDB
-    global collection
-    collection = initialize_database()
+    # Note: ChromaDB initialization moved to RAGService
+    # Old global collection no longer needed as routes now use RAGService directly
     
     # Register blueprints
     from app.routes.ai import ai_bp
     from app.routes.ioc import ioc_bp
     from app.routes.triage import triage_bp
     from app.routes.telegram import telegram_bp
+    from app.routes.rag import rag_bp
     
     app.register_blueprint(ai_bp, url_prefix='/api/ai')
     app.register_blueprint(ioc_bp)
     app.register_blueprint(triage_bp, url_prefix='/api/triage')
     app.register_blueprint(telegram_bp, url_prefix='/api/telegram')
+    app.register_blueprint(rag_bp)  # Already has /api/rag prefix in blueprint
     
     @app.route('/health', methods=['GET'])
     def health():

@@ -133,14 +133,14 @@ def _search_and_build_context(collection, query: str, n_results: int, filter_met
     return context_text, sources, context_list
 
 
-def _anonymize_context(context_text: str) -> str:
-    """
-    Anonymize sensitive information in context
+# def _anonymize_context(context_text: str) -> str:
+#     """
+#     Anonymize sensitive information in context
     
-    Returns:
-        Context text
-    """
-    return context_text
+#     Returns:
+#         Context text
+#     """
+#     return context_text
 
 
 def _build_user_input(context_text: str, query: str) -> str:
@@ -253,11 +253,11 @@ def ask(collection, query: str, n_results: int = DEFAULT_RESULTS, filter_metadat
         return cached_response
     
     # Anonymize context
-    context_text_anonymized = _anonymize_context(context_text)
+    # context_text_anonymized = _anonymize_context(context_text)
     
     # Build API request
     system_instructions = prompt_builder.build_rag_prompt()
-    user_input = _build_user_input(context_text_anonymized, query)
+    user_input = _build_user_input(context_text, query)
     
     # Call API with error handling
     try:

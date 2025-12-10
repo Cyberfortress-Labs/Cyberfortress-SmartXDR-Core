@@ -33,6 +33,7 @@ MITRE_DIR = os.path.join(ASSETS_DIR, "mitre-attck")
 # Database settings
 DB_PATH = str(PROJECT_ROOT / "chroma_db")
 COLLECTION_NAME = "soc_ecosystem"
+CHROMA_DB_PATH = DB_PATH  # Alias for RAG module
 
 # OpenAI model settings
 EMBEDDING_MODEL = "text-embedding-3-small"

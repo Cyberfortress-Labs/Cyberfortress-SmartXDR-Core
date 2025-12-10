@@ -175,3 +175,7 @@ temp/
 
 # Chrome database files
 chroma_db/
+
+# Docs for RAG
+docs-for-rag/
+

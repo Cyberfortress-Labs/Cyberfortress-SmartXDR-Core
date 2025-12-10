@@ -163,10 +163,9 @@ if __name__ == '__main__':
         exit(1)
     
     # Run data ingestion on startup
-    print("Initializing data ingestion...")
-    collection = get_collection()
-    ingest_data(collection)
-    print("Data ingestion completed.\n")
+    # NOTE: Ingestion now managed through RAG API endpoints
+    # Use POST /api/rag/documents to add documents
+    print("RAG system ready. Use /api/rag/documents endpoint to manage knowledge base.\n")
     
     # Run Flask app
     print("="*80)
@@ -177,13 +176,22 @@ if __name__ == '__main__':
     print("    - POST /api/ai/ask       - Ask LLM a question")
     print("    - GET  /api/ai/stats     - Get usage statistics")
     print("    - POST /api/ai/cache/clear - Clear response cache")
-    print("  IOC Enrichment:")
+    print("\n  RAG Knowledge Base:")
+    print("    - POST /api/rag/documents - Create document")
+    print("    - POST /api/rag/documents/batch - Batch create documents")
+    print("    - GET  /api/rag/documents - List documents")
+    print("    - GET  /api/rag/documents/<id> - Get document by ID")
+    print("    - PUT  /api/rag/documents/<id> - Update document")
+    print("    - DELETE /api/rag/documents/<id> - Delete document")
+    print("    - POST /api/rag/query    - RAG query (search + LLM answer)")
+    print("    - GET  /api/rag/stats    - RAG statistics")
+    print("\n  IOC Enrichment:")
     print("    - POST /api/enrich/explain_intelowl - Explain IntelOwl results with AI (single IOC)")
     print("    - POST /api/enrich/explain_case_iocs - Analyze all IOCs in a case with AI")
     print("    - GET /api/enrich/case_ioc_comments - Get SmartXDR comments for case IOCs")
-    print("  Telegram:")
+    print("\n  Telegram:")
     print("    - POST /api/telegram/webhook - Telegram webhook (auto-configured)")
-    print("  Health:")
+    print("\n  Health:")
     print("    - GET  /health           - Health check")
     print("="*80)
     

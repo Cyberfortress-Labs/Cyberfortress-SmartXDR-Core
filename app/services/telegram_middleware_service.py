@@ -670,7 +670,7 @@ class TelegramMiddlewareService:
             # Previous feature accidentally anonymized user's own IP, breaking query context
             if DEBUG_ANONYMIZATION:
                 print("\n" + "="*100)
-                print(f"[TELEGRAM] QUERY SENT TO AI (ANONYMIZATION DISABLED):")
+                print(f"[TELEGRAM] QUERY SENT TO AI:")
                 print("="*100)
                 print(query)
                 print("="*100 + "\n")

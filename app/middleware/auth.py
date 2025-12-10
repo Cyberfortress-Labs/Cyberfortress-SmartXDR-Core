@@ -174,12 +174,13 @@ def get_api_key_manager() -> APIKeyManager:
     return _api_key_manager
 
 
-def require_api_key(permission: str = None):
+def require_api_key(permission_or_func=None):
     """
     Decorator to require API key authentication
     
     Usage:
-        @require_api_key()  # Just require valid key
+        @require_api_key  # Just require valid key (no parentheses)
+        @require_api_key()  # Just require valid key (with parentheses)
         @require_api_key('ai:ask')  # Require specific permission
         @require_api_key('enrich:*')  # Require enrich permission
     
@@ -187,20 +188,25 @@ def require_api_key(permission: str = None):
         X-API-Key: your_api_key
         Authorization: Bearer your_api_key
     """
-    def decorator(f: Callable):
-        @functools.wraps(f)
-        def decorated_function(*args, **kwargs):
+    # Handle both @require_api_key and @require_api_key()
+    if callable(permission_or_func):
+        # Called without parentheses: @require_api_key
+        func = permission_or_func
+        permission = None
+        
+        @functools.wraps(func)
+        def api_key_protected_function(*args, **kwargs):
             manager = get_api_key_manager()
             
             # If auth is disabled, allow all requests
             if not manager.auth_enabled:
                 g.api_key_info = {'name': 'auth_disabled', 'permissions': ['*']}
                 g.api_key_name = 'auth_disabled'
-                return f(*args, **kwargs)
+                return func(*args, **kwargs)
             
             # Check if public endpoint
             if manager.is_public_endpoint(request.path):
-                return f(*args, **kwargs)
+                return func(*args, **kwargs)
             
             # Get client IP
             client_ip = request.headers.get('X-Forwarded-For', request.remote_addr) or '0.0.0.0'
@@ -255,9 +261,84 @@ def require_api_key(permission: str = None):
             g.api_key_info = key_info
             g.api_key_name = key_info['name']
             
-            return f(*args, **kwargs)
-        return decorated_function
-    return decorator
+            return func(*args, **kwargs)
+        return api_key_protected_function
+    
+    else:
+        # Called with parentheses: @require_api_key() or @require_api_key('permission')
+        permission = permission_or_func
+        
+        def api_key_decorator(f: Callable):
+            @functools.wraps(f)
+            def api_key_protected_function(*args, **kwargs):
+                manager = get_api_key_manager()
+                
+                # If auth is disabled, allow all requests
+                if not manager.auth_enabled:
+                    g.api_key_info = {'name': 'auth_disabled', 'permissions': ['*']}
+                    g.api_key_name = 'auth_disabled'
+                    return f(*args, **kwargs)
+                
+                # Check if public endpoint
+                if manager.is_public_endpoint(request.path):
+                    return f(*args, **kwargs)
+                
+                # Get client IP
+                client_ip = request.headers.get('X-Forwarded-For', request.remote_addr) or '0.0.0.0'
+                if ',' in client_ip:
+                    client_ip = client_ip.split(',')[0].strip()
+                
+                # Check IP whitelist first (if configured)
+                if not manager.check_ip_whitelist(client_ip):
+                    logger.warning(f"IP not in whitelist: {client_ip}")
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'Access denied: IP not allowed',
+                        'code': 'IP_BLOCKED'
+                    }), 403
+                
+                # Get API key from header
+                api_key = (
+                    request.headers.get('X-API-Key') or 
+                    request.headers.get('Authorization', '').replace('Bearer ', '')
+                )
+                
+                # Validate key
+                key_info = manager.validate_key(api_key)
+                if not key_info:
+                    logger.warning(f"Invalid API key attempt from {client_ip}")
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'Invalid or missing API key',
+                        'code': 'INVALID_API_KEY',
+                        'hint': 'Include header: X-API-Key: your_api_key'
+                    }), 401
+                
+                # Check permission
+                if permission and not manager.check_permission(key_info, permission):
+                    logger.warning(f"Permission denied for {key_info['name']}: {permission}")
+                    return jsonify({
+                        'status': 'error',
+                        'message': f"Permission denied: {permission}",
+                        'code': 'PERMISSION_DENIED'
+                    }), 403
+                
+                # Check rate limit
+                if not manager.check_rate_limit(key_info['name'], key_info.get('rate_limit', 60)):
+                    logger.warning(f"Rate limit exceeded for {key_info['name']}")
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'Rate limit exceeded. Please slow down.',
+                        'code': 'RATE_LIMIT_EXCEEDED'
+                    }), 429
+                
+                # Store key info in request context
+                g.api_key_info = key_info
+                g.api_key_name = key_info['name']
+                
+                return f(*args, **kwargs)
+            return api_key_protected_function
+        return api_key_decorator
 
 
 def optional_api_key():

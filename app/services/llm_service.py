@@ -101,20 +101,18 @@ class LLMService:
     # ==================== RAG Query Methods ====================
     
     def ask_rag(
-        self, 
-        collection, 
-        query: str, 
-        n_results: int = DEFAULT_RESULTS, 
-        filter_metadata: Optional[Dict[str, Any]] = None
+        self,
+        query: str,
+        top_k: int = DEFAULT_RESULTS,
+        filters: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
-        RAG Query - Search and answer questions using ChromaDB context
+        RAG Query - Search and answer questions using RAGService
         
         Args:
-            collection: ChromaDB collection instance
             query: User's question
-            n_results: Number of documents to retrieve
-            filter_metadata: Optional metadata filter
+            top_k: Number of documents to retrieve
+            filters: Optional metadata filters (e.g., {"is_active": True, "tags": "security"})
         
         Returns:
             {
@@ -136,23 +134,30 @@ class LLMService:
                 "error_type": "rate_limit"
             }
         
-        # Search and build context
-        context_text, sources, _ = self._search_and_build_context(
-            collection, query, n_results, filter_metadata
-        )
+        # Import RAGService
+        from app.rag.service import RAGService
+        rag_service = RAGService()
         
-        # Check cache - ignore context_hash to improve hit rate on similar questions
-        # Query normalization + semantic matching will handle variations
+        # Check cache
         cache_key = self.response_cache.get_cache_key(query, "")
-        cached_response = self.response_cache.get(cache_key, query)  # Pass query for semantic matching
+        cached_response = self.response_cache.get(cache_key, query)
         
         if cached_response:
+            # Get sources from RAG for cached response
+            query_result = rag_service.query(query, top_k, filters)
             return {
                 "status": "success",
                 "answer": cached_response,
                 "cached": True,
-                "sources": list(sources)
+                "sources": query_result.get("sources", [])
             }
+        
+        # Build context using RAGService
+        context_text, sources = rag_service.build_context_from_query(
+            query_text=query,
+            top_k=top_k,
+            filters=filters
+        )
         
         # Build API request
         system_instructions = self.prompt_builder.build_rag_prompt()
@@ -161,18 +166,17 @@ class LLMService:
         # Call API
         try:
             answer_with_tokens, actual_cost = self._call_responses_api(
-                system_instructions, 
+                system_instructions,
                 user_input
             )
             
-            # Use answer directly (no deanonymization needed)
             answer = answer_with_tokens
             
             # Add source citations
             if sources:
                 answer += f"\n\nSources: {', '.join(sorted(sources))}"
             
-            # Cache the response with query for semantic matching
+            # Cache the response
             self.response_cache.set(cache_key, answer, query)
             
             return {
@@ -205,57 +209,6 @@ class LLMService:
                 "error_type": "api_error",
                 "request_id": getattr(e, 'request_id', None)
             }
-    
-    def _search_and_build_context(
-        self, 
-        collection, 
-        query: str, 
-        n_results: int, 
-        filter_metadata: Optional[Dict[str, Any]] = None
-    ) -> tuple:
-        """Search collection and build context from results"""
-        effective_n_results = max(n_results, 5)
-        
-        search_params = {
-            "query_texts": [query],
-            "n_results": effective_n_results
-        }
-        
-        if filter_metadata:
-            search_params["where"] = filter_metadata
-        
-        results = collection.query(**search_params)
-        
-        # Check relevance
-        has_relevant_results = False
-        
-        if results["documents"] and results["documents"][0]:
-            if results["distances"] and results["distances"][0]:
-                min_distance = min(results["distances"][0])
-                has_relevant_results = min_distance < 1.4
-            else:
-                has_relevant_results = True
-        
-        if not has_relevant_results:
-            return "No specific Cyberfortress documentation found for this query.", set(), []
-        
-        # Build context from results
-        context_list = results["documents"][0]
-        metadatas_list = results["metadatas"][0] if results["metadatas"] else []
-        distances = results["distances"][0] if results["distances"] else []
-        
-        context_parts = []
-        sources = set()
-        
-        for idx, (doc, meta, dist) in enumerate(zip(context_list, metadatas_list, distances)):
-            if dist < 1.4:
-                context_parts.append(f"[Document {idx + 1}]\n{doc}")
-                if meta and "source" in meta:
-                    sources.add(meta["source"])
-        
-        context_text = "\n\n---\n\n".join(context_parts) if context_parts else "Limited relevant context found."
-        
-        return context_text, sources, context_list
     
     def _build_rag_user_input(self, context: str, query: str) -> str:
         """Build user input for RAG query"""

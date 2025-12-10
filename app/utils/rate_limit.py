@@ -2,8 +2,10 @@
 API Usage Tracking for Rate Limiting and Cost Control
 """
 import time
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Callable
 from datetime import datetime
+from functools import wraps
+from flask import request, jsonify
 
 
 class APIUsageTracker:
@@ -69,3 +71,70 @@ class APIUsageTracker:
         """Manually reset daily cost (for testing)"""
         self.daily_cost = 0.0
         self.cost_reset_date = datetime.now().date()
+
+
+# ==================== Rate Limit Decorator ====================
+
+# Global rate limit storage per endpoint
+_rate_limit_storage: Dict[str, Dict[str, List[float]]] = {}
+
+
+def rate_limit(max_calls: int = 60, window: int = 60):
+    """
+    Rate limiting decorator for Flask routes
+    
+    Args:
+        max_calls: Maximum number of calls allowed within the time window
+        window: Time window in seconds (default: 60)
+    
+    Usage:
+        @rate_limit(max_calls=30, window=60)
+        def my_endpoint():
+            ...
+    """
+    def rate_limit_decorator(func: Callable) -> Callable:
+        @wraps(func)
+        def rate_limited_function(*args, **kwargs):
+            # Get client identifier (IP address or API key)
+            client_id = request.headers.get('X-API-Key', request.remote_addr)
+            endpoint = request.endpoint or func.__name__
+            
+            # Initialize storage for this endpoint if needed
+            if endpoint not in _rate_limit_storage:
+                _rate_limit_storage[endpoint] = {}
+            
+            # Initialize storage for this client if needed
+            if client_id not in _rate_limit_storage[endpoint]:
+                _rate_limit_storage[endpoint][client_id] = []
+            
+            # Get current timestamp
+            now = time.time()
+            
+            # Clean old timestamps outside the window
+            _rate_limit_storage[endpoint][client_id] = [
+                ts for ts in _rate_limit_storage[endpoint][client_id]
+                if now - ts < window
+            ]
+            
+            # Check if limit exceeded
+            call_count = len(_rate_limit_storage[endpoint][client_id])
+            if call_count >= max_calls:
+                oldest_call = _rate_limit_storage[endpoint][client_id][0]
+                wait_time = window - (now - oldest_call)
+                
+                return jsonify({
+                    "status": "error",
+                    "error": f"Rate limit exceeded. Maximum {max_calls} requests per {window} seconds.",
+                    "retry_after": int(wait_time) + 1,
+                    "limit": max_calls,
+                    "window": window
+                }), 429
+            
+            # Record this call
+            _rate_limit_storage[endpoint][client_id].append(now)
+            
+            # Execute the function
+            return func(*args, **kwargs)
+        
+        return rate_limited_function
+    return rate_limit_decorator

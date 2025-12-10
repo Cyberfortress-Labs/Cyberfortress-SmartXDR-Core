@@ -92,23 +92,13 @@ def ask_llm():
                 'message': 'n_results must be an integer between 1 and 50'
             }), 400
         
-        # Get collection
-        collection = get_collection()
-        if collection is None:
-            logger.error("Database collection not initialized")
-            return jsonify({
-                'status': 'error',
-                'message': 'Database not initialized'
-            }), 500
-        
         logger.info(f"Processing query: {query[:100]}...")
         
-        # Call LLM Service
+        # Call LLM Service with new RAG architecture
         result = llm_service.ask_rag(
-            collection=collection,
             query=query,
-            n_results=n_results,
-            filter_metadata=filter_metadata
+            top_k=n_results,
+            filters=filter_metadata
         )
         
         # Handle response
