@@ -179,5 +179,5 @@ chroma_db/
 # Docs for RAG
 docs-for-rag/
 
-# API key database
-data/api_keys.db
+# Local database
+data/

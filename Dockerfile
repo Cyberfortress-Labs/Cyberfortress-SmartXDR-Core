@@ -1,27 +1,30 @@
-# SmartXDR API - Multi-stage Production Dockerfile
+# SmartXDR API - Optimized Multi-stage Production Dockerfile
 # Stage 1: Builder - Install dependencies
-FROM python:3.11-slim as builder
+FROM python:3.10-slim as builder
 
 WORKDIR /build
 
-# Install build dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Install only essential build dependencies with cache
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
-    make \
-    libffi-dev \
-    libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
+# Copy requirements first for better layer caching
 COPY requirements.txt .
 
-# Install Python dependencies to /install
-RUN pip install --no-cache-dir --prefix=/install \
-    -r requirements.txt
+# Install Python dependencies with pip cache mount
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir \
+    --prefix=/install \
+    --no-compile \
+    -r requirements.txt \
+    && find /install -type d -name __pycache__ -exec rm -rf {} + || true
 
-# Stage 2: Runtime - Final image
-FROM python:3.11-slim
+# Stage 2: Runtime - Minimal final image
+FROM python:3.10-slim
 
 LABEL maintainer="SmartXDR Team"
 LABEL description="SmartXDR AI-powered Security Analysis API"
@@ -29,18 +32,20 @@ LABEL version="1.0.0"
 
 WORKDIR /app
 
-# Install runtime dependencies only
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Install only curl for health checks with cache
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
 # Copy installed packages from builder
 COPY --from=builder /install /usr/local
 
-# Create non-root user
+# Create non-root user and directories
 RUN useradd -m -u 1000 smartxdr && \
-    mkdir -p /app/data /app/chroma_db /app/logs && \
+    mkdir -p /app/data /app/logs && \
     chown -R smartxdr:smartxdr /app
 
 # Copy application code
@@ -65,4 +70,6 @@ CMD ["gunicorn", \
      "--access-logfile", "-", \
      "--error-logfile", "-", \
      "--log-level", "info", \
+     "--preload", \
      "run:app"]
+

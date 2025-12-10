@@ -1,13 +1,11 @@
-version: '3.8'
-
 services:
   # Nginx - Reverse Proxy (HTTPS)
   nginx:
     image: nginx:1.25-alpine
     container_name: smartxdr-nginx
     ports:
-      - "8443:8443"
-      - "8080:8080"
+      - "${NGINX_HTTPS_PORT:-8443}:8443"
+      - "${NGINX_HTTP_PORT:-8080}:8080"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
@@ -38,8 +36,13 @@ services:
       - API_AUTH_ENABLED=true
       - TELEGRAM_BOT_ENABLED=${TELEGRAM_BOT_ENABLED:-true}
       - ELASTICSEARCH_ENABLED=${ELASTICSEARCH_ENABLED:-true}
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
     env_file:
       - .env
+    depends_on:
+      chromadb:
+        condition: service_healthy
     volumes:
       # Persistent data
       - api-data:/app/data
@@ -66,18 +69,25 @@ services:
         reservations:
           memory: 512M
 
-  # Optional: Embedding Service (future expansion)
-  # embeddings:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile.embeddings
-  #   image: wanthinnn/smartxdr-embeddings:latest
-  #   container_name: smartxdr-embeddings
-  #   volumes:
-  #     - chroma-db:/app/chroma_db
-  #   networks:
-  #     - smartxdr-net
-  #   restart: unless-stopped
+  # ChromaDB Vector Database Service
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: smartxdr-chromadb
+    ports:
+      - "${CHROMA_PORT:-8000}:8000"  # ChromaDB API
+    volumes:
+      - chroma-db:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+    networks:
+      - smartxdr-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 networks:
   smartxdr-net:

@@ -46,7 +46,8 @@ case "$COMMAND" in
     
     build)
         echo -e "${YELLOW}Building Docker images...${NC}"
-        docker compose -f "$COMPOSE_FILE" build
+        # Enable BuildKit for faster builds with cache
+        DOCKER_BUILDKIT=1 docker compose -f "$COMPOSE_FILE" build
         ;;
     
     up|start)
