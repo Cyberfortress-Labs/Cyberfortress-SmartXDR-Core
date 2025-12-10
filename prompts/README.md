@@ -1,150 +1,167 @@
 # Prompts Organization Guide
 
-## 📁 Directory Structure
+## Directory Structure
 
 ```
 prompts/
-├── system/          # Core system prompts (quyền cao nhất, ít thay đổi)
-└── instructions/    # Task-specific prompts (thường xuyên tune)
+├── system/          # Core system prompts (highest privilege, rarely changed)
+└── instructions/    # Task-specific prompts (frequently tuned)
 ```
 
 ---
 
-## 🎯 `prompts/system/` - Core System Prompts
+## `prompts/system/` – Core System Prompts
 
-**Purpose:** Định nghĩa identity, behavior, và core capabilities của SmartXDR AI  
+**Purpose:** Defines the identity, behavior, and core capabilities of SmartXDR AI
 **Characteristics:**
-- Quyền cao nhất trong hierarchy
-- Ít thay đổi (chỉ khi có major updates)
-- Định nghĩa "AI là ai" và "AI hoạt động thế nào"
-- Áp dụng cho toàn bộ hệ thống
 
-### Files:
+* Highest privilege in the hierarchy
+* Rarely modified (only for major changes)
+* Defines “who the AI is” and “how it behaves”
+* Applied globally across all features
+
+### Files
 
 #### 1. `base_system.json`
-- **Role:** SmartXDR identity & ecosystem overview
-- **Content:**
-  - AI identity: "You are SmartXDR..."
-  - Lab environment architecture
-  - Network topology (6 segments)
-  - Device inventory & capabilities
-  - MITRE ATT&CK framework
-- **Used by:** All LLM calls (foundation)
-- **Update frequency:** Rare (only when ecosystem changes)
+
+* **Role:** SmartXDR identity and ecosystem overview
+* **Content:**
+
+  * AI identity (“You are SmartXDR…”)
+  * Lab architecture
+  * Network topology (6 segments)
+  * Device inventory and capabilities
+  * MITRE ATT&CK knowledge
+* **Used by:** All LLM calls
+* **Update frequency:** Rare
 
 #### 2. `rag_system.json`
-- **Role:** RAG behavior rules
-- **Content:**
-  - Context interpretation guidelines
-  - Language matching (EN/VI)
-  - Source citation rules
-  - Fallback behavior
-- **Used by:** `LLMService.ask_rag()`
-- **Update frequency:** Rare (only when RAG logic changes)
+
+* **Role:** RAG behavior rules
+* **Content:**
+
+  * Context interpretation guidelines
+  * Language matching (EN/VI)
+  * Source citation rules
+  * Fallback behavior
+* **Used by:** `LLMService.ask_rag()`
+* **Update frequency:** Rare
 
 #### 3. `rag_user_input.json`
-- **Role:** RAG query template
-- **Content:**
-  - User input format
-  - Context injection template
-- **Used by:** `PromptBuilderService.build_rag_user_input()`
-- **Update frequency:** Rare
+
+* **Role:** Template for building RAG queries
+* **Content:**
+
+  * User input schema
+  * Context injection structure
+* **Used by:** `PromptBuilderService.build_rag_user_input()`
+* **Update frequency:** Rare
 
 #### 4. `system_prompt_template.md`
-- **Role:** Documentation & template reference
-- **Content:** Examples and structure guide
-- **Update frequency:** As needed
+
+* **Role:** Documentation and guidance template
+* **Content:** Examples and structure reference
+* **Update frequency:** As needed
 
 ---
 
-## 📝 `prompts/instructions/` - Task-Specific Prompts
+## `prompts/instructions/` – Task-Specific Prompts
 
-**Purpose:** Hướng dẫn cụ thể cho từng task (alert analysis, IOC enrichment, v.v.)  
+**Purpose:** Provides focused guidance for specific tasks (alert analysis, IOC enrichment, etc.)
 **Characteristics:**
-- Task-focused instructions
-- Thường xuyên tune để cải thiện output quality
-- Dễ dàng A/B test
-- Có thể customize theo use case
 
-### Files:
+* Task-oriented
+* Frequently tuned to improve output
+* Easy to A/B test
+* Customizable per use case
+
+### Files
 
 #### 1. `alert_summary.json`
-- **Task:** Tóm tắt alerts từ ElastAlert2, Kibana, ML
-- **Used by:** Email reporting, Telegram `/summary`
-- **Output:** Tổng quan tình hình bảo mật + top issues + actions
-- **Update frequency:** Medium (tune based on feedback)
 
-#### 2. `alert_ai_analysis.json` ⬅️ Moved from system/
-- **Task:** AI phân tích risk score + attack patterns
-- **Used by:** `AlertSummarizationService._generate_ai_analysis()`
-- **Output:** Threat assessment + priority actions + MITRE
-- **Update frequency:** High (tune recommendations)
+* **Task:** Summarize alerts from ElastAlert2, Kibana, and ML
+* **Used by:** Email reports, Telegram `/summary`
+* **Output:** Security overview, top issues, recommended actions
+* **Update frequency:** Medium
 
-#### 3. `sumlogs_analysis.json` ⬅️ Moved from system/
-- **Task:** Phân tích ML-classified logs
-- **Used by:** Telegram `/sumlogs` command
-- **Output:** Top dangerous logs + recommendations + MITRE
-- **Update frequency:** High (tune based on log types)
+#### 2. `alert_ai_analysis.json` (moved from system/)
+
+* **Task:** AI risk scoring and attack-pattern analysis
+* **Used by:** `AlertSummarizationService._generate_ai_analysis()`
+* **Output:** Threat assessment, key actions, MITRE techniques
+* **Update frequency:** High
+
+#### 3. `sumlogs_analysis.json` (moved from system/)
+
+* **Task:** Analyze ML-classified logs
+* **Used by:** Telegram `/sumlogs`
+* **Output:** Top dangerous logs, recommendations, MITRE mapping
+* **Update frequency:** High
 
 #### 4. `ioc_enrichment.json`
-- **Task:** Giải thích IntelOwl IOC analysis
-- **Used by:** IOC enrichment endpoints
-- **Output:** Risk assessment + findings + actions
-- **Update frequency:** Medium
+
+* **Task:** Explain IntelOwl IOC enrichment results
+* **Used by:** IOC enrichment endpoints
+* **Output:** Risk rating, findings, actions
+* **Update frequency:** Medium
 
 #### 5. `playbook_selection.json`
-- **Task:** Recommend response playbooks
-- **Used by:** SOAR automation
-- **Status:** ⚠️ Empty (TODO)
+
+* **Task:** Recommend response playbooks
+* **Used by:** SOAR automation
+* **Status:** Empty (TODO)
 
 #### 6. `severity_scoring.json`
-- **Task:** Score severity của incidents
-- **Used by:** Triage workflow
-- **Status:** ⚠️ Empty (TODO)
+
+* **Task:** Score incident severity
+* **Used by:** Triage workflow
+* **Status:** Empty (TODO)
 
 ---
 
-## 🔄 Reorganization Changes (Dec 10, 2025)
+## Reorganization Changes (Dec 10, 2025)
 
-### Moved from `system/` to `instructions/`:
+### Moved from `system/` to `instructions/`
 
 1. **`alert_ai_analysis.json`**
-   - Reason: Task-specific, thường xuyên tune recommendations
-   - Old path: `prompts/system/alert_ai_analysis.json`
-   - New path: `prompts/instructions/alert_ai_analysis.json`
-   - Updated: `app/services/alert_summarization_service.py`
+
+   * Reason: Task-specific, tuned frequently
+   * Old: `prompts/system/alert_ai_analysis.json`
+   * New: `prompts/instructions/alert_ai_analysis.json`
+   * Updated reference: `alert_summarization_service.py`
 
 2. **`sumlogs_analysis.json`**
-   - Reason: Task-specific, tune theo log types
-   - Old path: `prompts/system/sumlogs_analysis.json`
-   - New path: `prompts/instructions/sumlogs_analysis.json`
-   - Updated: `app/services/telegram_middleware_service.py`
 
-### Removed:
+   * Reason: Task-specific, tuned based on log types
+   * Old: `prompts/system/sumlogs_analysis.json`
+   * New: `prompts/instructions/sumlogs_analysis.json`
+   * Updated reference: `telegram_middleware_service.py`
 
-- **`triage.json`** - Empty file (removed)
+### Removed
 
-### Renamed:
+* `triage.json` (empty, removed)
 
-- **`system_promt_template.md`** → `system_prompt_template.md` (fixed typo)
+### Renamed
+
+* `system_promt_template.md` → `system_prompt_template.md`
 
 ---
 
-## 📊 Hierarchy Logic
+## Hierarchy Logic
 
 ```
 ┌─────────────────────────────────────┐
-│     prompts/system/                 │  ← Quyền cao nhất
-│  (Core identity & behavior)         │     Ít thay đổi
-│  - base_system.json                 │     Define "who AI is"
+│     prompts/system/                 │  Highest privilege
+│  (Core identity & behavior)         │  Rarely changed
+│  - base_system.json                 │  Defines “who the AI is”
 │  - rag_system.json                  │
 │  - rag_user_input.json              │
 └─────────────────────────────────────┘
-              ↓ Uses
+              ↓ Used by all tasks
 ┌─────────────────────────────────────┐
-│   prompts/instructions/             │  ← Task-specific
-│  (Task-focused prompts)             │     Thường xuyên tune
-│  - alert_summary.json               │     Define "how to do X"
+│   prompts/instructions/             │  Task-specific
+│  (Task-focused prompts)             │  Frequently tuned
+│  - alert_summary.json               │  Defines “how to do X”
 │  - alert_ai_analysis.json           │
 │  - sumlogs_analysis.json            │
 │  - ioc_enrichment.json              │
@@ -155,71 +172,58 @@ prompts/
 
 ---
 
-## 🎯 When to Edit Which?
+## When to Edit What?
 
 ### Edit `prompts/system/` when:
-- ✅ Ecosystem topology changes (new devices, IPs)
-- ✅ Core AI behavior needs adjustment
-- ✅ RAG logic changes
-- ❌ NOT for output quality tuning
-- ❌ NOT for task-specific improvements
+
+* Ecosystem or topology changes
+* Core AI behavior needs redesign
+* RAG logic changes
+* Not for quality tuning
+* Not for task-specific output
 
 ### Edit `prompts/instructions/` when:
-- ✅ Muốn improve output quality của 1 task cụ thể
-- ✅ Thêm/bớt requirements cho task
-- ✅ A/B test different prompts
-- ✅ Customize cho specific use cases
-- ✅ Tune recommendations, format, language
+
+* Improve quality for a specific task
+* Add/remove task requirements
+* A/B testing new instructions
+* Customize for special use cases
+* Tune severity, language, formatting
 
 ---
 
-## 🔧 Code Usage Pattern
+## Code Usage Pattern
 
 ```python
-# System prompts - loaded via PromptBuilderService
+# System prompts
 from app.services.prompt_builder_service import PromptBuilderService
 builder = PromptBuilderService()
-system_prompt = builder.build_system_prompt()  # Uses prompts/system/base_system.json
-rag_prompt = builder.build_rag_prompt()        # Uses prompts/system/rag_system.json
+system_prompt = builder.build_system_prompt()
+rag_prompt = builder.build_rag_prompt()
 
-# Instruction prompts - loaded directly per task
+# Instruction prompts
 import json
 
-# Example: Alert AI analysis
-with open("prompts/instructions/alert_ai_analysis.json", 'r') as f:
+# Alert AI analysis
+with open("prompts/instructions/alert_ai_analysis.json") as f:
     prompt_data = json.load(f)
-    system_prompt = prompt_data['system_prompt']
-    user_template = prompt_data['user_prompt_template']
+    system_prompt = prompt_data["system_prompt"]
+    user_template = prompt_data["user_prompt_template"]
 
-# Example: ML logs analysis
-with open("prompts/instructions/sumlogs_analysis.json", 'r') as f:
+# ML logs analysis
+with open("prompts/instructions/sumlogs_analysis.json") as f:
     prompt_data = json.load(f)
-    # Use prompt_data...
+    # ...
 ```
 
 ---
 
-## 📈 Best Practices
+## Best Practices
 
-1. **Version tracking:** Update `last_updated` field khi chỉnh sửa
-2. **Fallback:** Always có fallback prompt trong code
-3. **Testing:** Test prompts trước khi commit
-4. **Documentation:** Document changes trong commit message
-5. **A/B Testing:** Keep old versions để compare
-6. **Token optimization:** Monitor token usage sau khi update prompts
+1. Maintain versioning (`last_updated`)
+2. Always provide fallback prompts
+3. Test prompts before committing
+4. Document changes in commit messages
+5. Keep old versions for A/B testing
+6. Monitor token usage when updating prompts
 
----
-
-## 🚀 Future Enhancements
-
-- [ ] Add prompt versioning system (v1, v2, v3)
-- [ ] Create prompt effectiveness metrics
-- [ ] Build A/B testing framework
-- [ ] Add JSON schema validation
-- [ ] Create prompt library với examples
-- [ ] Add multi-language support templates
-
----
-
-**Last Updated:** December 10, 2025  
-**Maintainer:** SmartXDR Team

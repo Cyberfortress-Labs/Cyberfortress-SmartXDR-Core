@@ -1108,23 +1108,40 @@ class TelegramMiddlewareService:
             except:
                 system_prompt = "Bạn là chuyên gia phân tích bảo mật mạng. Phân tích logs và đưa ra khuyến nghị."
             
-            # Build context from logs (for display to user + AI)
-            logs_context = f"Tổng số logs: {total}, Trả về: {len(logs)}\n\n"
-            logs_context += "Danh sách logs (sắp xếp theo probability):\n\n"
+            # Build context from logs - 2 versions: AI (truncated) and Full (for markdown)
+            logs_context_header = f"Tổng số logs: {total}, Trả về: {len(logs)}\n\n"
+            logs_context_header += "Danh sách logs (sắp xếp theo probability):\n\n"
             
+            # Version 1: For AI (truncated ml_input, top 20 only)
+            logs_context_ai = logs_context_header
             for i, log in enumerate(logs[:20], 1):  # Limit to top 20 for token optimization
-                logs_context += (
+                logs_context_ai += (
                     f"{i}. [{log['timestamp']}]\n"
                     f"   - ID: {log.get('_id', 'N/A')}\n"
                     f"   - ML Prediction: {log['ml_prediction']} (prob: {log['ml_probability']})\n"
-                    f"   - Event: {log['ml_input']}\n"
+                    f"   - Event: {log['ml_input']}\n"  # Already truncated to 200 chars
                     f"   - Source IP: {log['source_ip']} → Dest IP: {log['dest_ip']}\n"
                     f"   - Type: {log['event_type']}\n"
                     f"   - Index: {log['index']}\n\n"
                 )
             
-            # Build query for AI (include system prompt in query)
-            user_query = f"{system_prompt}\n\nCÂU HỎI: {question}\n\nDỮ LIỆU LOGS:\n{logs_context}"
+            # Version 2: For markdown file (full event_original, all logs)
+            logs_context_full = logs_context_header
+            for i, log in enumerate(logs, 1):  # All logs
+                # Use event_original if available, else ml_input
+                event_detail = log.get('event_original', log['ml_input'])
+                logs_context_full += (
+                    f"{i}. [{log['timestamp']}]\n"
+                    f"   - ID: {log.get('_id', 'N/A')}\n"
+                    f"   - ML Prediction: {log['ml_prediction']} (prob: {log['ml_probability']})\n"
+                    f"   - Event: {event_detail}\n"  # Full event data
+                    f"   - Source IP: {log['source_ip']} → Dest IP: {log['dest_ip']}\n"
+                    f"   - Type: {log['event_type']}\n"
+                    f"   - Index: {log['index']}\n\n"
+                )
+            
+            # Build query for AI (include system prompt in query) - Use truncated version
+            user_query = f"{system_prompt}\n\nCÂU HỎI: {question}\n\nDỮ LIỆU LOGS:\n{logs_context_ai}"
             
             # Call LLM with RAG (disable cache - index/time-specific queries)
             llm_service = LLMService()
@@ -1153,8 +1170,8 @@ class TelegramMiddlewareService:
                 emoji = "🔴" if severity == "ERROR" else "🟠" if severity == "WARNING" else "🟢"
                 stats_text += f"  {emoji} {severity}: {count}\n"
             
-            # Add preview of logs data
-            # stats_text += f"\n<b>Preview:</b>\n<pre>{logs_context[:500]}...</pre>"
+            # Add preview of logs data (truncated version for display)
+            stats_text += f"\n<b>Preview:</b>\n<pre>{logs_context_ai[:500]}...</pre>"
             
             self.send_message(chat_id, stats_text, reply_to_message_id=message_id)
             
@@ -1167,7 +1184,7 @@ class TelegramMiddlewareService:
             # Ensure logs directory exists
             os.makedirs("logs", exist_ok=True)
             
-            # Write analysis to markdown
+            # Write analysis to markdown (use full logs data)
             with open(filepath, 'w', encoding='utf-8') as f:
                 f.write(f"# ML Logs Analysis - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
                 f.write(f"**Question:** {question}\n\n")
@@ -1175,7 +1192,7 @@ class TelegramMiddlewareService:
                 f.write(f"**Total Logs:** {total} | **Analyzed:** {len(logs)}\n\n")
                 f.write("---\n\n")
                 f.write("## Logs Data\n\n")
-                f.write(logs_context)
+                f.write(logs_context_full)  # Full version with event_original
                 f.write("\n\n---\n\n")
                 f.write("## AI Analysis\n\n")
                 f.write(analysis)
