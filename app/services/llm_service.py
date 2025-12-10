@@ -103,7 +103,8 @@ class LLMService:
         self,
         query: str,
         top_k: int = DEFAULT_RESULTS,
-        filters: Optional[Dict[str, Any]] = None
+        filters: Optional[Dict[str, Any]] = None,
+        use_cache: bool = True
     ) -> Dict[str, Any]:
         """
         RAG Query - Search and answer questions using RAGService
@@ -112,6 +113,7 @@ class LLMService:
             query: User's question
             top_k: Number of documents to retrieve
             filters: Optional metadata filters (e.g., {"is_active": True, "tags": "security"})
+            use_cache: Whether to use cache (default: True). Set False for queries with dynamic context.
         
         Returns:
             {
@@ -137,19 +139,20 @@ class LLMService:
         from app.rag.service import RAGService
         rag_service = RAGService()
         
-        # Check cache
-        cache_key = self.response_cache.get_cache_key(query, "")
-        cached_response = self.response_cache.get(cache_key, query)
-        
-        if cached_response:
-            # Get sources from RAG for cached response
-            query_result = rag_service.query(query, top_k, filters)
-            return {
-                "status": "success",
-                "answer": cached_response,
-                "cached": True,
-                "sources": query_result.get("sources", [])
-            }
+        # Check cache (skip if use_cache=False)
+        if use_cache:
+            cache_key = self.response_cache.get_cache_key(query, "")
+            cached_response = self.response_cache.get(cache_key, query)
+            
+            if cached_response:
+                # Get sources from RAG for cached response
+                query_result = rag_service.query(query, top_k, filters)
+                return {
+                    "status": "success",
+                    "answer": cached_response,
+                    "cached": True,
+                    "sources": query_result.get("sources", [])
+                }
         
         # Build context using RAGService
         context_text, sources = rag_service.build_context_from_query(
@@ -175,8 +178,10 @@ class LLMService:
             if sources:
                 answer += f"\n\nSources: {', '.join(sorted(sources))}"
             
-            # Cache the response
-            self.response_cache.set(cache_key, answer, query)
+            # Cache the response (only if use_cache=True)
+            if use_cache:
+                cache_key = self.response_cache.get_cache_key(query, "")
+                self.response_cache.set(cache_key, answer, query)
             
             return {
                 "status": "success",

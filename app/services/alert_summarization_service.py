@@ -553,13 +553,27 @@ class AlertSummarizationService:
                     f"- {pattern.upper()}: {data['count']} alerts, {len(data['ips'])} IPs"
                 )
             
-            query = f"""Phân tích tóm tắt cảnh báo bảo mật này và đưa ra khuyến nghị ngắn gọn:
+            # Load prompt from file
+            prompt_path = "prompts/instructions/alert_ai_analysis.json"
+            system_prompt = ""
+            user_template = ""
+            
+            try:
+                with open(prompt_path, 'r', encoding='utf-8') as f:
+                    prompt_data = json.load(f)
+                    system_prompt = prompt_data.get('system_prompt', '')
+                    user_template = prompt_data.get('user_prompt_template', '')
+            except Exception as e:
+                logger.warning(f"⚠️  Failed to load prompt from {prompt_path}: {e}. Using fallback.")
+                # Fallback prompt
+                system_prompt = "Bạn là chuyên gia SOC Analyst. Phân tích cảnh báo và đưa ra khuyến nghị ngắn gọn."
+                user_template = """Phân tích tóm tắt cảnh báo bảo mật này và đưa ra khuyến nghị ngắn gọn:
 
-Risk Score: {risk_score:.1f}/100
-Tổng số alerts: {sum(g['alert_count'] for g in grouped_alerts)}
+Risk Score: {risk_score}/100
+Tổng số alerts: {total_alerts}
 
 Các mẫu tấn công chính:
-{chr(10).join(pattern_summary)}
+{attack_patterns}
 
 Hãy cung cấp:
 1. Đánh giá mức độ nguy hiểm (2-3 câu)
@@ -568,8 +582,18 @@ Hãy cung cấp:
 
 Giữ phản hồi dưới 250 từ, cụ thể và có thể hành động."""
             
+            # Build user query from template
+            query = user_template.format(
+                risk_score=f"{risk_score:.1f}",
+                total_alerts=sum(g['alert_count'] for g in grouped_alerts),
+                attack_patterns='\n'.join(pattern_summary)
+            )
+            
+            # Prepend system prompt to query for LLM
+            full_query = f"{system_prompt}\n\n{query}"
+            
             # Call LLM with RAG
-            response = self.llm_service.ask_rag(query)
+            response = self.llm_service.ask_rag(full_query)
             
             if response.get('status') == 'success':
                 return response.get('answer', '')

@@ -8,7 +8,8 @@
       "ml_input (mô tả sự kiện)",
       "source_ip",
       "dest_ip",
-      "event_type"
+      "event_type",
+      "event.original"
     ],
     "notes": "Chỉ tập trung vào logs có ml_probability > 0.7 và mức độ ERROR hoặc WARNING."
   },

@@ -1100,7 +1100,7 @@ class TelegramMiddlewareService:
                 return
             
             # Load prompt template
-            prompt_path = "prompts/system/sumlogs_analysis.json"
+            prompt_path = "prompts/instructions/sumlogs_analysis.json"
             system_prompt = ""
             try:
                 with open(prompt_path, 'r', encoding='utf-8') as f:
@@ -1126,9 +1126,9 @@ class TelegramMiddlewareService:
             # Build query for AI (include system prompt in query)
             user_query = f"{system_prompt}\n\nCÂU HỎI: {question}\n\nDỮ LIỆU LOGS:\n{logs_context}"
             
-            # Call LLM with RAG
+            # Call LLM with RAG (disable cache - index/time-specific queries)
             llm_service = LLMService()
-            ai_response = llm_service.ask_rag(query=user_query)
+            ai_response = llm_service.ask_rag(query=user_query, use_cache=False)
             
             if ai_response.get('status') != 'success':
                 self.send_message(
@@ -1154,7 +1154,7 @@ class TelegramMiddlewareService:
                 stats_text += f"  {emoji} {severity}: {count}\n"
             
             # Add preview of logs data
-            stats_text += f"\n<b>Preview:</b>\n<pre>{logs_context[:500]}...</pre>"
+            # stats_text += f"\n<b>Preview:</b>\n<pre>{logs_context[:500]}...</pre>"
             
             self.send_message(chat_id, stats_text, reply_to_message_id=message_id)
             
