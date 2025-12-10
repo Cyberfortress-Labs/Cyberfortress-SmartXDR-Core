@@ -77,7 +77,14 @@ class AlertSummarizationService:
         self.es_service = ElasticsearchService()
         self.llm_service = LLMService()
         self._initialized = True
-        logger.info("✓ Alert Summarization Service initialized")
+        
+        # Log Elasticsearch status
+        if self.es_service.enabled and self.es_service.client:
+            logger.info("✓ Alert Summarization Service initialized with Elasticsearch")
+        elif not self.es_service.enabled:
+            logger.warning("⚠️  Alert Summarization Service initialized WITHOUT Elasticsearch (ELASTICSEARCH_ENABLED=false)")
+        else:
+            logger.error("❌ Alert Summarization Service initialized but Elasticsearch connection FAILED (check password/connection)")
     
     def summarize_alerts(self, time_window_minutes: Optional[int] = None, 
                         source_ip: Optional[str] = None) -> Dict[str, Any]:
@@ -257,14 +264,19 @@ class AlertSummarizationService:
     def _query_alerts(self, time_window_minutes: int, source_ip: Optional[str]) -> List[Dict]:
         """Query Elasticsearch for ML-classified alerts"""
         try:
+            # Check if Elasticsearch client is available
+            if not self.es_service.enabled or self.es_service.client is None:
+                logger.error("❌ Elasticsearch service not available. Check ELASTICSEARCH_PASSWORD in .env")
+                return []
+            
             # Build time range
             now = datetime.utcnow()
             start_time = now - timedelta(minutes=time_window_minutes)
             
-            # Build query for all indices
+            # Build query for all indices - include INFO, WARNING, ERROR
             must_clauses = [
                 {"range": {"@timestamp": {"gte": start_time.isoformat(), "lte": now.isoformat()}}},
-                {"terms": {"ml.prediction.predicted_value": ["WARNING", "ERROR"]}},
+                {"terms": {"ml.prediction.predicted_value": ["INFO", "WARNING", "ERROR"]}},
                 {"range": {"ml.prediction.prediction_probability": {"gte": ALERT_MIN_PROBABILITY}}},
                 {"exists": {"field": "ml_input"}},  # Ensure ml_input exists (summary for user)
                 {"bool": {"must_not": {"term": {"ml_input.keyword": ""}}}}  # Exclude empty ml_input
@@ -406,35 +418,60 @@ class AlertSummarizationService:
     
     def _calculate_risk_score(self, grouped_alerts: List[Dict]) -> float:
         """
-        Calculate risk score using formula:
-        risk_score = (alert_count * COUNT_WEIGHT) + (avg_probability * PROBABILITY_WEIGHT) + 
-                     (severity_level * SEVERITY_WEIGHT) + (escalation_level * ESCALATION_WEIGHT)
+        Calculate risk score with improved formula:
+        - Base score starts at 0.5 (not 0)
+        - Logarithmic scaling for alert counts (avoid easy 100 score)
+        - Weighted by severity distribution
+        - Considers attack pattern escalation
+        
+        Formula:
+        base_score = 0.5
+        volume_score = log10(total_alerts + 1) * 15  # Logarithmic scaling
+        severity_score = (ERROR% * 30) + (WARNING% * 15) + (INFO% * 5)
+        confidence_score = avg_confidence * 25
+        escalation_score = escalation_level * 15
+        
+        Final: base_score + volume + severity + confidence + escalation (max 100)
         """
         if not grouped_alerts:
-            return 0.0
+            return 0.5  # Base score
         
-        total_score = 0.0
+        import math
         
-        for group in grouped_alerts:
-            # Count component
-            count_component = min(group["alert_count"], 10) * RISK_SCORE_COUNT_WEIGHT
-            
-            # Probability component (0-1 scale)
-            prob_component = group["avg_probability"] * RISK_SCORE_PROBABILITY_WEIGHT
-            
-            # Severity component
-            severity = self.SEVERITY_LEVELS.get(group["severity"], 1)
-            severity_component = severity * RISK_SCORE_SEVERITY_WEIGHT
-            
-            # Escalation component (detect pattern sequences)
-            escalation_level = self._detect_escalation(grouped_alerts)
-            escalation_component = escalation_level * RISK_SCORE_ESCALATION_WEIGHT
-            
-            group_score = count_component + prob_component + severity_component + escalation_component
-            total_score += group_score
+        # Calculate total alerts and severity distribution
+        total_alerts = sum(g["alert_count"] for g in grouped_alerts)
+        error_count = sum(g["alert_count"] for g in grouped_alerts if g["severity"] == "ERROR")
+        warning_count = sum(g["alert_count"] for g in grouped_alerts if g["severity"] == "WARNING")
+        info_count = sum(g["alert_count"] for g in grouped_alerts if g["severity"] == "INFO")
         
-        # Normalize to 0-100 scale
-        return min(round(total_score * 10, 1), 100.0)
+        # 1. Base score (always starts at 0.5)
+        base_score = 0.5
+        
+        # 2. Volume score (logarithmic to prevent easy 100)
+        # log10(1) = 0, log10(10) = 1, log10(100) = 2, log10(1000) = 3
+        volume_score = math.log10(total_alerts + 1) * 10  # Reduced from 15 to 10
+        
+        # 3. Severity distribution score (weighted percentages)
+        error_pct = error_count / total_alerts if total_alerts > 0 else 0
+        warning_pct = warning_count / total_alerts if total_alerts > 0 else 0
+        info_pct = info_count / total_alerts if total_alerts > 0 else 0
+        
+        severity_score = (error_pct * 35) + (warning_pct * 15) + (info_pct * 3)  # Increased ERROR weight, reduced INFO
+        
+        # 4. Confidence score (average ML prediction probability)
+        total_probability = sum(g["avg_probability"] * g["alert_count"] for g in grouped_alerts)
+        avg_confidence = total_probability / total_alerts if total_alerts > 0 else 0
+        confidence_score = avg_confidence * 30  # Increased from 25 to 30
+        
+        # 5. Escalation score (attack pattern sequences)
+        escalation_level = self._detect_escalation(grouped_alerts)
+        escalation_score = escalation_level * 20  # Increased from 15 to 20
+        
+        # Final score calculation
+        final_score = base_score + volume_score + severity_score + confidence_score + escalation_score
+        
+        # Cap at 100
+        return min(round(final_score, 1), 100.0)
     
     def _detect_escalation(self, grouped_alerts: List[Dict]) -> float:
         """
@@ -459,14 +496,23 @@ class AlertSummarizationService:
         else:
             return 0.0  # No pattern
     
-    def _generate_summary(self, grouped_alerts: List[Dict], risk_score: float) -> str:
-        """Generate detailed summary of grouped alerts"""
+    def _generate_summary(self, grouped_alerts: List[Dict], risk_score: float, include_ai: bool = True) -> str:
+        """
+        Generate detailed summary of grouped alerts
+        
+        Args:
+            grouped_alerts: Grouped alert data
+            risk_score: Calculated risk score
+            include_ai: Whether to include AI analysis (default: True)
+        
+        Returns:
+            str: Formatted summary text
+        """
         try:
             # Build context from grouped alerts
             alert_context = self._build_alert_context(grouped_alerts, risk_score)
             
-            # Build detailed summary text (without LLM due to collection requirement)
-            # In production, you could create a separate endpoint or extend to use LLM
+            # Build detailed summary text
             summary = self._build_detailed_summary(alert_context, grouped_alerts, risk_score)
             
             return summary if summary else self._build_fallback_summary(grouped_alerts)
@@ -474,6 +520,66 @@ class AlertSummarizationService:
         except Exception as e:
             logger.error(f"❌ Summary generation failed: {str(e)}")
             return self._build_fallback_summary(grouped_alerts)
+    
+    def get_ai_analysis(self, grouped_alerts: List[Dict], risk_score: float) -> str:
+        """
+        Get AI analysis and recommendations using LLM + RAG
+        
+        Args:
+            grouped_alerts: Grouped alert data
+            risk_score: Calculated risk score
+        
+        Returns:
+            str: AI-generated analysis and recommendations
+        """
+        try:
+            # Extract patterns
+            patterns = {}
+            for group in grouped_alerts[:5]:
+                pattern = group.get('pattern', 'unknown')
+                if pattern not in patterns:
+                    patterns[pattern] = {
+                        'count': 0,
+                        'severity': group.get('severity', 'INFO'),
+                        'ips': set()
+                    }
+                patterns[pattern]['count'] += group.get('alert_count', 0)
+                patterns[pattern]['ips'].add(group.get('source_ip', 'unknown'))
+            
+            # Build query
+            pattern_summary = []
+            for pattern, data in patterns.items():
+                pattern_summary.append(
+                    f"- {pattern.upper()}: {data['count']} alerts, {len(data['ips'])} IPs"
+                )
+            
+            query = f"""Phân tích tóm tắt cảnh báo bảo mật này và đưa ra khuyến nghị ngắn gọn:
+
+Risk Score: {risk_score:.1f}/100
+Tổng số alerts: {sum(g['alert_count'] for g in grouped_alerts)}
+
+Các mẫu tấn công chính:
+{chr(10).join(pattern_summary)}
+
+Hãy cung cấp:
+1. Đánh giá mức độ nguy hiểm (2-3 câu)
+2. 3 hành động khuyến nghị ưu tiên (ngắn gọn, dạng bullet point)
+3. MITRE ATT&CK techniques cần điều tra (nếu có)
+
+Giữ phản hồi dưới 250 từ, cụ thể và có thể hành động."""
+            
+            # Call LLM with RAG
+            response = self.llm_service.ask_rag(query)
+            
+            if response.get('status') == 'success':
+                return response.get('answer', '')
+            else:
+                logger.warning(f"⚠️  AI analysis failed: {response.get('error', '')}")
+                return ""
+        
+        except Exception as e:
+            logger.error(f"❌ AI analysis error: {str(e)}")
+            return ""
     
     def _build_detailed_summary(self, alert_context: str, grouped_alerts: List[Dict], risk_score: float) -> str:
         """Build detailed summary from grouped alerts"""

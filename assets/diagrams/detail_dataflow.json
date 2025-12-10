@@ -1,0 +1,634 @@
+{
+  "metadata": {
+    "name": "Intelligent SOC Ecosystem - Data Flow Definition",
+    "version": "1.0",
+    "description": "Logical dataflow for Cyberfortress Intelligent SOC Ecosystem: from network traffic and endpoint logs to SIEM, SmartXDR pipeline, alerting, SOAR, and automated response.",
+    "source_topology_refs": [
+      "network_map.json",
+      "devices_full_inventory.json"
+    ],
+    "created_at": "2025-12-10"
+  },
+  "nodes": [
+    {
+      "id": "ext-attacker-01",
+      "ref_device_id": "ext-attacker-01",
+      "type": "endpoint",
+      "zone": "Internet",
+      "role": "External Attacker"
+    },
+    {
+      "id": "int-attacker-01",
+      "ref_device_id": "int-attacker-01",
+      "type": "endpoint",
+      "zone": "Guest Subnet",
+      "role": "Internal Attacker"
+    },
+    {
+      "id": "guest-devices",
+      "ref_device_id": "guest-devices",
+      "type": "endpoint_group",
+      "zone": "Guest Subnet",
+      "role": "User Endpoints"
+    },
+    {
+      "id": "nat-gateway-01",
+      "ref_device_id": "nat-gateway-01",
+      "type": "router",
+      "zone": "Internet/WAN",
+      "role": "NAT Gateway / Linux Router"
+    },
+    {
+      "id": "pfsense-01",
+      "ref_device_id": "pfsense-01",
+      "type": "firewall_router",
+      "zone": "WAN/LAN/Guest/SOC",
+      "role": "Perimeter Firewall & Router"
+    },
+    {
+      "id": "suricata-01",
+      "ref_device_id": "suricata-01",
+      "type": "ids_ips",
+      "zone": "XDR/LAN Subnet",
+      "role": "Suricata Inline IDPS"
+    },
+    {
+      "id": "zeek-01",
+      "ref_device_id": "zeek-01",
+      "type": "nsm",
+      "zone": "XDR/LAN Subnet",
+      "role": "Zeek Network Security Monitoring"
+    },
+    {
+      "id": "waf-01",
+      "ref_device_id": "waf-01",
+      "type": "waf",
+      "zone": "XDR/LAN Subnet",
+      "role": "ModSecurity WAF"
+    },
+    {
+      "id": "dvwa-01",
+      "ref_device_id": "dvwa-01",
+      "type": "web_target",
+      "zone": "XDR/LAN Subnet",
+      "role": "Vulnerable Web Application (DVWA)"
+    },
+    {
+      "id": "win-srv-01",
+      "ref_device_id": "win-srv-01",
+      "type": "server",
+      "zone": "XDR/LAN Subnet",
+      "role": "Windows Server / AD Target"
+    },
+    {
+      "id": "elastic-01",
+      "ref_device_id": "elastic-01",
+      "type": "siem",
+      "zone": "SOC Subnet",
+      "role": "Elastic Stack SIEM"
+    },
+    {
+      "id": "wazuh-01",
+      "ref_device_id": "wazuh-01",
+      "type": "xdr_platform",
+      "zone": "SOC Subnet",
+      "role": "Wazuh XDR Server"
+    },
+    {
+      "id": "soar-01",
+      "ref_device_id": "soar-01",
+      "type": "soar_platform",
+      "zone": "SOC Subnet",
+      "role": "DFIR-IRIS + IntelOwl SOAR"
+    },
+    {
+      "id": "misp-01",
+      "ref_device_id": "misp-01",
+      "type": "threat_intel_platform",
+      "zone": "SOC Subnet",
+      "role": "MISP Threat Intelligence"
+    },
+    {
+      "id": "n8n-01",
+      "ref_device_id": "n8n-01",
+      "type": "automation_platform",
+      "zone": "SOC Subnet",
+      "role": "n8n Automation & Middleware"
+    },
+    {
+      "id": "elastalert-01",
+      "ref_device_id": "elastalert-01",
+      "type": "alert_engine",
+      "zone": "SOC Subnet",
+      "role": "ElastAlert2"
+    },
+    {
+      "id": "smartxdr-core",
+      "type": "application_service",
+      "zone": "SOC Subnet",
+      "role": "SmartXDR Core API & Ingest Pipeline",
+      "host_device_id": "n8n-01"
+    },
+    {
+      "id": "smartxdr-ml",
+      "type": "ml_model",
+      "zone": "SOC Subnet",
+      "role": "SmartXDR Machine Learning Classification Model",
+      "host_device_id": "n8n-01"
+    },
+    {
+      "id": "smartxdr-assistant",
+      "type": "llm_assistant",
+      "zone": "SOC Subnet",
+      "role": "SmartXDR RAG Assistant",
+      "host_device_id": "n8n-01"
+    },
+    {
+      "id": "email-gateway",
+      "type": "external_service",
+      "zone": "External",
+      "role": "Email Notification Channel"
+    },
+    {
+      "id": "telegram-bot",
+      "type": "external_service",
+      "zone": "External",
+      "role": "Telegram/Chat Notification Bot"
+    },
+    {
+      "id": "soc-analyst",
+      "type": "human_actor",
+      "zone": "SOC",
+      "role": "SOC Analyst / Incident Responder"
+    }
+  ],
+  "phases": [
+    {
+      "id": "phase-1-logs-collecting",
+      "name": "Phase 1 - Logs Collecting",
+      "description": "Collect raw logs from endpoints, network sensors, and security devices into SIEM/XDR with ECS/normalized formats.",
+      "edge_ids": [
+        "edge-network-traffic-to-sensors",
+        "edge-waf-logs-to-elastic",
+        "edge-suricata-logs-to-elastic",
+        "edge-zeek-logs-to-elastic",
+        "edge-win-logs-to-wazuh",
+        "edge-guest-logs-to-wazuh",
+        "edge-wazuh-alerts-to-elastic"
+      ]
+    },
+    {
+      "id": "phase-2-preprocessed-logs",
+      "name": "Phase 2 - Pre-processed Logs",
+      "description": "SmartXDR ingest pipeline reads normalized ECS logs from SIEM and prepares ML-ready datasets.",
+      "edge_ids": [
+        "edge-elastic-to-smartxdr-ingest",
+        "edge-smartxdr-ingest-to-elastic-ml-ready"
+      ]
+    },
+    {
+      "id": "phase-3-classification-enrichment",
+      "name": "Phase 3 - Classification & Enrichment",
+      "description": "SmartXDR ML model classifies log severity and enriches events before writing back to SIEM.",
+      "edge_ids": [
+        "edge-elastic-ml-ready-to-smartxdr-ml",
+        "edge-smartxdr-ml-to-elastic-enriched"
+      ]
+    },
+    {
+      "id": "phase-4-alerting-correlation",
+      "name": "Phase 4 - Alerting & Correlation",
+      "description": "ElastAlert2 queries enriched logs, applies correlation rules, and generates alerts/IOCs.",
+      "edge_ids": [
+        "edge-elastic-enriched-to-elastalert",
+        "edge-elastalert-to-smartxdr-query",
+        "edge-elastalert-to-email",
+        "edge-elastalert-to-n8n-webhook"
+      ]
+    },
+    {
+      "id": "phase-5-incident-response",
+      "name": "Phase 5 - Incident Response",
+      "description": "DFIR-IRIS receives alerts, opens cases, enriches IOCs via IntelOwl/MISP and analysis with SmartXDR.",
+      "edge_ids": [
+        "edge-n8n-to-iris-case",
+        "edge-elastalert-to-iris-case",
+        "edge-iris-to-intelowl",
+        "edge-iris-to-misp",
+        "edge-iris-to-smartxdr-analysis",
+        "edge-smartxdr-assistant-to-analyst"
+      ]
+    },
+    {
+      "id": "phase-6-automated-response",
+      "name": "Phase 6 - Automated Response",
+      "description": "Automation workflows orchestrate blocking actions, report generation, and notifications via SmartXDR and n8n.",
+      "edge_ids": [
+        "edge-n8n-to-pfsense-block",
+        "edge-n8n-to-wazuh-response",
+        "edge-n8n-to-suricata-response",
+        "edge-n8n-to-email",
+        "edge-n8n-to-telegram",
+        "edge-smartxdr-assistant-feedback-loop"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-network-traffic-to-sensors",
+      "from": [
+        "ext-attacker-01",
+        "int-attacker-01",
+        "guest-devices"
+      ],
+      "to": [
+        "pfsense-01",
+        "suricata-01",
+        "zeek-01",
+        "waf-01",
+        "dvwa-01",
+        "win-srv-01"
+      ],
+      "data_type": "network_traffic",
+      "channel_type": "ip_tcp_udp",
+      "description": "Malicious and normal network traffic from external and internal attackers traverses pfSense and is inspected by Suricata inline, Zeek passive NSM, WAF, and reaches internal servers and web applications.",
+      "related_routing_flows": [
+        "ingress_flow",
+        "east_west_flow"
+      ]
+    },
+    {
+      "id": "edge-waf-logs-to-elastic",
+      "from": [
+        "waf-01"
+      ],
+      "to": [
+        "elastic-01"
+      ],
+      "data_type": "waf_http_logs",
+      "channel_type": "logs",
+      "description": "ModSecurity WAF generates HTTP security logs and audit events, which are shipped (via Elastic Agent/Filebeat) into Elasticsearch indices for SIEM correlation.",
+      "phase_hint": "phase-1-logs-collecting"
+    },
+    {
+      "id": "edge-suricata-logs-to-elastic",
+      "from": [
+        "suricata-01"
+      ],
+      "to": [
+        "elastic-01"
+      ],
+      "data_type": "ids_alerts_eve_json",
+      "channel_type": "logs",
+      "description": "Suricata EVE JSON logs (alerts, flows, DNS, HTTP, TLS, etc.) are sent via Filebeat/Elastic Agent to Elasticsearch, normalized to ECS where applicable.",
+      "phase_hint": "phase-1-logs-collecting"
+    },
+    {
+      "id": "edge-zeek-logs-to-elastic",
+      "from": [
+        "zeek-01"
+      ],
+      "to": [
+        "elastic-01"
+      ],
+      "data_type": "nsm_metadata_logs",
+      "channel_type": "logs",
+      "description": "Zeek connection and protocol logs (conn, http, dns, ssl, files, etc.) are exported to Elasticsearch for deep network analytics.",
+      "phase_hint": "phase-1-logs-collecting"
+    },
+    {
+      "id": "edge-win-logs-to-wazuh",
+      "from": [
+        "win-srv-01"
+      ],
+      "to": [
+        "wazuh-01"
+      ],
+      "data_type": "endpoint_security_logs",
+      "channel_type": "agent_logs",
+      "description": "Windows Server hosts send endpoint and security events via Wazuh Agent to Wazuh Manager for XDR analysis and alerting.",
+      "phase_hint": "phase-1-logs-collecting"
+    },
+    {
+      "id": "edge-guest-logs-to-wazuh",
+      "from": [
+        "guest-devices"
+      ],
+      "to": [
+        "wazuh-01"
+      ],
+      "data_type": "endpoint_security_logs",
+      "channel_type": "agent_logs",
+      "description": "Guest endpoints in the Guest Subnet send log and telemetry data via Wazuh Agents to Wazuh Server for monitoring and compliance.",
+      "phase_hint": "phase-1-logs-collecting"
+    },
+    {
+      "id": "edge-wazuh-alerts-to-elastic",
+      "from": [
+        "wazuh-01"
+      ],
+      "to": [
+        "elastic-01"
+      ],
+      "data_type": "xdr_alerts",
+      "channel_type": "logs",
+      "description": "Wazuh Manager forwards alerts and selected events into Elasticsearch indices, enabling unified SOC view with network and application logs.",
+      "phase_hint": "phase-1-logs-collecting"
+    },
+    {
+      "id": "edge-elastic-to-smartxdr-ingest",
+      "from": [
+        "elastic-01"
+      ],
+      "to": [
+        "smartxdr-core"
+      ],
+      "data_type": "normalized_logs_ecs",
+      "channel_type": "api_query",
+      "description": "SmartXDR Ingest Pipeline periodically queries and pulls normalized ECS logs (Suricata, Zeek, Wazuh, WAF, endpoints) from Elasticsearch.",
+      "phase_hint": "phase-2-preprocessed-logs"
+    },
+    {
+      "id": "edge-smartxdr-ingest-to-elastic-ml-ready",
+      "from": [
+        "smartxdr-core"
+      ],
+      "to": [
+        "elastic-01"
+      ],
+      "data_type": "ml_ready_logs",
+      "channel_type": "bulk_index",
+      "description": "SmartXDR Ingest Pipeline standardizes fields, removes noise, and writes ML-ready logs into dedicated Elasticsearch indices (e.g., logs-ml-*).",
+      "phase_hint": "phase-2-preprocessed-logs"
+    },
+    {
+      "id": "edge-elastic-ml-ready-to-smartxdr-ml",
+      "from": [
+        "elastic-01"
+      ],
+      "to": [
+        "smartxdr-ml"
+      ],
+      "data_type": "ml_ready_logs",
+      "channel_type": "batch_ml_inference",
+      "description": "SmartXDR ML model consumes ML-ready logs in batches for severity classification, category labeling, and enrichment.",
+      "phase_hint": "phase-3-classification-enrichment"
+    },
+    {
+      "id": "edge-smartxdr-ml-to-elastic-enriched",
+      "from": [
+        "smartxdr-ml"
+      ],
+      "to": [
+        "elastic-01"
+      ],
+      "data_type": "enriched_logs",
+      "channel_type": "bulk_index",
+      "description": "Classification results, risk scores, and enrichment fields from SmartXDR ML are written back to Elasticsearch as enriched log documents.",
+      "phase_hint": "phase-3-classification-enrichment"
+    },
+    {
+      "id": "edge-elastic-enriched-to-elastalert",
+      "from": [
+        "elastic-01"
+      ],
+      "to": [
+        "elastalert-01"
+      ],
+      "data_type": "enriched_logs",
+      "channel_type": "query_polling",
+      "description": "ElastAlert2 periodically queries enriched indices in Elasticsearch using detection and correlation rules to identify suspicious patterns.",
+      "phase_hint": "phase-4-alerting-correlation"
+    },
+    {
+      "id": "edge-elastalert-to-smartxdr-query",
+      "from": [
+        "elastalert-01"
+      ],
+      "to": [
+        "smartxdr-core"
+      ],
+      "data_type": "alert_context",
+      "channel_type": "webhook_or_api",
+      "description": "For selected alerts, ElastAlert2 sends structured alert payloads to SmartXDR Core for deeper log querying, summarization, or AI-assisted investigation.",
+      "phase_hint": "phase-4-alerting-correlation"
+    },
+    {
+      "id": "edge-elastalert-to-email",
+      "from": [
+        "elastalert-01"
+      ],
+      "to": [
+        "email-gateway"
+      ],
+      "data_type": "alert_notification",
+      "channel_type": "smtp",
+      "description": "ElastAlert2 can directly send email notifications for high-priority alerts to SOC distribution lists.",
+      "phase_hint": "phase-4-alerting-correlation"
+    },
+    {
+      "id": "edge-elastalert-to-n8n-webhook",
+      "from": [
+        "elastalert-01"
+      ],
+      "to": [
+        "n8n-01"
+      ],
+      "data_type": "alert_payload",
+      "channel_type": "webhook",
+      "description": "Primary path for advanced SOAR: ElastAlert2 posts alert payloads to n8n webhooks, triggering SmartXDR triage and automation workflows.",
+      "phase_hint": "phase-4-alerting-correlation"
+    },
+    {
+      "id": "edge-n8n-to-iris-case",
+      "from": [
+        "n8n-01"
+      ],
+      "to": [
+        "soar-01"
+      ],
+      "data_type": "case_creation_request",
+      "channel_type": "api_call",
+      "description": "n8n/SmartXDR workflows create or update incidents in DFIR-IRIS based on alert severity, confidence, and playbook logic.",
+      "phase_hint": "phase-5-incident-response"
+    },
+    {
+      "id": "edge-elastalert-to-iris-case",
+      "from": [
+        "elastalert-01"
+      ],
+      "to": [
+        "soar-01"
+      ],
+      "data_type": "alert_case_creation",
+      "channel_type": "http_post_or_email_parser",
+      "description": "Alternative or complementary integration where ElastAlert2 directly opens cases in DFIR-IRIS via API or email parsing.",
+      "phase_hint": "phase-5-incident-response"
+    },
+    {
+      "id": "edge-iris-to-intelowl",
+      "from": [
+        "soar-01"
+      ],
+      "to": [
+        "soar-01"
+      ],
+      "data_type": "ioc_enrichment_requests",
+      "channel_type": "internal_api",
+      "description": "Within the SOAR server, DFIR-IRIS submits IOCs (IPs, domains, hashes, URLs) to IntelOwl for automated enrichment.",
+      "phase_hint": "phase-5-incident-response"
+    },
+    {
+      "id": "edge-iris-to-misp",
+      "from": [
+        "soar-01"
+      ],
+      "to": [
+        "misp-01"
+      ],
+      "data_type": "threat_intel_sync",
+      "channel_type": "api_call",
+      "description": "IRIS/IntelOwl interact with MISP to pull and push threat intel, correlate events with known campaigns, and update IOCs in cases.",
+      "phase_hint": "phase-5-incident-response"
+    },
+    {
+      "id": "edge-iris-to-smartxdr-analysis",
+      "from": [
+        "soar-01"
+      ],
+      "to": [
+        "smartxdr-core"
+      ],
+      "data_type": "case_context",
+      "channel_type": "api_call",
+      "description": "From IRIS cases, SmartXDR can be called to summarize timelines, correlate logs from Elasticsearch, and generate analyst-ready narratives.",
+      "phase_hint": "phase-5-incident-response"
+    },
+    {
+      "id": "edge-smartxdr-assistant-to-analyst",
+      "from": [
+        "smartxdr-assistant"
+      ],
+      "to": [
+        "soc-analyst"
+      ],
+      "data_type": "natural_language_insights",
+      "channel_type": "chat_ui",
+      "description": "SmartXDR Assistant exposes RAG-based explanations, recommendations, and summaries to SOC analysts during investigation.",
+      "phase_hint": "phase-5-incident-response"
+    },
+    {
+      "id": "edge-n8n-to-pfsense-block",
+      "from": [
+        "n8n-01"
+      ],
+      "to": [
+        "pfsense-01"
+      ],
+      "data_type": "response_action_block_ip",
+      "channel_type": "api_or_ssh",
+      "description": "Automation workflows can update pfSense aliases or firewall rules to block malicious IPs derived from alerts or threat intel.",
+      "phase_hint": "phase-6-automated-response"
+    },
+    {
+      "id": "edge-n8n-to-wazuh-response",
+      "from": [
+        "n8n-01"
+      ],
+      "to": [
+        "wazuh-01"
+      ],
+      "data_type": "endpoint_response_commands",
+      "channel_type": "api_call",
+      "description": "n8n/SmartXDR orchestrate response via Wazuh API (e.g., run active responses, quarantine endpoints, push scripts).",
+      "phase_hint": "phase-6-automated-response"
+    },
+    {
+      "id": "edge-n8n-to-suricata-response",
+      "from": [
+        "n8n-01"
+      ],
+      "to": [
+        "suricata-01"
+      ],
+      "data_type": "ids_ips_rule_updates",
+      "channel_type": "ssh_or_api",
+      "description": "Automated workflows can push temporary block rules or modify Suricata rule sets based on new IOCs or attack campaigns.",
+      "phase_hint": "phase-6-automated-response"
+    },
+    {
+      "id": "edge-n8n-to-email",
+      "from": [
+        "n8n-01"
+      ],
+      "to": [
+        "email-gateway"
+      ],
+      "data_type": "notification",
+      "channel_type": "smtp_or_api",
+      "description": "n8n sends enriched notifications, reports, or escalation messages via email to SOC team or management.",
+      "phase_hint": "phase-6-automated-response"
+    },
+    {
+      "id": "edge-n8n-to-telegram",
+      "from": [
+        "n8n-01"
+      ],
+      "to": [
+        "telegram-bot"
+      ],
+      "data_type": "chatops_notification",
+      "channel_type": "bot_api",
+      "description": "n8n triggers chat-based notifications and interactive ChatOps flows using Telegram or similar messaging bots.",
+      "phase_hint": "phase-6-automated-response"
+    },
+    {
+      "id": "edge-smartxdr-assistant-feedback-loop",
+      "from": [
+        "soc-analyst"
+      ],
+      "to": [
+        "smartxdr-assistant"
+      ],
+      "data_type": "analyst_feedback",
+      "channel_type": "chat_ui",
+      "description": "Analyst feedback, tagging, and corrections are sent back to SmartXDR Assistant and SmartXDR Core, enabling continuous improvement of RAG answers and playbooks.",
+      "phase_hint": "phase-6-automated-response"
+    }
+  ],
+  "routing_pipelines": {
+    "ingress_flow": [
+      "ext-attacker-01",
+      "nat-gateway-01",
+      "pfsense-01",
+      "suricata-01",
+      "zeek-01",
+      "waf-01",
+      "dvwa-01",
+      "elastic-01",
+      "elastalert-01",
+      "n8n-01",
+      "soar-01",
+      "misp-01",
+      "smartxdr-assistant",
+      "soc-analyst"
+    ],
+    "east_west_flow": [
+      "int-attacker-01",
+      "pfsense-01",
+      "suricata-01",
+      "zeek-01",
+      "win-srv-01",
+      "elastic-01",
+      "soar-01"
+    ],
+    "endpoint_flow": [
+      "guest-devices",
+      "win-srv-01",
+      "wazuh-01",
+      "elastic-01",
+      "soar-01",
+      "smartxdr-assistant"
+    ]
+  }
+}

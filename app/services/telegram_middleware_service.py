@@ -559,6 +559,7 @@ class TelegramMiddlewareService:
                 "• <code>/summary</code> - Last 7 days, all indices\n"
                 "• <code>/summary --time 24h</code> - Last 24 hours\n"
                 "• <code>/summary --time 3d</code> - Last 3 days\n"
+                "• <code>/summary --time 7d --ai</code> - Include AI analysis\n"
                 "• <code>/summary --time 7d --index suricata,zeek</code> - Custom filter\n\n"
                 "<b>Tips:</b>\n"
                 "• Be specific in your questions\n"
@@ -586,10 +587,11 @@ class TelegramMiddlewareService:
             )
         
         elif command == "/summary":
-            # Parse command arguments: /summary --time 7d --index suricata,zeek
+            # Parse command arguments: /summary --time 7d --index suricata,zeek --ai
             args = text.split()[1:]  # Skip /summary
             time_arg = None
             index_arg = None
+            include_ai = False
             
             i = 0
             while i < len(args):
@@ -599,13 +601,16 @@ class TelegramMiddlewareService:
                 elif args[i] == "--index" and i + 1 < len(args):
                     index_arg = args[i + 1]
                     i += 2
+                elif args[i] == "--ai":
+                    include_ai = True
+                    i += 1
                 else:
                     i += 1
             
             # Handle alert summarization (async via threading)
             threading.Thread(
                 target=self._handle_alert_summary,
-                args=(chat_id, message_id, time_arg, index_arg),
+                args=(chat_id, message_id, time_arg, index_arg, include_ai),
                 daemon=True
             ).start()
         
@@ -742,7 +747,7 @@ class TelegramMiddlewareService:
             self._stats["errors"] += 1
             logger.error(f"Unexpected error: {e}")
     
-    def _handle_alert_summary(self, chat_id: int, message_id: int, time_arg: str = None, index_arg: str = None) -> None:
+    def _handle_alert_summary(self, chat_id: int, message_id: int, time_arg: str = None, index_arg: str = None, include_ai: bool = False) -> None:
         """
         Handle /summary command - fetch and summarize ML-classified alerts
         Runs asynchronously in background thread
@@ -752,6 +757,7 @@ class TelegramMiddlewareService:
             message_id: Message ID to reply to
             time_arg: Time window (e.g., "7d", "24h", "60m")
             index_arg: Comma-separated index patterns (e.g., "suricata,zeek")
+            include_ai: Include AI analysis (default: False)
         """
         try:
             # Send typing indicator
@@ -782,12 +788,14 @@ class TelegramMiddlewareService:
             # Show processing message
             time_display = f"{time_window_minutes // 1440}d" if time_window_minutes >= 1440 else f"{time_window_minutes // 60}h" if time_window_minutes >= 60 else f"{time_window_minutes}m"
             index_display = index_arg if index_arg else "all indices"
+            ai_indicator = "🤖 AI Analysis Enabled" if include_ai else ""
             
             processing_msg = self.send_message(
                 chat_id,
                 f"⏳ <b>Processing Alert Summary...</b>\n\n"
                 f"Time: {time_display}\n"
-                f"Indices: {index_display}\n\n"
+                f"Indices: {index_display}\n"
+                f"{ai_indicator}\n\n" if ai_indicator else "\n"
                 "Querying Elasticsearch for ML-classified alerts...",
                 reply_to_message_id=message_id
             )
@@ -796,8 +804,11 @@ class TelegramMiddlewareService:
             # Use parsed time or ALERT_TIME_WINDOW from config (supports 7d/14d/28d format)
             response = self._session.post(
                 f"{self.smartxdr_api_url}/api/triage/summarize-alerts",
-                json={"time_window_minutes": time_window_minutes},
-                timeout=30
+                json={
+                    "time_window_minutes": time_window_minutes,
+                    "include_ai_analysis": include_ai
+                },
+                timeout=60 if include_ai else 30  # Longer timeout for AI analysis
             )
             
             result = response.json()
@@ -865,8 +876,16 @@ class TelegramMiddlewareService:
                         f"   • Probability: {group['avg_probability']}\n"
                     )
             
-            # Send as inline text (since Telegram card formatting is complex)
+            # Send main summary
             self.send_message(chat_id, summary_text, reply_to_message_id=message_id)
+            
+            # Send AI analysis if available
+            if include_ai and 'ai_analysis' in result and result['ai_analysis']:
+                ai_text = (
+                    f"🤖 <b>AI Analysis & Recommendations</b>\n\n"
+                    f"{self._format_response(result['ai_analysis'])}"
+                )
+                self.send_message(chat_id, ai_text, reply_to_message_id=message_id)
             
             # Send visualization if available
             if 'visualization' in result and result['visualization']:

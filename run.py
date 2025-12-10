@@ -47,11 +47,11 @@ def start_tunnel(port):
     
     cloudflared = find_cloudflared()
     if not cloudflared:
-        print("  ⚠️  cloudflared not found - Telegram webhook disabled")
+        print("cloudflared not found - Telegram webhook disabled")
         print("     Install: winget install --id Cloudflare.cloudflared")
         return None
     
-    print(f"  🚀 Starting Cloudflare Tunnel...")
+    print(f"  Starting Cloudflare Tunnel...")
     
     _tunnel_process = subprocess.Popen(
         [cloudflared, "tunnel", "--url", f"http://localhost:{port}"],
@@ -78,13 +78,13 @@ def start_tunnel(port):
             _tunnel_url = match.group(1)
             # Validate URL doesn't have consecutive hyphens or hyphen at weird places
             if '--' not in _tunnel_url and not _tunnel_url.startswith('https://-'):
-                print(f"  ✅ Tunnel URL: {_tunnel_url}")
+                print(f"  Tunnel URL: {_tunnel_url}")
                 return _tunnel_url
             else:
-                print(f"  ⚠️  Invalid tunnel URL detected, retrying...")
+                print(f"  Invalid tunnel URL detected, retrying...")
                 continue
     
-    print("  ❌ Failed to get tunnel URL")
+    print("  Failed to get tunnel URL")
     return None
 
 
@@ -92,11 +92,11 @@ def set_telegram_webhook(tunnel_url):
     """Set Telegram webhook with tunnel URL"""
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
     if not bot_token:
-        print("  ⚠️  TELEGRAM_BOT_TOKEN not set - webhook skipped")
+        print("  TELEGRAM_BOT_TOKEN not set - webhook skipped")
         return False
     
     webhook_url = f"{tunnel_url}/api/telegram/webhook"
-    print(f"  📡 Setting webhook: {webhook_url}")
+    print(f"  Setting webhook: {webhook_url}")
     
     # Wait for DNS propagation
     time.sleep(5)
@@ -114,13 +114,13 @@ def set_telegram_webhook(tunnel_url):
         result = response.json()
         
         if result.get("ok"):
-            print("  ✅ Telegram webhook active!")
+            print("  Telegram webhook active!")
             return True
         else:
-            print(f"  ❌ Webhook failed: {result.get('description')}")
+            print(f"  Webhook failed: {result.get('description')}")
             return False
     except Exception as e:
-        print(f"  ❌ Webhook error: {e}")
+        print(f"  Webhook error: {e}")
         return False
 
 
@@ -128,7 +128,7 @@ def cleanup_tunnel():
     """Cleanup tunnel on exit"""
     global _tunnel_process
     if _tunnel_process:
-        print("\n🛑 Stopping Cloudflare Tunnel...")
+        print("\nStopping Cloudflare Tunnel...")
         _tunnel_process.terminate()
         _tunnel_process = None
         
@@ -141,7 +141,7 @@ def cleanup_tunnel():
                     json={"drop_pending_updates": True},
                     timeout=5
                 )
-                print("  ✅ Webhook removed")
+                print("  Webhook removed")
             except:
                 pass
 
@@ -153,6 +153,17 @@ signal.signal(signal.SIGTERM, lambda s, f: sys.exit(0))
 
 # Create Flask app (this initializes the collection)
 app = create_app()
+
+# Initialize and start daily report scheduler
+from app.services.daily_report_scheduler import get_daily_report_scheduler
+
+scheduler = get_daily_report_scheduler()
+if scheduler.enabled:
+    scheduler.start()
+    atexit.register(scheduler.stop)
+    print(f"Daily report scheduler started (sends at {os.getenv('DAILY_REPORT_TIME', '07:00')})")
+else:
+    print("Daily report scheduler disabled (check email configuration in .env)")
 
 if __name__ == '__main__':
     # Check API key
@@ -188,6 +199,11 @@ if __name__ == '__main__':
     print("    - POST /api/enrich/explain_intelowl - Explain IntelOwl results with AI (single IOC)")
     print("    - POST /api/enrich/explain_case_iocs - Analyze all IOCs in a case with AI")
     print("    - GET /api/enrich/case_ioc_comments - Get SmartXDR comments for case IOCs")
+    print("\n  Triage & Alerts:")
+    print("    - POST /api/triage/summarize-alerts - Summarize ML-classified alerts (supports include_ai_analysis=true)")
+    print("    - POST /api/triage/send-report-email - Send alert summary via email")
+    print("    - POST /api/triage/daily-report/trigger - Manually trigger daily report")
+    print("    - GET  /api/triage/health - Check triage service health")
     print("\n  Telegram:")
     print("    - POST /api/telegram/webhook - Telegram webhook (auto-configured)")
     print("\n  Health:")
@@ -195,12 +211,12 @@ if __name__ == '__main__':
     print("="*80)
     
     # Start Cloudflare Tunnel for Telegram webhook
-    print("\n🔗 Telegram Integration:")
+    print("\nTelegram Integration:")
     bot_enabled = os.getenv("TELEGRAM_BOT_ENABLED", "true").lower() == "true"
     use_tunnel = os.getenv("TELEGRAM_WEBHOOK_ENABLED", "true").lower() == "true"
     
     if not bot_enabled:
-        print("  ⏸️  Telegram bot DISABLED (set TELEGRAM_BOT_ENABLED=true to enable)")
+        print("  Telegram bot DISABLED (set TELEGRAM_BOT_ENABLED=true to enable)")
     elif bot_enabled and os.getenv("TELEGRAM_BOT_TOKEN") and use_tunnel:
         def setup_tunnel_async():
             time.sleep(2)  # Wait for Flask to start
@@ -210,12 +226,12 @@ if __name__ == '__main__':
         
         tunnel_thread = threading.Thread(target=setup_tunnel_async, daemon=True)
         tunnel_thread.start()
-        print("  ⏳ Tunnel starting in background...")
+        print("  Tunnel starting in background...")
     else:
         if not os.getenv("TELEGRAM_BOT_TOKEN"):
-            print("  ⚠️  TELEGRAM_BOT_TOKEN not set - Telegram disabled")
+            print("  TELEGRAM_BOT_TOKEN not set - Telegram disabled")
         else:
-            print("  ⚠️  Webhook disabled (set TELEGRAM_WEBHOOK_ENABLED=true to enable)")
+            print("  Webhook disabled (set TELEGRAM_WEBHOOK_ENABLED=true to enable)")
     
     print("="*80 + "\n")
     

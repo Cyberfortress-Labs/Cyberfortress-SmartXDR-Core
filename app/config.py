@@ -78,15 +78,25 @@ def _parse_time_window(value_str: str) -> int:
 
 ALERT_TIME_WINDOW = _parse_time_window(os.environ.get('ALERT_TIME_WINDOW', '7d'))
 
-# Risk Score Formula: risk_score = (alert_count * COUNT_WEIGHT) + (avg_probability * PROBABILITY_WEIGHT) + (severity_level * SEVERITY_WEIGHT) + (escalation_level * ESCALATION_WEIGHT)
-# Where severity_level: INFO=1, WARNING=2, ERROR=3
-# And escalation_level: 0=none, 1=single pattern, 2=sequence (scan→brute-force→lateral movement)
-RISK_SCORE_COUNT_WEIGHT = 0.3  # Weight for alert count
-RISK_SCORE_PROBABILITY_WEIGHT = 0.35  # Weight for ML prediction probability
-RISK_SCORE_SEVERITY_WEIGHT = 0.25  # Weight for severity level
-RISK_SCORE_ESCALATION_WEIGHT = 0.1  # Weight for attack pattern escalation
+# Risk Score Formula (Optimized - Nov 2024):
+# base_score = 0.5 (always starts here)
+# volume_score = log10(total_alerts + 1) * 15  (logarithmic scaling)
+# severity_score = (ERROR% * 30) + (WARNING% * 15) + (INFO% * 5)
+# confidence_score = avg_ML_probability * 25
+# escalation_score = escalation_level * 15  (0=none, 1=single, 2=sequence)
+# Final: min(base + volume + severity + confidence + escalation, 100)
+#
+# This prevents easy 100 scores from high WARNING counts
+# Examples:
+#   100 INFO (70% conf) → ~20 score
+#   100 WARNING (90% conf) → ~50 score  
+#   50 ERROR (95% conf) + escalation → ~85 score
+RISK_SCORE_COUNT_WEIGHT = 0.3  # [DEPRECATED] Kept for backward compatibility
+RISK_SCORE_PROBABILITY_WEIGHT = 0.35  # [DEPRECATED]
+RISK_SCORE_SEVERITY_WEIGHT = 0.25  # [DEPRECATED]
+RISK_SCORE_ESCALATION_WEIGHT = 0.1  # [DEPRECATED]
 
 # Elasticsearch settings for alert summarization
-ALERT_MIN_PROBABILITY = 0.7  # Minimum ML prediction probability threshold
-ALERT_MIN_SEVERITY = "WARNING"  # Minimum severity level (INFO, WARNING, ERROR)
+ALERT_MIN_PROBABILITY = 0.5  # Minimum ML prediction probability threshold (lowered to include INFO alerts)
+ALERT_MIN_SEVERITY = "INFO"  # Minimum severity level (INFO, WARNING, ERROR)
 ALERT_SOURCE_TYPES = ["suricata", "zeek", "pfsense", "modsecurity", "apache", "nginx", "mysql", "windows", "wazuh"]

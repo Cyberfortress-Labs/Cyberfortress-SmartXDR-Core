@@ -27,12 +27,13 @@ alert_summarization_service = get_alert_summarization_service()
 @require_api_key('triage:summary')
 def summarize_ml_alerts():
     """
-    Summarize ML-classified alerts from Elasticsearch with risk scoring
+    Summarize ML-classified alerts from Elasticsearch with risk scoring and AI analysis
     
     Request Body (POST):
         {
             "time_window_minutes": 10,  # Optional, uses config default if not provided
-            "source_ip": "192.168.1.1"  # Optional, filter by source IP
+            "source_ip": "192.168.1.1",  # Optional, filter by source IP
+            "include_ai_analysis": true  # Optional, include AI recommendations (default: false)
         }
     
     Response:
@@ -41,19 +42,9 @@ def summarize_ml_alerts():
             "status": "completed",
             "count": 25,
             "time_window_minutes": 10,
-            "grouped_alerts": [
-                {
-                    "group_key": "192.168.1.1_reconnaissance_WARNING",
-                    "source_ip": "192.168.1.1",
-                    "pattern": "reconnaissance",
-                    "severity": "WARNING",
-                    "alert_count": 5,
-                    "avg_probability": 0.92,
-                    "agents": ["suricata", "zeek"],
-                    "sample_alerts": [...]
-                }
-            ],
-            "summary": "Detailed summary with risk assessment and MITRE tags...",
+            "grouped_alerts": [...],
+            "summary": "Detailed summary with risk assessment...",
+            "ai_analysis": "AI-generated recommendations...",  # If requested
             "risk_score": 65.5,
             "timestamp": "2024-..."
         }
@@ -63,12 +54,21 @@ def summarize_ml_alerts():
         data = request.get_json() or {}
         time_window_minutes = data.get('time_window_minutes')
         source_ip = data.get('source_ip')
+        include_ai = data.get('include_ai_analysis', False)
         
         # Call alert summarization service
         result = alert_summarization_service.summarize_alerts(
             time_window_minutes=time_window_minutes,
             source_ip=source_ip
         )
+        
+        # Add AI analysis if requested and successful
+        if include_ai and result.get('success'):
+            ai_analysis = alert_summarization_service.get_ai_analysis(
+                grouped_alerts=result.get('grouped_alerts', []),
+                risk_score=result.get('risk_score', 0)
+            )
+            result['ai_analysis'] = ai_analysis
         
         # Return appropriate status code
         status_code = 200 if result.get('success') else 400
@@ -402,6 +402,143 @@ def get_ml_predictions():
         }), 500
 
 
+@triage_bp.route('/send-report-email', methods=['POST'])
+@require_api_key('triage:summary')
+def send_report_email():
+    """
+    Send alert summary report via email
+    
+    Request Body:
+        {
+            "to_email": "analyst@example.com",  # Optional, uses FROM_EMAIL from .env if not provided
+            "time_window_minutes": 10080,  # Optional, default from config
+            "source_ip": "192.168.1.1",  # Optional
+            "include_ai_analysis": true  # Optional, default: true
+        }
+    
+    Response:
+        {
+            "success": true,
+            "message": "Email sent successfully",
+            "sent_to": "analyst@example.com",
+            "timestamp": "2024-..."
+        }
+    """
+    try:
+        from app.services.email_service import get_email_service
+        
+        email_service = get_email_service()
+        
+        if not email_service.enabled:
+            return jsonify({
+                'success': False,
+                'error': 'Email service not configured (check .env)'
+            }), 503
+        
+        # Get parameters
+        data = request.get_json() or {}
+        to_email = data.get('to_email') or email_service.to_emails  # Use TO_EMAILS from .env
+        time_window_minutes = data.get('time_window_minutes')
+        source_ip = data.get('source_ip')
+        include_ai = data.get('include_ai_analysis', True)
+        
+        # Get alert summary
+        summary_data = alert_summarization_service.summarize_alerts(
+            time_window_minutes=time_window_minutes,
+            source_ip=source_ip
+        )
+        
+        if not summary_data.get('success'):
+            return jsonify({
+                'success': False,
+                'error': f"Failed to generate summary: {summary_data.get('error', 'Unknown')}"
+            }), 500
+        
+        # Add AI analysis if requested
+        if include_ai:
+            ai_analysis = alert_summarization_service.get_ai_analysis(
+                grouped_alerts=summary_data.get('grouped_alerts', []),
+                risk_score=summary_data.get('risk_score', 0)
+            )
+            summary_data['ai_analysis'] = ai_analysis
+        
+        # Send email
+        success = email_service.send_alert_summary_email(
+            to_email=to_email,
+            summary_data=summary_data
+        )
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'Email sent successfully',
+                'sent_to': to_email,
+                'timestamp': summary_data.get('timestamp')
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to send email'
+            }), 500
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@triage_bp.route('/daily-report/trigger', methods=['POST'])
+@require_api_key('triage:admin')
+def trigger_daily_report():
+    """
+    Manually trigger daily report email (for testing)
+    
+    Request Body:
+        {
+            "to_email": "analyst@example.com"  # Optional
+        }
+    
+    Response:
+        {
+            "success": true,
+            "message": "Report sent successfully"
+        }
+    """
+    try:
+        from app.services.daily_report_scheduler import get_daily_report_scheduler
+        
+        scheduler = get_daily_report_scheduler()
+        
+        if not scheduler.enabled:
+            return jsonify({
+                'success': False,
+                'error': 'Daily report scheduler not configured'
+            }), 503
+        
+        data = request.get_json() or {}
+        to_email = data.get('to_email')
+        
+        success = scheduler.send_report_now(recipient_email=to_email)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'Report sent successfully'
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to send report'
+            }), 500
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @triage_bp.route('/health', methods=['GET'])
 def triage_health():
     """
@@ -412,16 +549,29 @@ def triage_health():
             "status": "healthy",
             "services": {
                 "elasticsearch": true/false,
-                "llm_service": true/false
+                "llm_service": true/false,
+                "email_service": true/false,
+                "daily_report": true/false
             }
         }
     """
     try:
+        from app.services.email_service import get_email_service
+        from app.services.daily_report_scheduler import get_daily_report_scheduler
+        
         # Check Elasticsearch connection
         es_health = es_service.health_check() if hasattr(es_service, 'health_check') else True
         
         # LLM Service is always available (singleton)
         llm_health = True
+        
+        # Check email service
+        email_service = get_email_service()
+        email_health = email_service.enabled
+        
+        # Check daily report scheduler
+        scheduler = get_daily_report_scheduler()
+        scheduler_health = scheduler.enabled and scheduler.running
         
         all_healthy = es_health and llm_health
         
@@ -429,7 +579,9 @@ def triage_health():
             'status': 'healthy' if all_healthy else 'degraded',
             'services': {
                 'elasticsearch': es_health,
-                'llm_service': llm_health
+                'llm_service': llm_health,
+                'email_service': email_health,
+                'daily_report': scheduler_health
             }
         }), 200 if all_healthy else 503
         
