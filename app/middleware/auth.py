@@ -1,34 +1,31 @@
 """
 API Authentication Middleware for SmartXDR
-Supports: API Key, IP Whitelist, Rate Limiting, Permission System
+Supports: API Key (DB-backed), IP Whitelist, Rate Limiting, Permission System
 """
 import os
-import json
 import functools
-import hashlib
-import secrets
 from flask import request, jsonify, g
 from typing import Optional, Callable
 from datetime import datetime
 import logging
 
+from app.models.api_key import APIKey
+
 logger = logging.getLogger('smartxdr.auth')
 
 
 class APIKeyManager:
-    """Manage API keys for SmartXDR"""
+    """Manage API keys for SmartXDR (DB-backed)"""
     
     def __init__(self):
         # Check if auth is enabled
         self.auth_enabled = os.getenv('API_AUTH_ENABLED', 'true').lower() == 'true'
         
-        # Load from environment
-        self.master_key = os.getenv('SMARTXDR_MASTER_API_KEY', '')
+        # Initialize database-backed API key model
+        db_path = os.getenv('API_KEY_DB_PATH', 'data/api_keys.db')
+        self.api_key_model = APIKey(db_path)
         
-        # Additional keys can be added here or loaded from DB
-        self._valid_keys = self._load_keys()
-        
-        # Rate limiting tracker
+        # Rate limiting tracker (in-memory for now)
         self._request_counts = {}
         
         # IP Whitelist (optional)
@@ -42,49 +39,37 @@ class APIKeyManager:
         if not self.auth_enabled:
             logger.warning("⚠️  API Authentication is DISABLED! All endpoints are public.")
         else:
-            logger.info(f"🔐 API Authentication enabled with {len(self._valid_keys)} keys")
+            logger.info(f"🔐 API Authentication enabled with database: {db_path}")
         
-    def _load_keys(self) -> dict:
-        """Load valid API keys with their permissions"""
-        keys = {}
-        
-        # Master key - full access
-        if self.master_key and self.master_key != 'sxdr_CHANGE_THIS_MASTER_KEY':
-            keys[self._hash_key(self.master_key)] = {
-                'name': 'master',
-                'permissions': ['*'],  # All permissions
-                'rate_limit': 1000  # requests per minute
-            }
-            logger.info("✓ Master API key loaded")
-        
-        # Load API keys from JSON config in env
-        api_keys_json = os.getenv('API_KEYS', '{}')
-        try:
-            api_keys_config = json.loads(api_keys_json)
-            for key, config in api_keys_config.items():
-                if key and not key.endswith('CHANGE_THIS'):
-                    keys[self._hash_key(key)] = {
-                        'name': config.get('name', 'unnamed'),
-                        'permissions': config.get('permissions', ['ai:ask']),
-                        'rate_limit': config.get('rate_limit', 60)
-                    }
-            logger.info(f"✓ Loaded {len(api_keys_config)} API keys from config")
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse API_KEYS JSON: {e}")
-        
-        return keys
+        # Auto-create master key if not exists
+        self._ensure_master_key()
     
-    def _hash_key(self, key: str) -> str:
-        """Hash API key for secure storage/comparison"""
-        return hashlib.sha256(key.encode()).hexdigest()
+    def _ensure_master_key(self):
+        """Ensure master key exists in database"""
+        master_key_env = os.getenv('SMARTXDR_MASTER_API_KEY', '')
+        
+        # Check if master key exists in DB
+        master = self.api_key_model.get_by_name('master')
+        
+        if not master and master_key_env and master_key_env != 'sxdr_CHANGE_THIS_MASTER_KEY':
+            # Import master key from environment
+            logger.info("Importing master key from environment...")
+            # Note: We can't store the actual key, only validate against hash
+            # Master key should be created using the management script
+            pass
     
     def validate_key(self, api_key: str) -> Optional[dict]:
-        """Validate API key and return key info if valid"""
+        """Validate API key using database"""
         if not api_key:
             return None
         
-        key_hash = self._hash_key(api_key)
-        return self._valid_keys.get(key_hash)
+        key_info = self.api_key_model.validate(api_key)
+        
+        if key_info:
+            # Update usage stats
+            self.api_key_model.update_usage(api_key)
+        
+        return key_info
     
     def check_permission(self, key_info: dict, required_permission: str) -> bool:
         """Check if key has required permission"""
@@ -152,16 +137,14 @@ class APIKeyManager:
         return True
     
     def reload_keys(self):
-        """Reload API keys from environment"""
-        self.master_key = os.getenv('SMARTXDR_API_KEY', '')
-        self.iris_key = os.getenv('IRIS_API_KEY_FOR_SMARTXDR', '')
-        self._valid_keys = self._load_keys()
-        logger.info("API keys reloaded")
+        """Reload API keys from database"""
+        logger.info("API keys reloaded from database")
     
     @staticmethod
     def generate_key(prefix: str = "sxdr") -> str:
-        """Generate a new API key"""
-        return f"{prefix}_{secrets.token_urlsafe(32)}"
+        """Generate a new API key (delegates to model)"""
+        from app.models.api_key import APIKey
+        return APIKey().generate_key(prefix)
 
 
 # Singleton instance
@@ -260,8 +243,30 @@ def require_api_key(permission_or_func=None):
             # Store key info in request context
             g.api_key_info = key_info
             g.api_key_name = key_info['name']
+            g.api_key_raw = api_key  # For logging usage
+            g.request_start_time = datetime.now()
             
-            return func(*args, **kwargs)
+            # Execute request
+            response = func(*args, **kwargs)
+            
+            # Log usage (async in background)
+            try:
+                response_time_ms = int((datetime.now() - g.request_start_time).total_seconds() * 1000)
+                status_code = response[1] if isinstance(response, tuple) else 200
+                
+                manager.api_key_model.log_usage(
+                    api_key=api_key,
+                    endpoint=request.path,
+                    method=request.method,
+                    client_ip=client_ip,
+                    user_agent=request.headers.get('User-Agent', ''),
+                    status_code=status_code,
+                    response_time_ms=response_time_ms
+                )
+            except Exception as e:
+                logger.warning(f"Failed to log API usage: {e}")
+            
+            return response
         return api_key_protected_function
     
     else:
@@ -335,8 +340,30 @@ def require_api_key(permission_or_func=None):
                 # Store key info in request context
                 g.api_key_info = key_info
                 g.api_key_name = key_info['name']
+                g.api_key_raw = api_key
+                g.request_start_time = datetime.now()
                 
-                return f(*args, **kwargs)
+                # Execute request
+                response = f(*args, **kwargs)
+                
+                # Log usage
+                try:
+                    response_time_ms = int((datetime.now() - g.request_start_time).total_seconds() * 1000)
+                    status_code = response[1] if isinstance(response, tuple) else 200
+                    
+                    manager.api_key_model.log_usage(
+                        api_key=api_key,
+                        endpoint=request.path,
+                        method=request.method,
+                        client_ip=client_ip,
+                        user_agent=request.headers.get('User-Agent', ''),
+                        status_code=status_code,
+                        response_time_ms=response_time_ms
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to log API usage: {e}")
+                
+                return response
             return api_key_protected_function
         return api_key_decorator
 

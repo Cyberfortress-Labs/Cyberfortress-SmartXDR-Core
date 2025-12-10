@@ -1171,7 +1171,7 @@ class TelegramMiddlewareService:
                 stats_text += f"  {emoji} {severity}: {count}\n"
             
             # Add preview of logs data (truncated version for display)
-            stats_text += f"\n<b>Preview:</b>\n<pre>{logs_context_ai[:500]}...</pre>"
+            # stats_text += f"\n<b>Preview:</b>\n<pre>{logs_context_ai[:500]}...</pre>"
             
             self.send_message(chat_id, stats_text, reply_to_message_id=message_id)
             
