@@ -1,0 +1,96 @@
+version: '3.8'
+
+# Production Docker Compose - Uses pre-built images from DockerHub
+# Usage: docker compose -f docker-compose.prod.yml up -d
+
+services:
+  # Nginx - Reverse Proxy (HTTPS)
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: smartxdr-nginx
+    ports:
+      - "8443:8443"
+      - "8080:8080"  # HTTP redirects to HTTPS
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./certs:/etc/nginx/certs:ro
+      - nginx-logs:/var/log/nginx
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - smartxdr-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # SmartXDR API Service - Pull from DockerHub
+  api:
+    image: wanthinnn/smartxdr-core:latest
+    container_name: smartxdr-core
+    pull_policy: always  # Always pull latest image
+    environment:
+      - FLASK_ENV=production
+      - DEBUG=false
+      - API_AUTH_ENABLED=true
+      - TELEGRAM_BOT_ENABLED=${TELEGRAM_BOT_ENABLED:-true}
+      - ELASTICSEARCH_ENABLED=${ELASTICSEARCH_ENABLED:-true}
+    env_file:
+      - .env
+    volumes:
+      # Persistent data
+      - api-data:/app/data
+      - chroma-db:/app/chroma_db
+      - api-logs:/app/logs
+      # Read-only configs
+      - ./certs:/app/certs:ro
+      - ./prompts:/app/prompts:ro
+      - ./assets:/app/assets:ro
+      - ./sources_config:/app/sources_config:ro
+    networks:
+      - smartxdr-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+
+networks:
+  smartxdr-net:
+    driver: bridge
+    name: smartxdr-network
+
+volumes:
+  # API data (API keys database, cache)
+  api-data:
+    driver: local
+    name: smartxdr-core-data
+  
+  # Vector embeddings database
+  chroma-db:
+    driver: local
+    name: smartxdr-chroma-db
+  
+  # Application logs
+  api-logs:
+    driver: local
+    name: smartxdr-core-logs
+  
+  # Nginx logs
+  nginx-logs:
+    driver: local
+    name: smartxdr-nginx-logs
