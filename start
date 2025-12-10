@@ -85,10 +85,9 @@ case "$COMMAND" in
         docker compose -f "$COMPOSE_FILE" exec api /bin/bash
         ;;
     
-    api-key)
-        shift
-        echo -e "${BLUE}Managing API keys...${NC}"
-        docker compose -f "$COMPOSE_FILE" exec api python scripts/manage_api_keys.py "$@"
+    admin-init)
+        echo -e "${BLUE}Initializing admin database (Flask-Security)...${NC}"
+        docker compose -f "$COMPOSE_FILE" exec api python scripts/init_admin_db.py
         ;;
     
     clean)
@@ -141,7 +140,7 @@ case "$COMMAND" in
         echo "  ${GREEN}logs${NC}        - View service logs"
         echo "  ${GREEN}status${NC}      - Show service status"
         echo "  ${GREEN}shell${NC}       - Open shell in API container"
-        echo "  ${GREEN}api-key${NC}     - Manage API keys (./start api-key create --name ...)"
+        echo "  ${GREEN}admin-init${NC}  - Initialize admin database (Flask-Security + Flask-Admin)"
         echo "  ${GREEN}clean${NC}       - Remove all containers and volumes"
         echo "  ${GREEN}rebuild${NC}     - Rebuild from scratch"
         echo "  ${GREEN}pull${NC}        - Pull latest images from registry"
@@ -159,12 +158,13 @@ case "$COMMAND" in
         echo "  ${YELLOW}./start --prod start${NC}"
         echo ""
         echo "  ${YELLOW}# Management${NC}"
-        echo "  ${YELLOW}./start api-key create --name \"master\" --permissions \"*\"${NC}"
+        echo "  ${YELLOW}./start admin-init${NC}  ${YELLOW}# First time - create admin user and database${NC}"
         echo "  ${YELLOW}./start logs${NC}"
         echo ""
         echo "Access URLs:"
         echo "  HTTPS: ${BLUE}https://localhost:8443${NC}"
         echo "  HTTP:  ${BLUE}http://localhost:8080${NC} ${YELLOW}(redirects to HTTPS)${NC}"
+        echo "  Admin Panel: ${BLUE}https://localhost:8443/admin${NC} ${YELLOW}(admin@cyberfortress.local / admin123)${NC}"
         ;;
 esac
 

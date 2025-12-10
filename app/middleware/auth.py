@@ -4,26 +4,24 @@ Supports: API Key (DB-backed), IP Whitelist, Rate Limiting, Permission System
 """
 import os
 import functools
+import json
 from flask import request, jsonify, g
 from typing import Optional, Callable
 from datetime import datetime
 import logging
 
-from app.models.api_key import APIKey
+from app.models.db_models import db, APIKeyModel
+from app.utils.cryptography import verify_api_key
 
 logger = logging.getLogger('smartxdr.auth')
 
 
 class APIKeyManager:
-    """Manage API keys for SmartXDR (DB-backed)"""
+    """Manage API keys for SmartXDR (SQLAlchemy-backed)"""
     
     def __init__(self):
         # Check if auth is enabled
         self.auth_enabled = os.getenv('API_AUTH_ENABLED', 'true').lower() == 'true'
-        
-        # Initialize database-backed API key model
-        db_path = os.getenv('API_KEY_DB_PATH', 'data/api_keys.db')
-        self.api_key_model = APIKey(db_path)
         
         # Rate limiting tracker (in-memory for now)
         self._request_counts = {}
@@ -39,37 +37,42 @@ class APIKeyManager:
         if not self.auth_enabled:
             logger.warning("⚠️  API Authentication is DISABLED! All endpoints are public.")
         else:
-            logger.info(f"🔐 API Authentication enabled with database: {db_path}")
-        
-        # Auto-create master key if not exists
-        self._ensure_master_key()
-    
-    def _ensure_master_key(self):
-        """Ensure master key exists in database"""
-        master_key_env = os.getenv('SMARTXDR_MASTER_API_KEY', '')
-        
-        # Check if master key exists in DB
-        master = self.api_key_model.get_by_name('master')
-        
-        if not master and master_key_env and master_key_env != 'sxdr_CHANGE_THIS_MASTER_KEY':
-            # Import master key from environment
-            logger.info("Importing master key from environment...")
-            # Note: We can't store the actual key, only validate against hash
-            # Master key should be created using the management script
-            pass
+            logger.info("🔐 API Authentication enabled (SQLAlchemy)")
     
     def validate_key(self, api_key: str) -> Optional[dict]:
-        """Validate API key using database"""
+        """Validate API key using SQLAlchemy"""
         if not api_key:
             return None
         
-        key_info = self.api_key_model.validate(api_key)
+        # Get all active keys
+        active_keys = APIKeyModel.query.filter_by(enabled=True).all()
         
-        if key_info:
-            # Update usage stats
-            self.api_key_model.update_usage(api_key)
+        # Verify against each hash
+        for key_model in active_keys:
+            if verify_api_key(api_key, key_model.key_hash):
+                # Check expiration
+                if key_model.is_expired:
+                    logger.warning(f"API key expired: {key_model.name}")
+                    return None
+                
+                # Update usage stats
+                key_model.last_used_at = datetime.utcnow()
+                key_model.usage_count += 1
+                db.session.commit()
+                
+                # Parse permissions
+                permissions = json.loads(key_model.permissions)
+                
+                return {
+                    'id': key_model.id,
+                    'name': key_model.name,
+                    'description': key_model.description,
+                    'permissions': permissions,
+                    'rate_limit': key_model.rate_limit,
+                    'enabled': key_model.enabled
+                }
         
-        return key_info
+        return None
     
     def check_permission(self, key_info: dict, required_permission: str) -> bool:
         """Check if key has required permission"""
@@ -249,20 +252,27 @@ def require_api_key(permission_or_func=None):
             # Execute request
             response = func(*args, **kwargs)
             
-            # Log usage (async in background)
+            # Log usage to database
             try:
+                from app.models.db_models import APIKeyUsage
+                
                 response_time_ms = int((datetime.now() - g.request_start_time).total_seconds() * 1000)
                 status_code = response[1] if isinstance(response, tuple) else 200
                 
-                manager.api_key_model.log_usage(
-                    api_key=api_key,
-                    endpoint=request.path,
-                    method=request.method,
-                    client_ip=client_ip,
-                    user_agent=request.headers.get('User-Agent', ''),
-                    status_code=status_code,
-                    response_time_ms=response_time_ms
-                )
+                # Find key by hash
+                key_model = APIKeyModel.query.filter_by(name=key_info['name']).first()
+                if key_model:
+                    usage_log = APIKeyUsage(
+                        key_hash=key_model.key_hash,
+                        endpoint=request.path,
+                        method=request.method,
+                        client_ip=client_ip,
+                        user_agent=request.headers.get('User-Agent', ''),
+                        status_code=status_code,
+                        response_time_ms=response_time_ms
+                    )
+                    db.session.add(usage_log)
+                    db.session.commit()
             except Exception as e:
                 logger.warning(f"Failed to log API usage: {e}")
             

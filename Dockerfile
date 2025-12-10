@@ -1,6 +1,6 @@
 # SmartXDR API - Optimized Multi-stage Production Dockerfile
 # Stage 1: Builder - Install dependencies
-FROM python:3.10-slim as builder
+FROM python:3.10-slim AS builder
 
 WORKDIR /build
 
