@@ -300,6 +300,30 @@ class TelegramMiddlewareService:
             logger.error(f"Error sending message to {chat_id}: {e}")
             return None
     
+    def send_document(self, chat_id: int, file_path: str, caption: Optional[str] = None,
+                     reply_to_message_id: Optional[int] = None) -> Optional[Dict]:
+        """Send a document/file to a chat"""
+        try:
+            url = f"{self.api_base}/sendDocument"
+            
+            with open(file_path, 'rb') as f:
+                files = {'document': f}
+                data: Dict[str, Any] = {'chat_id': chat_id}
+                
+                if caption:
+                    data['caption'] = caption
+                    data['parse_mode'] = 'HTML'
+                
+                if reply_to_message_id:
+                    data['reply_to_message_id'] = reply_to_message_id
+                
+                response = self._tg_session.post(url, files=files, data=data, timeout=60)
+                response.raise_for_status()
+                return response.json()
+        except Exception as e:
+            logger.error(f"Error sending document to {chat_id}: {e}")
+            return None
+    
     def _send_single_message(self, chat_id: int, text: str, parse_mode: str = "HTML",
                              reply_to_message_id: int = None) -> Optional[Dict]:
         """Send a single message (internal)"""
@@ -536,6 +560,7 @@ class TelegramMiddlewareService:
                 "/status - Check bot and API status\n"
                 "/stats - Show usage statistics\n"
                 "/summary - Summarize recent ML-classified alerts\n"
+                "/sumlogs - Analyze ML logs with AI\n"
                 "/id - Show your chat ID\n\n"
                 "🔒 This bot is protected by whitelist and rate limiting.",
                 reply_to_message_id=message_id
@@ -561,6 +586,10 @@ class TelegramMiddlewareService:
                 "• <code>/summary --time 3d</code> - Last 3 days\n"
                 "• <code>/summary --time 7d --ai</code> - Include AI analysis\n"
                 "• <code>/summary --time 7d --index suricata,zeek</code> - Custom filter\n\n"
+                "<b>ML Logs Analysis:</b>\n"
+                "• <code>/sumlogs trong 24h gần đây, logs nào có dấu hiệu tấn công? --index *suricata*</code>\n"
+                "• <code>/sumlogs liệt kê logs nguy hiểm --time 24h --index all</code>\n"
+                "• <code>/sumlogs phân tích logs ERROR --time 7d --severity ERROR,WARNING</code>\n\n"
                 "<b>Tips:</b>\n"
                 "• Be specific in your questions\n"
                 "• Include relevant log data for analysis\n"
@@ -611,6 +640,38 @@ class TelegramMiddlewareService:
             threading.Thread(
                 target=self._handle_alert_summary,
                 args=(chat_id, message_id, time_arg, index_arg, include_ai),
+                daemon=True
+            ).start()
+        
+        elif command == "/sumlogs":
+            # Parse /sumlogs command with natural language + options
+            # Format: /sumlogs <question> --time 14d --index *suricata* --severity ERROR,WARNING
+            
+            # Extract question and options using split
+            parts = text.split('--')
+            question = parts[0].replace('/sumlogs', '').strip()
+            
+            # Parse options
+            time_arg = "24h"  # Default
+            index_arg = "all"  # Default to all indices
+            severity_arg = None
+            
+            for part in parts[1:]:
+                part = part.strip()
+                if part.startswith('time '):
+                    # Extract time value (everything after 'time ')
+                    time_arg = part[5:].strip().split()[0]  # Take first token after 'time '
+                elif part.startswith('index '):
+                    # Extract index pattern (everything after 'index ')
+                    index_arg = part[6:].strip().split()[0]  # Take first token after 'index '
+                elif part.startswith('severity '):
+                    # Extract severity list (everything after 'severity ')
+                    severity_arg = part[9:].strip().split()[0]  # Take first token after 'severity '
+            
+            # Handle async processing
+            threading.Thread(
+                target=self._handle_sumlogs_analysis,
+                args=(chat_id, message_id, question, time_arg, index_arg, severity_arg),
                 daemon=True
             ).start()
         
@@ -939,6 +1000,197 @@ class TelegramMiddlewareService:
                 reply_to_message_id=message_id
             )
             logger.error(f"Alert summary error: {e}")
+    
+    def _handle_sumlogs_analysis(
+        self,
+        chat_id: int,
+        message_id: int,
+        question: str,
+        time_arg: Optional[str] = None,
+        index_arg: str = "all",
+        severity_arg: Optional[str] = None
+    ) -> None:
+        """
+        Handle /sumlogs command - query ML logs and analyze with AI
+        
+        Args:
+            chat_id: Telegram chat ID
+            message_id: Message ID to reply to
+            question: User's question about the logs
+            time_arg: Time window (e.g., "24h", "7d")
+            index_arg: Index pattern (e.g., "*suricata*", "all")
+            severity_arg: Severity filter (e.g., "ERROR,WARNING")
+        """
+        try:
+            from app.services.elasticsearch_service import ElasticsearchService
+            from app.services.llm_service import LLMService
+            
+            # Send typing indicator
+            self.send_typing_action(chat_id)
+            
+            # Parse time argument (default: 24h)
+            hours = 24
+            if time_arg:
+                try:
+                    time_str = time_arg.strip().lower()
+                    if time_str.endswith('d'):
+                        hours = int(time_str[:-1]) * 24
+                    elif time_str.endswith('h'):
+                        hours = int(time_str[:-1])
+                    else:
+                        hours = int(time_str)
+                except ValueError:
+                    self.send_message(
+                        chat_id,
+                        f"⚠️ Invalid time format: {time_arg}\nUsing default: 24h",
+                        reply_to_message_id=message_id
+                    )
+            
+            # Parse index pattern
+            if index_arg == "all":
+                index_pattern = "*"
+            else:
+                index_pattern = index_arg.strip()
+            
+            # Parse severity filter
+            severity_filter = None
+            if severity_arg:
+                severity_filter = [s.strip().upper() for s in severity_arg.split(',')]
+            
+            # Show processing message
+            processing_msg = self.send_message(
+                chat_id,
+                f"⏳ <b>Analyzing ML Logs...</b>\n\n"
+                f"<b>Question:</b> {html.escape(question or 'Tìm logs nguy hiểm')}\n"
+                f"<b>Time:</b> {hours}h\n"
+                f"<b>Index:</b> {index_pattern}\n"
+                f"<b>Severity:</b> {', '.join(severity_filter) if severity_filter else 'All'}\n\n"
+                "🔍 Querying Elasticsearch...",
+                reply_to_message_id=message_id
+            )
+            
+            # Query Elasticsearch for ML logs
+            es_service = ElasticsearchService()
+            result = es_service.query_ml_logs(
+                index_pattern=index_pattern,
+                hours=hours,
+                min_probability=0.5,
+                severity_filter=severity_filter,
+                max_results=50
+            )
+            
+            if result.get('status') != 'success':
+                self.send_message(
+                    chat_id,
+                    f"❌ <b>Query Failed</b>\n\n{html.escape(result.get('error', 'Unknown error'))}",
+                    reply_to_message_id=message_id
+                )
+                return
+            
+            logs = result.get('logs', [])
+            total = result.get('total', 0)
+            
+            if not logs:
+                self.send_message(
+                    chat_id,
+                    "ℹ️ <b>No ML Logs Found</b>\n\n"
+                    f"No logs with ML predictions found in the last {hours}h matching your criteria.",
+                    reply_to_message_id=message_id
+                )
+                return
+            
+            # Load prompt template
+            prompt_path = "prompts/system/sumlogs_analysis.json"
+            system_prompt = ""
+            try:
+                with open(prompt_path, 'r', encoding='utf-8') as f:
+                    system_prompt = f.read()
+            except:
+                system_prompt = "Bạn là chuyên gia phân tích bảo mật mạng. Phân tích logs và đưa ra khuyến nghị."
+            
+            # Build context from logs (for display to user + AI)
+            logs_context = f"Tổng số logs: {total}, Trả về: {len(logs)}\n\n"
+            logs_context += "Danh sách logs (sắp xếp theo probability):\n\n"
+            
+            for i, log in enumerate(logs[:20], 1):  # Limit to top 20 for token optimization
+                logs_context += (
+                    f"{i}. [{log['timestamp']}]\n"
+                    f"   - ID: {log.get('_id', 'N/A')}\n"
+                    f"   - ML Prediction: {log['ml_prediction']} (prob: {log['ml_probability']})\n"
+                    f"   - Event: {log['ml_input']}\n"
+                    f"   - Source IP: {log['source_ip']} → Dest IP: {log['dest_ip']}\n"
+                    f"   - Type: {log['event_type']}\n"
+                    f"   - Index: {log['index']}\n\n"
+                )
+            
+            # Build query for AI (include system prompt in query)
+            user_query = f"{system_prompt}\n\nCÂU HỎI: {question}\n\nDỮ LIỆU LOGS:\n{logs_context}"
+            
+            # Call LLM with RAG
+            llm_service = LLMService()
+            ai_response = llm_service.ask_rag(query=user_query)
+            
+            if ai_response.get('status') != 'success':
+                self.send_message(
+                    chat_id,
+                    f"❌ <b>AI Analysis Failed</b>\n\n{html.escape(ai_response.get('error', 'Unknown error'))}",
+                    reply_to_message_id=message_id
+                )
+                return
+            
+            # Send summary statistics with logs preview
+            severity_breakdown = result.get('summary', {}).get('severity_breakdown', {})
+            stats_text = (
+                f"📊 <b>ML Logs Summary</b>\n\n"
+                f"<b>Total Logs:</b> {total}\n"
+                f"<b>Analyzed:</b> {len(logs)}\n"
+                f"<b>Time Range:</b> {hours}h\n"
+                f"<b>Index:</b> {index_pattern}\n\n"
+                f"<b>Severity Breakdown:</b>\n"
+            )
+            
+            for severity, count in severity_breakdown.items():
+                emoji = "🔴" if severity == "ERROR" else "🟠" if severity == "WARNING" else "🟢"
+                stats_text += f"  {emoji} {severity}: {count}\n"
+            
+            # Add preview of logs data
+            stats_text += f"\n<b>Preview:</b>\n<pre>{logs_context[:500]}...</pre>"
+            
+            self.send_message(chat_id, stats_text, reply_to_message_id=message_id)
+            
+            # Save AI analysis to markdown file
+            analysis = ai_response.get('answer', 'No analysis available')
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"ml_logs_analysis_{timestamp}.md"
+            filepath = os.path.join("logs", filename)
+            
+            # Ensure logs directory exists
+            os.makedirs("logs", exist_ok=True)
+            
+            # Write analysis to markdown
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(f"# ML Logs Analysis - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+                f.write(f"**Question:** {question}\n\n")
+                f.write(f"**Time Range:** {hours}h | **Index:** {index_pattern}\n\n")
+                f.write(f"**Total Logs:** {total} | **Analyzed:** {len(logs)}\n\n")
+                f.write("---\n\n")
+                f.write("## Logs Data\n\n")
+                f.write(logs_context)
+                f.write("\n\n---\n\n")
+                f.write("## AI Analysis\n\n")
+                f.write(analysis)
+            
+            # Send file with short caption
+            caption = f"🤖 <b>AI Analysis Complete</b>\n\nQuestion: {question}\nTime: {hours}h | Logs: {len(logs)}"
+            self.send_document(chat_id, filepath, caption=caption, reply_to_message_id=message_id)
+            
+        except Exception as e:
+            self.send_message(
+                chat_id,
+                f"❌ <b>Error Analyzing Logs</b>\n\n{html.escape(str(e))}",
+                reply_to_message_id=message_id
+            )
+            logger.error(f"Sumlogs analysis error: {e}")
     
     def _format_response(self, text: str) -> str:
         """

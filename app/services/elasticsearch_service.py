@@ -1336,6 +1336,162 @@ class ElasticsearchService:
         except Exception:
             return False
     
+    def query_ml_logs(
+        self,
+        index_pattern: str = "*",
+        hours: int = 24,
+        min_probability: float = 0.5,
+        severity_filter: Optional[List[str]] = None,
+        max_results: int = 50
+    ) -> Dict[str, Any]:
+        """
+        Query logs with ML predictions for intelligent analysis
+        
+        Args:
+            index_pattern: Elasticsearch index pattern (e.g., "*suricata*", "*zeek*", "*")
+            hours: Time range to query (default: 24)
+            min_probability: Minimum ML prediction probability (default: 0.5)
+            severity_filter: Filter by predicted values (e.g., ["WARNING", "ERROR"])
+            max_results: Maximum number of results (default: 50, optimized for token usage)
+        
+        Returns:
+            {
+                "total": int,
+                "logs": [
+                    {
+                        "timestamp": str,
+                        "ml_prediction": str,
+                        "ml_probability": float,
+                        "ml_input": str,
+                        "source_ip": str,
+                        "dest_ip": str,
+                        "event_type": str,
+                        "index": str
+                    }
+                ],
+                "summary": {...}
+            }
+        """
+        error_check = self._check_enabled()
+        if error_check:
+            return error_check
+        
+        try:
+            # Build time range
+            now = datetime.utcnow()
+            start_time = now - timedelta(hours=hours)
+            
+            # Build query
+            must_clauses = [
+                {"range": {"@timestamp": {"gte": start_time.isoformat(), "lte": now.isoformat()}}},
+                {"exists": {"field": "ml.prediction.predicted_value"}},
+                {"exists": {"field": "ml.prediction.prediction_probability"}},
+                {"exists": {"field": "ml_input"}},
+                {"range": {"ml.prediction.prediction_probability": {"gte": min_probability}}},
+                {"bool": {"must_not": {"term": {"ml_input.keyword": ""}}}}
+            ]
+            
+            # Add severity filter if specified
+            if severity_filter:
+                must_clauses.append({"terms": {"ml.prediction.predicted_value": severity_filter}})
+            
+            query = {
+                "query": {
+                    "bool": {
+                        "must": must_clauses
+                    }
+                },
+                "size": max_results,
+                "_source": [
+                    "@timestamp",
+                    "ml.prediction.predicted_value",
+                    "ml.prediction.prediction_probability",
+                    "ml_input",
+                    "source.ip",
+                    "destination.ip",
+                    "event.type",
+                    "event.action",
+                    "event.category",
+                    "event.original",
+                    "agent.name",
+                    "message",
+                    "rule.name"
+                ],
+                "sort": [
+                    {"ml.prediction.prediction_probability": {"order": "desc"}},
+                    {"@timestamp": {"order": "desc"}}
+                ]
+            }
+            
+            # Execute query
+            response = self.client.search(index=index_pattern, body=query)
+            hits = response.get("hits", {}).get("hits", [])
+            total = response.get("hits", {}).get("total", {})
+            total_count = total.get("value", 0) if isinstance(total, dict) else total
+            
+            # Format results (optimize for tokens)
+            logs = []
+            for hit in hits:
+                source = hit.get("_source", {})
+                
+                # Extract ML fields
+                ml_prediction = source.get("ml", {}).get("prediction", {})
+                predicted_value = ml_prediction.get("predicted_value", "UNKNOWN")
+                probability = ml_prediction.get("prediction_probability", 0.0)
+                ml_input = source.get("ml_input", "")
+                
+                # Extract network info
+                source_ip = source.get("source", {}).get("ip") if isinstance(source.get("source"), dict) else source.get("source.ip", "N/A")
+                dest_ip = source.get("destination", {}).get("ip") if isinstance(source.get("destination"), dict) else source.get("destination.ip", "N/A")
+                
+                # Extract event info
+                event_type = source.get("event", {}).get("type", "N/A") if isinstance(source.get("event"), dict) else source.get("event.type", "N/A")
+                event_action = source.get("event", {}).get("action", "") if isinstance(source.get("event"), dict) else source.get("event.action", "")
+                event_original = source.get("event", {}).get("original", "") if isinstance(source.get("event"), dict) else source.get("event.original", "")
+                
+                logs.append({
+                    "_id": hit.get("_id", ""),  # Document ID for easy lookup
+                    "timestamp": source.get("@timestamp", ""),
+                    "ml_prediction": predicted_value,
+                    "ml_probability": round(probability, 2),
+                    "ml_input": ml_input[:200],  # Truncate for token optimization
+                    "source_ip": source_ip,
+                    "dest_ip": dest_ip,
+                    "event_type": event_type,
+                    "event_action": event_action,
+                    "event_original": event_original[:300] if event_original else "",  # Truncate for tokens
+                    "agent": source.get("agent", {}).get("name", "N/A"),
+                    "index": hit.get("_index", "")
+                })
+            
+            # Build summary
+            severity_counts = {}
+            for log in logs:
+                severity = log["ml_prediction"]
+                severity_counts[severity] = severity_counts.get(severity, 0) + 1
+            
+            return {
+                "status": "success",
+                "total": total_count,
+                "returned": len(logs),
+                "logs": logs,
+                "summary": {
+                    "time_range_hours": hours,
+                    "index_pattern": index_pattern,
+                    "min_probability": min_probability,
+                    "severity_breakdown": severity_counts
+                }
+            }
+        
+        except Exception as e:
+            logger.error(f"❌ Failed to query ML logs: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "total": 0,
+                "logs": []
+            }
+    
     def close(self):
         """Close Elasticsearch client connection"""
         if self.client is None:
