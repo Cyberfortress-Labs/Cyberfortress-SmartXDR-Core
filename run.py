@@ -14,7 +14,10 @@ import requests
 from dotenv import load_dotenv
 from app import create_app, get_collection
 from app.config import PORT, HOST
+import warnings
 
+warnings.filterwarnings('ignore', category=UserWarning, module='passlib')
+warnings.filterwarnings('ignore', category=DeprecationWarning)
 # Load environment variables
 load_dotenv()
 

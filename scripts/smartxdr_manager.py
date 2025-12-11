@@ -74,6 +74,164 @@ def confirm(prompt: str) -> bool:
     return response == 'y'
 
 
+def get_password_input(prompt: str = "  Password: ") -> str:
+    """Get password input (hidden if possible)"""
+    try:
+        import getpass
+        return getpass.getpass(prompt)
+    except Exception:
+        # Fallback if getpass doesn't work (some terminals)
+        return input(prompt)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# AUTHENTICATION
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def check_first_run() -> bool:
+    """Check if this is first run (no admin users exist)"""
+    admin_role = Role.query.filter_by(name='admin').first()
+    if not admin_role:
+        return True
+    
+    admin_users = User.query.join(User.roles).filter(Role.name == 'admin').count()
+    return admin_users == 0
+
+
+def create_first_admin():
+    """Force creation of first admin user on first run"""
+    clear_screen()
+    print("""
+╔══════════════════════════════════════════════════════════╗
+║                                                          ║
+║       🚀 SmartXDR First-Time Setup                       ║
+║                                                          ║
+║   No admin users found. Please create the first admin    ║
+║   account to secure this management console.             ║
+║                                                          ║
+╚══════════════════════════════════════════════════════════╝
+    """)
+    
+    # Get email
+    while True:
+        email = input("  Email: ").strip()
+        if email and '@' in email:
+            break
+        print("  ✗ Please enter a valid email")
+    
+    # Get username
+    while True:
+        username = input("  Username: ").strip()
+        if username and len(username) >= 3:
+            break
+        print("  ✗ Username must be at least 3 characters")
+    
+    # Get password
+    gen_password = generate_password()
+    print(f"\n  💡 Generated strong password: {gen_password}")
+    print("  (Press Enter to use this password, or type your own)")
+    
+    while True:
+        password = get_password_input("  Password: ").strip() or gen_password
+        if len(password) >= 8:
+            break
+        print("  ✗ Password must be at least 8 characters")
+    
+    # Create admin role if needed
+    admin_role = Role.query.filter_by(name='admin').first()
+    if not admin_role:
+        admin_role = Role(name='admin', description='Administrator')
+        db.session.add(admin_role)
+        db.session.commit()
+    
+    # Create user
+    from flask_security.datastore import SQLAlchemyUserDatastore
+    user_datastore = SQLAlchemyUserDatastore(db, User, Role)
+    
+    new_user = user_datastore.create_user(
+        email=email,
+        username=username,
+        password=hash_password(password),
+        active=True
+    )
+    user_datastore.add_role_to_user(new_user, admin_role)
+    db.session.commit()
+    
+    print(f"""
+╔══════════════════════════════════════════════════════════╗
+║  ✓ First Admin Created Successfully!                    ║
+╠══════════════════════════════════════════════════════════╣
+║  Email:    {email:<45} ║
+║  Username: {username:<45} ║
+║  Password: {password:<45} ║
+╚══════════════════════════════════════════════════════════╝
+    """)
+    print("  ⚠️  Save these credentials securely!")
+    input("\n  Press Enter to continue to login...")
+    return email
+
+
+def login_admin() -> bool:
+    """Authenticate admin user before accessing CLI"""
+    from flask_security.utils import verify_and_update_password
+    
+    clear_screen()
+    print("""
+╔══════════════════════════════════════════════════════════╗
+║                                                          ║
+║       🔐 SmartXDR Management Console                     ║
+║                                                          ║
+║   Please login with admin credentials to continue.       ║
+║                                                          ║
+╚══════════════════════════════════════════════════════════╝
+    """)
+    
+    max_attempts = 3
+    for attempt in range(max_attempts):
+        remaining = max_attempts - attempt
+        print(f"\n  Attempts remaining: {remaining}")
+        
+        username_or_email = input("  Username or Email: ").strip()
+        if not username_or_email:
+            continue
+            
+        password = get_password_input("  Password: ")
+        if not password:
+            continue
+        
+        # Find user by email or username
+        user = User.query.filter(
+            (User.email == username_or_email) | 
+            (User.username == username_or_email)
+        ).first()
+        
+        if not user:
+            print("  ✗ User not found")
+            continue
+        
+        # Verify password using Flask-Security (handles HMAC + Argon2)
+        if not verify_and_update_password(password, user):
+            print("  ✗ Invalid password")
+            continue
+        
+        # Check if user has admin role
+        if not any(role.name == 'admin' for role in user.roles):
+            print("  ✗ Access denied: Admin role required")
+            continue
+        
+        # Check if user is active
+        if not user.active:
+            print("  ✗ Account is disabled")
+            continue
+        
+        # Login successful
+        print(f"\n  ✓ Welcome, {user.username}!")
+        return True
+    
+    print("\n  ✗ Too many failed attempts. Exiting.")
+    return False
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # USER MANAGEMENT
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -509,7 +667,19 @@ def main():
     """Main entry point"""
     try:
         app = create_app()
+        
+        with app.app_context():
+            # Check if first run (no admins exist)
+            if check_first_run():
+                create_first_admin()
+            
+            # Require admin login
+            if not login_admin():
+                sys.exit(1)
+        
+        # If authenticated, show main menu
         main_menu(app)
+        
     except KeyboardInterrupt:
         print("\n\n  ✗ Cancelled by user")
         sys.exit(0)
