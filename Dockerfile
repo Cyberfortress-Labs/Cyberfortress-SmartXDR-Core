@@ -63,6 +63,10 @@ RUN useradd -m -u 1000 smartxdr && \
     chown -R smartxdr:smartxdr /app && \
     chmod -R 755 /app/chroma_db
 
+# Copy entrypoint script
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Copy application code
 COPY --chown=smartxdr:smartxdr . .
 
@@ -76,7 +80,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
-# Run with gunicorn
-CMD ["gunicorn", \
-    "--config", "gunicorn.conf.py", \
-    "run:app"]
+# Run with entrypoint script (handles tunnel + gunicorn)
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

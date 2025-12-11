@@ -222,12 +222,21 @@ def require_api_key(permission_or_func=None):
             # Validate key
             key_info = manager.validate_key(api_key)
             if not key_info:
-                logger.warning(f"Invalid API key attempt from {client_ip}")
+                logger.warning(
+                    f"Invalid API key attempt from {client_ip} "
+                    f"(endpoint: {request.path}, method: {request.method}, "
+                    f"key_present: {'Yes' if api_key else 'No'})"
+                )
                 return jsonify({
                     'status': 'error',
                     'message': 'Invalid or missing API key',
                     'code': 'INVALID_API_KEY',
-                    'hint': 'Include header: X-API-Key: your_api_key'
+                    'hint': 'Include header: X-API-Key: your_api_key',
+                    'debug': {
+                        'client_ip': client_ip,
+                        'endpoint': request.path,
+                        'has_api_key': bool(api_key)
+                    }
                 }), 401
             
             # Check permission
