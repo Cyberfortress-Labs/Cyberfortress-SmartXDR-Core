@@ -112,16 +112,16 @@ def create_first_admin():
 ╚══════════════════════════════════════════════════════════╝
     """)
     
-    # Get email
+    # Get email (normalize to lowercase)
     while True:
-        email = input("  Email: ").strip()
+        email = input("  Email: ").strip().lower()
         if email and '@' in email:
             break
         print("  ✗ Please enter a valid email")
     
-    # Get username
+    # Get username (normalize to lowercase)
     while True:
-        username = input("  Username: ").strip()
+        username = input("  Username: ").strip().lower()
         if username and len(username) >= 3:
             break
         print("  ✗ Username must be at least 3 characters")
@@ -191,7 +191,7 @@ def login_admin() -> bool:
         remaining = max_attempts - attempt
         print(f"\n  Attempts remaining: {remaining}")
         
-        username_or_email = input("  Username or Email: ").strip()
+        username_or_email = input("  Username or Email: ").strip().lower()
         if not username_or_email:
             continue
             
@@ -199,10 +199,11 @@ def login_admin() -> bool:
         if not password:
             continue
         
-        # Find user by email or username
+        # Find user by email or username (case-insensitive)
+        from sqlalchemy import func
         user = User.query.filter(
-            (User.email == username_or_email) | 
-            (User.username == username_or_email)
+            (func.lower(User.email) == username_or_email) | 
+            (func.lower(User.username) == username_or_email)
         ).first()
         
         if not user:
@@ -260,8 +261,8 @@ def create_user():
     """Create a new user"""
     print_header("Create New User")
     
-    # Get email
-    email = input("\n  Email: ").strip()
+    # Get email (normalize to lowercase)
+    email = input("\n  Email: ").strip().lower()
     if not email or '@' not in email:
         print("  ✗ Invalid email")
         return
@@ -270,8 +271,8 @@ def create_user():
         print("  ✗ Email already exists")
         return
     
-    # Get username
-    username = input("  Username: ").strip()
+    # Get username (normalize to lowercase)
+    username = input("  Username: ").strip().lower()
     if not username:
         print("  ✗ Username required")
         return
@@ -319,7 +320,7 @@ def delete_user():
     print_header("Delete User")
     list_users()
     
-    email = input("\n  Enter email to delete: ").strip()
+    email = input("\n  Enter email to delete: ").strip().lower()
     user = User.query.filter_by(email=email).first()
     
     if not user:
@@ -339,7 +340,7 @@ def reset_password():
     print_header("Reset Password")
     list_users()
     
-    email = input("\n  Enter email: ").strip()
+    email = input("\n  Enter email: ").strip().lower()
     user = User.query.filter_by(email=email).first()
     
     if not user:
@@ -413,8 +414,8 @@ def create_api_key():
     """Create a new API key"""
     print_header("Create New API Key")
     
-    # Get name
-    name = input("\n  Key name: ").strip()
+    # Get name (normalize to lowercase)
+    name = input("\n  Key name: ").strip().lower()
     if not name:
         print("  ✗ Name required")
         return
@@ -492,7 +493,7 @@ def delete_api_key():
     print_header("Delete API Key")
     list_api_keys()
     
-    name = input("\n  Enter key name to delete: ").strip()
+    name = input("\n  Enter key name to delete: ").strip().lower()
     key = APIKeyModel.query.filter_by(name=name).first()
     
     if not key:
@@ -514,7 +515,7 @@ def toggle_api_key():
     print_header("Enable/Disable API Key")
     list_api_keys()
     
-    name = input("\n  Enter key name: ").strip()
+    name = input("\n  Enter key name: ").strip().lower()
     key = APIKeyModel.query.filter_by(name=name).first()
     
     if not key:
