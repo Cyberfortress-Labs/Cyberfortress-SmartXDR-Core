@@ -1,14 +1,12 @@
-# Production Docker Compose - Uses pre-built images from DockerHub
-# Usage: docker compose -f docker-compose.prod.yml up -d
-
 services:
   # Nginx - Reverse Proxy (HTTPS)
   nginx:
-    image: nginx:1.25-alpine
+    image: wanthinnn/smartxdr-nginx:latest
+    pull_policy: always
     container_name: smartxdr-nginx
     ports:
       - "${NGINX_HTTPS_PORT:-8443}:8443"
-      - "${NGINX_HTTP_PORT:-8080}:8080"  # HTTP redirects to HTTPS
+      - "${NGINX_HTTP_PORT:-8080}:8080"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
@@ -21,7 +19,7 @@ services:
       - smartxdr-net
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "sh", "-c", "wget -q -O- http://localhost:8080/health || exit 1"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -30,8 +28,8 @@ services:
   # SmartXDR API Service - Pull from DockerHub
   api:
     image: wanthinnn/smartxdr-core:latest
+    pull_policy: always
     container_name: smartxdr-core
-    pull_policy: always  # Always pull latest image
     environment:
       - FLASK_ENV=production
       - DEBUG=false
@@ -87,7 +85,11 @@ services:
     networks:
       - smartxdr-net
     restart: unless-stopped
-    # Note: ChromaDB image doesn't have curl/wget, skip healthcheck
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/heartbeat')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     deploy:
       resources:
         limits:
@@ -96,7 +98,6 @@ services:
         reservations:
           memory: 512M
   
-  # Cloudflare Tunnel - Named Tunnel for webhook
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: smartxdr-cloudflared
@@ -109,6 +110,8 @@ services:
         condition: service_healthy
     networks:
       - smartxdr-net
+
+
 
 networks:
   smartxdr-net:
