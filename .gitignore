@@ -181,3 +181,6 @@ docs-for-rag/
 
 # Local database
 data/
+
+# Cloudflare Tunnel credentials
+cloudflared/
