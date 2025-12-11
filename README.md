@@ -4,8 +4,6 @@
 
 SmartXDR Core is an intelligent security operations platform that leverages Large Language Models (LLM) and Retrieval-Augmented Generation (RAG) to enhance threat detection, analysis, and response capabilities.
 
----
-
 ## Table of Contents
 
 - [Features](#features)
@@ -20,8 +18,6 @@ SmartXDR Core is an intelligent security operations platform that leverages Larg
 - [Security](#security)
 - [Testing](#testing)
 - [License](#license)
-
----
 
 ## Features
 
@@ -61,8 +57,6 @@ SmartXDR Core is an intelligent security operations platform that leverages Larg
 - IP whitelisting support
 - Permission-based endpoint protection
 
----
-
 ## Architecture
 
 ```
@@ -82,8 +76,6 @@ SmartXDR Core
 └── tests/                # Unit and integration tests
 ```
 
----
-
 ## Requirements
 
 - Python 3.10+
@@ -101,8 +93,6 @@ Flask-Security-Too 5.3+
 Argon2-cffi 23.1+
 Gunicorn 21.2+
 ```
-
----
 
 ## Installation
 
@@ -155,8 +145,6 @@ python run.py
 gunicorn -c gunicorn.conf.py run:app
 ```
 
----
-
 ## Configuration
 
 ### Environment Variables
@@ -183,8 +171,6 @@ Edit `app/api_config/endpoints.py` to configure:
 - Protected endpoints with permission requirements
 - Rate limits per endpoint
 
----
-
 ## Usage
 
 ### Starting the Server
@@ -208,8 +194,6 @@ curl -X POST http://localhost:8080/api/ai/ask \
   -H "X-API-Key: YOUR_API_KEY" \
   -d '{"query": "What is XDR?"}'
 ```
-
----
 
 ## API Reference
 
@@ -260,8 +244,6 @@ Or use Bearer token:
 Authorization: Bearer sxdr_your_api_key_here
 ```
 
----
-
 ## Management CLI
 
 SmartXDR includes a CLI tool for user and API key management.
@@ -284,8 +266,6 @@ On first run with empty database, the CLI will prompt you to create an initial a
 
 CLI requires admin login before accessing management functions.
 
----
-
 ## Docker Deployment
 
 ### Using Docker Compose
@@ -305,8 +285,6 @@ docker build -t smartxdr-core:latest .
 ```
 
 See `DOCKER_DEPLOYMENT.md` for detailed deployment instructions.
-
----
 
 ## Security
 
@@ -334,8 +312,6 @@ Permissions follow the format `resource:action`:
 4. Rotate API keys periodically
 5. Monitor usage logs for anomalies
 
----
-
 ## Testing
 
 ### Run Tests
@@ -360,8 +336,6 @@ tests/
 ├── test_rag_service.py   # RAG service tests
 └── conftest.py           # Test fixtures
 ```
-
----
 
 ## License
 
