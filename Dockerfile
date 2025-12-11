@@ -67,8 +67,13 @@ RUN useradd -m -u 1000 smartxdr && \
 COPY docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Copy application code
-COPY --chown=smartxdr:smartxdr . .
+# Copy application code (as root first)
+COPY . .
+
+# Fix permissions - ensure directories have execute bit
+RUN find /app -type d -exec chmod 755 {} \; && \
+    find /app -type f -exec chmod 644 {} \; && \
+    chown -R smartxdr:smartxdr /app
 
 # Switch to non-root user
 USER smartxdr
