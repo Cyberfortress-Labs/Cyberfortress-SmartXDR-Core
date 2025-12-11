@@ -30,9 +30,14 @@ class APIKeyManager:
         whitelist_str = os.getenv('API_IP_WHITELIST', '')
         self.ip_whitelist = [ip.strip() for ip in whitelist_str.split(',') if ip.strip()]
         
-        # Public endpoints (no auth required)
-        public_str = os.getenv('API_PUBLIC_ENDPOINTS', '/api/health,/api/telegram/webhook,/api/triage/health')
-        self.public_endpoints = [ep.strip() for ep in public_str.split(',') if ep.strip()]
+        # Load public endpoints from config (with fallback to env var)
+        try:
+            from app.api_config.endpoints import PUBLIC_ENDPOINTS
+            self.public_endpoints = PUBLIC_ENDPOINTS
+        except ImportError:
+            # Fallback to env var if config not found
+            public_str = os.getenv('API_PUBLIC_ENDPOINTS', '/health,/api/telegram/webhook,/api/triage/health,/api/rag/health')
+            self.public_endpoints = [ep.strip() for ep in public_str.split(',') if ep.strip()]
         
         if not self.auth_enabled:
             logger.warning("⚠️  API Authentication is DISABLED! All endpoints are public.")
