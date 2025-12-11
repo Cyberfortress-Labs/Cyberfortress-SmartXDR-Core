@@ -6,9 +6,20 @@ on:
       - main
     tags:
       - 'v*'
+    paths:
+      - 'Dockerfile'
+      - 'nginx/Dockerfile'
+      - 'requirements.txt'
+      - 'app/**'
+      - '.github/workflows/docker-build.yml'
   pull_request:
     branches:
       - main
+    paths:
+      - 'Dockerfile'
+      - 'nginx/Dockerfile'
+      - 'requirements.txt'
+      - 'app/**'
   workflow_dispatch:
 
 env:
@@ -62,7 +73,9 @@ jobs:
           labels: ${{ steps.meta-core.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
 
       - name: Core image digest
         run: echo ${{ steps.build-and-push-core.outputs.digest }}
@@ -112,7 +125,9 @@ jobs:
           labels: ${{ steps.meta-nginx.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
 
       - name: Nginx image digest
         run: echo ${{ steps.build-and-push-nginx.outputs.digest }}
