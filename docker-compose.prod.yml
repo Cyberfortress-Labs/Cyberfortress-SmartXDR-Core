@@ -45,9 +45,9 @@ services:
       chromadb:
         condition: service_started
     volumes:
-      # Persistent data
-      - api-data:/app/data
-      - api-logs:/app/logs
+      # Persistent data - bind mount to preserve data on host
+      - ./data:/app/data
+      - ./logs:/app/logs
       # Read-only configs
       - ./certs:/app/certs:ro
       - ./prompts:/app/prompts:ro
@@ -94,6 +94,20 @@ services:
           cpus: '1'
         reservations:
           memory: 512M
+  
+  # Cloudflare Tunnel - Named Tunnel for webhook
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: smartxdr-cloudflared
+    restart: unless-stopped
+    command: tunnel --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./cloudflared:/etc/cloudflared:ro
+    depends_on:
+      api:
+        condition: service_started
+    networks:
+      - smartxdr-net
 
 networks:
   smartxdr-net:
@@ -101,20 +115,10 @@ networks:
     name: smartxdr-network
 
 volumes:
-  # API data (API keys database, cache)
-  api-data:
-    driver: local
-    name: smartxdr-core-data
-  
   # Vector embeddings database
   chroma-db:
     driver: local
     name: smartxdr-chroma-db
-  
-  # Application logs
-  api-logs:
-    driver: local
-    name: smartxdr-core-logs
   
   # Nginx logs
   nginx-logs:
