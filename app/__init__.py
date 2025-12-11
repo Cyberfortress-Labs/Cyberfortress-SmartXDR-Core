@@ -4,7 +4,7 @@ Flask application factory for Cyberfortress SmartXDR Core
 import os
 import secrets
 from pathlib import Path
-from flask import Flask
+from flask import Flask, request, redirect
 from flask_cors import CORS
 from flask_security.core import Security
 from flask_security.datastore import SQLAlchemyUserDatastore
@@ -34,15 +34,40 @@ def create_app():
     app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
     app.config['JSON_AS_ASCII'] = False  # Để tiếng Việt hiển thị đúng
     
-    # Security configuration
-    app.config['SECRET_KEY'] = secrets.token_hex(32)
-    app.config['SECURITY_PASSWORD_SALT'] = secrets.token_hex(16)
+    # Security configuration - Use persistent keys (from env vars or fixed default for dev)
+    # IMPORTANT: Never regenerate these on restart - it breaks password verification!
+    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production-12345678')
+    app.config['SECURITY_PASSWORD_SALT'] = os.environ.get('SECURITY_PASSWORD_SALT', 'dev-salt-change-me-12345678')
+    
+    # Flask-Security password hashing (use argon2 - most secure)
+    app.config['SECURITY_PASSWORD_HASH'] = 'argon2'
+    app.config['SECURITY_PASSWORD_SCHEMES'] = ['argon2', 'bcrypt', 'pbkdf2_sha512']
     
     # Flask-Security settings
     app.config['SECURITY_REGISTERABLE'] = False  # Disable public registration
     app.config['SECURITY_SEND_REGISTER_EMAIL'] = False
-    app.config['SECURITY_POST_LOGIN_VIEW'] = '/admin'
-    app.config['SECURITY_POST_LOGOUT_VIEW'] = '/admin'
+    app.config['SECURITY_USER_IDENTITY_ATTRIBUTES'] = [{'email': {'mapper': str.lower}}, {'username': {'mapper': str.lower}}]  # Allow login with email OR username
+    app.config['SECURITY_POST_LOGIN_VIEW'] = '/admin/'
+    app.config['SECURITY_POST_LOGOUT_VIEW'] = '/login'
+    app.config['SECURITY_LOGIN_USER_TEMPLATE'] = 'security/login_user.html'
+    
+    # Flask-Security URL configuration
+    app.config['SECURITY_URL_PREFIX'] = None
+    app.config['SECURITY_BLUEPRINT_NAME'] = 'security'
+    
+    # Flask-Security flash messages
+    app.config['SECURITY_FLASH_MESSAGES'] = True
+    app.config['SECURITY_MSG_INVALID_PASSWORD'] = ('Invalid password', 'error')
+    app.config['SECURITY_MSG_USER_DOES_NOT_EXIST'] = ('User does not exist', 'error')
+    
+    # Flask-Security redirect behavior - CRITICAL for proper redirects
+    app.config['SECURITY_REDIRECT_BEHAVIOR'] = None  # Use traditional redirects, not SPA
+    app.config['SECURITY_REDIRECT_HOST'] = None
+    app.config['SECURITY_REDIRECT_ALLOW_SUBDOMAINS'] = False
+    
+    # CSRF Protection
+    app.config['WTF_CSRF_ENABLED'] = True
+    app.config['WTF_CSRF_TIME_LIMIT'] = None  # No time limit for CSRF tokens
     
     # SQLAlchemy configuration - use absolute path for Windows compatibility
     base_dir = Path(__file__).parent.parent
@@ -59,34 +84,28 @@ def create_app():
     user_datastore = SQLAlchemyUserDatastore(db, User, Role)
     security = Security(app, user_datastore)
     
-    # Create tables and default admin user
+    # Add signal handler for logging successful logins
+    from flask_security import user_authenticated
+    
+    @user_authenticated.connect_via(app)
+    def on_user_authenticated(sender, user, **extra):
+        """Log when user is authenticated"""
+        print(f"✓ User authenticated: {user.email}")
+
+    
+    # Create tables and roles (admin user should be created via scripts/create_superadmin.py)
     with app.app_context():
         db.create_all()
         
-        # # Create roles if they don't exist
-        # if not user_datastore.find_role('admin'):
-        #     user_datastore.create_role(name='admin', description='Administrator')
-        # if not user_datastore.find_role('user'):
-        #     user_datastore.create_role(name='user', description='Regular User')
-        
-        # # Create default admin user if no users exist
-        # if not user_datastore.find_user(email='admin@cyberfortress.local'):
-        #     admin_user = user_datastore.create_user(
-        #         email='admin@cyberfortress.local',
-        #         username='admin',
-        #         password=hash_password('admin123'),
-        #         active=True
-        #     )
-        #     user_datastore.add_role_to_user(admin_user, 'admin')
+        # Create roles if they don't exist
+        if not user_datastore.find_role('admin'):
+            user_datastore.create_role(name='admin', description='Administrator')
+        if not user_datastore.find_role('user'):
+            user_datastore.create_role(name='user', description='Regular User')
         
         db.session.commit()
     
-    # Note: ChromaDB initialization moved to RAGService
-    # Old global collection no longer needed as routes now use RAGService directly
-    
-    # Initialize Flask-Admin (after Flask-Security)
-    from app.admin import init_admin
-    init_admin(app)
+    # Note: Web admin removed - use scripts/smartxdr_manager.py for management
     
     # Register blueprints
     from app.routes.ai import ai_bp

@@ -7,7 +7,6 @@ flask-security-too==5.3.3
 flask-login==0.6.3
 WTForms==3.1.1
 email-validator==2.1.0
-flask-security==5.7.1
 
 # OpenAI SDK
 openai>=1.0.0
