@@ -9,14 +9,11 @@ SmartXDR Core is an intelligent security operations platform that leverages Larg
 - [Features](#features)
 - [Architecture](#architecture)
 - [Requirements](#requirements)
-- [Installation](#installation)
+- [Quick Start](#quick-start)
 - [Configuration](#configuration)
-- [Usage](#usage)
 - [API Reference](#api-reference)
 - [Management CLI](#management-cli)
-- [Docker Deployment](#docker-deployment)
 - [Security](#security)
-- [Testing](#testing)
 - [License](#license)
 
 ## Features
@@ -78,23 +75,12 @@ SmartXDR Core
 
 ## Requirements
 
-- Python 3.10+
+- Docker and Docker Compose
 - OpenAI API Key or Gemini API Key
 - Elasticsearch 8.x (optional, for triage features)
 - IRIS instance (optional, for IOC enrichment)
 
-### Python Dependencies
-
-```
-Flask 3.0+
-OpenAI SDK 1.0+
-ChromaDB 0.4+
-Flask-Security-Too 5.3+
-Argon2-cffi 23.1+
-Gunicorn 21.2+
-```
-
-## Installation
+## Quick Start
 
 ### 1. Clone Repository
 
@@ -103,65 +89,63 @@ git clone https://github.com/cyberfortress/smartxdr-core.git
 cd smartxdr-core
 ```
 
-### 2. Create Virtual Environment
-
-```bash
-python -m venv venv
-
-# Windows
-venv\Scripts\activate
-
-# Linux/Mac
-source venv/bin/activate
-```
-
-### 3. Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Configure Environment
+### 2. Configure Environment
 
 ```bash
 cp .env.example .env
-# Edit .env with your configuration
+# Edit .env with your API keys and configuration
 ```
 
-### 5. Initialize Database
+Required environment variables:
+
+| Variable         | Description            |
+| ---------------- | ---------------------- |
+| `OPENAI_API_KEY` | OpenAI API key for LLM |
+| `SECRET_KEY`     | Flask secret key       |
+
+### 3. Start Services
 
 ```bash
-python scripts/smartxdr_manager.py
-# Follow first-run setup to create admin user
+# Development (builds from source)
+docker compose up -d
+
+# Production (pulls from DockerHub)
+docker compose -f docker-compose.prod.yml up -d
 ```
 
-### 6. Run Application
+### 4. Initialize Admin Account
 
 ```bash
-# Development
-python run.py
+docker exec -it smartxdr-core python scripts/smartxdr_manager.py
+# Follow prompts to create first admin user and API key
+```
 
-# Production
-gunicorn -c gunicorn.conf.py run:app
+### 5. Test API
+
+```bash
+curl -X POST http://localhost:8080/api/ai/ask \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -d '{"query": "What is XDR?"}'
 ```
 
 ## Configuration
 
 ### Environment Variables
 
-| Variable                 | Description                            | Required |
-| ------------------------ | -------------------------------------- | -------- |
-| `OPENAI_API_KEY`         | OpenAI API key for LLM                 | Yes      |
-| `GEMINI_API_KEY`         | Alternative: Google Gemini API key     | No       |
-| `SECRET_KEY`             | Flask secret key for sessions          | Yes      |
-| `SECURITY_PASSWORD_SALT` | Salt for password hashing              | Yes      |
-| `ELASTICSEARCH_HOSTS`    | Elasticsearch URL                      | No       |
-| `ELASTICSEARCH_USERNAME` | Elasticsearch username                 | No       |
-| `ELASTICSEARCH_PASSWORD` | Elasticsearch password                 | No       |
-| `IRIS_API_URL`           | IRIS instance URL                      | No       |
-| `IRIS_API_KEY`           | IRIS API key                           | No       |
-| `TELEGRAM_BOT_TOKEN`     | Telegram bot token                     | No       |
-| `API_AUTH_ENABLED`       | Enable API authentication (true/false) | No       |
+| Variable                 | Description                        | Required |
+| ------------------------ | ---------------------------------- | -------- |
+| `OPENAI_API_KEY`         | OpenAI API key for LLM             | Yes      |
+| `GEMINI_API_KEY`         | Alternative: Google Gemini API key | No       |
+| `SECRET_KEY`             | Flask secret key for sessions      | Yes      |
+| `SECURITY_PASSWORD_SALT` | Salt for password hashing          | Yes      |
+| `ELASTICSEARCH_HOSTS`    | Elasticsearch URL                  | No       |
+| `ELASTICSEARCH_USERNAME` | Elasticsearch username             | No       |
+| `ELASTICSEARCH_PASSWORD` | Elasticsearch password             | No       |
+| `IRIS_API_URL`           | IRIS instance URL                  | No       |
+| `IRIS_API_KEY`           | IRIS API key                       | No       |
+| `TELEGRAM_BOT_TOKEN`     | Telegram bot token                 | No       |
+| `API_AUTH_ENABLED`       | Enable API authentication          | No       |
 
 ### Endpoint Configuration
 
@@ -171,28 +155,17 @@ Edit `app/api_config/endpoints.py` to configure:
 - Protected endpoints with permission requirements
 - Rate limits per endpoint
 
-## Usage
+### Docker Compose Override
 
-### Starting the Server
+Create `docker-compose.override.yml` for local customizations:
 
-```bash
-# Development mode
-python run.py
-
-# Server runs at http://localhost:8080
-```
-
-### Quick API Test
-
-```bash
-# Get API key from CLI manager first
-python scripts/smartxdr_manager.py
-
-# Test AI endpoint
-curl -X POST http://localhost:8080/api/ai/ask \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: YOUR_API_KEY" \
-  -d '{"query": "What is XDR?"}'
+```yaml
+services:
+  api:
+    environment:
+      - DEBUG=true
+    volumes:
+      - ./app:/app/app:ro
 ```
 
 ## API Reference
@@ -249,7 +222,8 @@ Authorization: Bearer sxdr_your_api_key_here
 SmartXDR includes a CLI tool for user and API key management.
 
 ```bash
-python scripts/smartxdr_manager.py
+# Local development
+docker exec -it smartxdr-core python scripts/smartxdr_manager.py
 ```
 
 ### Features
@@ -265,26 +239,6 @@ On first run with empty database, the CLI will prompt you to create an initial a
 ### Authentication
 
 CLI requires admin login before accessing management functions.
-
-## Docker Deployment
-
-### Using Docker Compose
-
-```bash
-# Development
-docker-compose up -d
-
-# Production
-docker-compose -f docker-compose.prod.yml up -d
-```
-
-### Build Image
-
-```bash
-docker build -t smartxdr-core:latest .
-```
-
-See `DOCKER_DEPLOYMENT.md` for detailed deployment instructions.
 
 ## Security
 
@@ -307,34 +261,35 @@ Permissions follow the format `resource:action`:
 ### Best Practices
 
 1. Use strong, unique SECRET_KEY in production
-2. Enable SSL/TLS with reverse proxy
+2. Enable SSL/TLS with reverse proxy (included via nginx)
 3. Restrict IP whitelist in production
 4. Rotate API keys periodically
 5. Monitor usage logs for anomalies
 
-## Testing
+## Maintenance
 
-### Run Tests
+### View Logs
 
 ```bash
-# All tests
-pytest
-
-# With coverage
-pytest --cov=app --cov-report=html
-
-# Specific test file
-pytest tests/test_api.py
+docker compose logs -f api
+docker compose logs -f nginx
 ```
 
-### Test Structure
+### Backup Data
 
+```bash
+# Backup volumes
+docker run --rm -v smartxdr-core-data:/data -v $(pwd):/backup alpine tar czf /backup/smartxdr-backup.tar.gz /data
 ```
-tests/
-├── test_api.py           # API endpoint tests
-├── test_llm_service.py   # LLM service tests
-├── test_rag_service.py   # RAG service tests
-└── conftest.py           # Test fixtures
+
+### Update
+
+```bash
+# Pull latest images
+docker compose -f docker-compose.prod.yml pull
+
+# Restart services
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 ## License
@@ -344,9 +299,5 @@ This project is licensed under the Open Software License 3.0 (OSL-3.0).
 See [LICENSE](LICENSE) for details.
 
 ---
-
-## Support
-
-For issues and feature requests, please use the GitHub issue tracker.
 
 **Cyberfortress SmartXDR Core** - Intelligent Security Operations Platform

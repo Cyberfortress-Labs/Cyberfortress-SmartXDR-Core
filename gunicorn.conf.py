@@ -1,8 +1,8 @@
-# Gunicorn configuration file
+# Gunicorn configuration for SmartXDR Core
 import multiprocessing
 
 # Server socket
-bind = "0.0.0.0:8000"
+bind = "0.0.0.0:8080"
 backlog = 2048
 
 # Worker processes
@@ -20,7 +20,7 @@ capture_output = True
 enable_stdio_inheritance = True
 
 # Process naming
-proc_name = "django_gunicorn"
+proc_name = "smartxdr_gunicorn"
 
 # Server mechanics
 daemon = False
