@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# SmartXDR - Deployment Script
-# Usage: ./start [--prod] [command]
+# SmartXDR Core - Deployment Script
+# Usage: ./start [--prod] <command>
 
 set -e
 
@@ -24,56 +24,66 @@ GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-echo -e "${BLUE}[SmartXDR - ${ENV}]${NC} Running: ${GREEN}${COMMAND}${NC}"
+printf "${BLUE}[SmartXDR - ${ENV}]${NC} Running: ${GREEN}${COMMAND}${NC}\n"
 
 case "$COMMAND" in
     setup)
-        echo -e "${YELLOW}Setting up environment...${NC}"
-        # Create required directories
-        mkdir -p data chroma_db logs certs
+        printf "${YELLOW}Setting up environment...${NC}\n"
         
-        # Check .env file
+        mkdir -p data chroma_db logs certs nginx/conf.d
+        
         if [ ! -f .env ]; then
-            echo -e "${RED}Error: .env file not found!${NC}"
-            echo "Please create .env file with required configurations"
-            exit 1
+            if [ -f .env.example ]; then
+                cp .env.example .env
+                printf "${YELLOW}Created .env from .env.example${NC}\n"
+                printf "${RED}Please edit .env with your API keys!${NC}\n"
+            else
+                printf "${RED}Error: .env file not found!${NC}\n"
+                exit 1
+            fi
         fi
         
-        echo -e "${GREEN}✓ Setup complete${NC}"
+        printf "${GREEN}Setup complete${NC}\n"
         ;;
     
     build)
-        echo -e "${YELLOW}Building Docker images...${NC}"
-        # Enable BuildKit for faster builds with cache
+        printf "${YELLOW}Building Docker images...${NC}\n"
         DOCKER_BUILDKIT=1 docker compose -f "$COMPOSE_FILE" build
+        printf "${GREEN}Build complete${NC}\n"
         ;;
     
     up|start)
-        echo -e "${YELLOW}Starting SmartXDR services...${NC}"
+        printf "${YELLOW}Starting SmartXDR services...${NC}\n"
         docker compose -f "$COMPOSE_FILE" up -d
-        echo ""
-        echo -e "${GREEN}✓ Services started successfully!${NC}"
-        echo -e "  API:   ${BLUE}https://localhost:8443${NC}"
-        echo -e "  HTTP:  ${BLUE}http://localhost:8080${NC}"
-        echo -e "  Logs:  ${YELLOW}./start logs${NC}"
+        printf "\n"
+        printf "${GREEN}Services started successfully!${NC}\n"
+        printf "  API:    ${BLUE}http://localhost:8080${NC}\n"
+        printf "  HTTPS:  ${BLUE}https://localhost:8443${NC}\n"
+        printf "  Logs:   ${YELLOW}./start logs${NC}\n"
+        printf "  Manage: ${YELLOW}./start manage${NC}\n"
         ;;
     
     down|stop)
-        echo -e "${YELLOW}Stopping services...${NC}"
+        printf "${YELLOW}Stopping services...${NC}\n"
         docker compose -f "$COMPOSE_FILE" down
-        echo -e "${GREEN}✓ Services stopped${NC}"
+        printf "${GREEN}Services stopped${NC}\n"
         ;;
     
     restart)
-        echo -e "${YELLOW}Restarting services...${NC}"
+        printf "${YELLOW}Restarting services...${NC}\n"
         docker compose -f "$COMPOSE_FILE" restart
-        echo -e "${GREEN}✓ Services restarted${NC}"
+        printf "${GREEN}Services restarted${NC}\n"
         ;;
     
     logs)
-        docker compose -f "$COMPOSE_FILE" logs -f --tail=100
+        SERVICE="${2:-}"
+        if [ -z "$SERVICE" ]; then
+            docker compose -f "$COMPOSE_FILE" logs -f --tail=100
+        else
+            docker compose -f "$COMPOSE_FILE" logs -f --tail=100 "$SERVICE"
+        fi
         ;;
     
     ps|status)
@@ -81,131 +91,143 @@ case "$COMMAND" in
         ;;
     
     shell)
-        echo -e "${BLUE}Opening shell in API container...${NC}"
+        printf "${BLUE}Opening shell in API container...${NC}\n"
         docker compose -f "$COMPOSE_FILE" exec api /bin/bash
         ;;
     
-    admin-init)
-        echo -e "${BLUE}Initializing admin database (Flask-Security)...${NC}"
-        docker compose -f "$COMPOSE_FILE" exec api python scripts/init_admin_db.py
+    manage)
+        printf "${BLUE}Opening SmartXDR Manager...${NC}\n"
+        docker compose -f "$COMPOSE_FILE" exec api python scripts/smartxdr_manager.py
+        ;;
+    
+    health)
+        printf "${YELLOW}Checking service health...${NC}\n"
+        curl -s http://localhost:8080/health | python -m json.tool 2>/dev/null || printf "API not responding\n"
+        ;;
+    
+    quick_rag)
+        DOCS_PATH="${2:-assets}"
+        printf "${BLUE}Running Quick RAG Ingestion...${NC}\n"
+        printf "  Documents path: ${DOCS_PATH}\n"
+        docker compose -f "$COMPOSE_FILE" exec api python scripts/quick_rag_docs.py --path "${DOCS_PATH}"
+        ;;
+    
+    sync_rag)
+        if [ -d "chroma_db" ]; then
+            printf "${BLUE}Syncing local chroma_db to ChromaDB container...${NC}\n"
+            # Copy data to chromadb container volume (correct path is /chroma/chroma)
+            docker cp chroma_db/. smartxdr-chromadb:/chroma/chroma/
+            printf "${GREEN}Sync complete! Restart chromadb to apply.${NC}\n"
+            printf "Run: ./start restart\n"
+        else
+            printf "${YELLOW}No local chroma_db directory found.${NC}\n"
+            printf "Run './start quick_rag <path>' to ingest documents first.\n"
+        fi
         ;;
     
     clean)
-        echo -e "${RED}Removing all containers and volumes...${NC}"
-        read -p "Are you sure? (y/N) " -n 1 -r
+        printf "${RED}Removing all containers and volumes...${NC}\n"
+        read -p "Are you sure? This will delete all data! (y/N) " -n 1 -r
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             docker compose -f "$COMPOSE_FILE" down -v
-            docker system prune -f
-            echo -e "${GREEN}✓ Cleaned up${NC}"
+            printf "${GREEN}Cleaned up${NC}\n"
+        else
+            printf "${YELLOW}Cancelled${NC}\n"
         fi
         ;;
     
     rebuild)
-        echo -e "${YELLOW}Rebuilding from scratch...${NC}"
+        printf "${YELLOW}Rebuilding from scratch...${NC}\n"
         docker compose -f "$COMPOSE_FILE" down
         docker compose -f "$COMPOSE_FILE" build --no-cache
         docker compose -f "$COMPOSE_FILE" up -d
-        echo -e "${GREEN}✓ Rebuild complete${NC}"
+        printf "${GREEN}Rebuild complete${NC}\n"
         ;;
     
     pull)
-        echo -e "${YELLOW}Pulling latest images...${NC}"
+        printf "${YELLOW}Pulling latest images...${NC}\n"
         docker compose -f "$COMPOSE_FILE" pull
+        printf "${GREEN}Pull complete${NC}\n"
+        ;;
+    
+    update)
+        printf "${YELLOW}Updating SmartXDR...${NC}\n"
+        docker compose -f "$COMPOSE_FILE" pull
+        docker compose -f "$COMPOSE_FILE" up -d
+        printf "${GREEN}Update complete${NC}\n"
         ;;
     
     backup)
         BACKUP_DIR="backups/$(date +%Y%m%d_%H%M%S)"
         mkdir -p "$BACKUP_DIR"
-        echo -e "${YELLOW}Backing up data to ${BACKUP_DIR}...${NC}"
-        docker compose -f "$COMPOSE_FILE" exec api tar czf - /app/data /app/chroma_db > "$BACKUP_DIR/smartxdr-backup.tar.gz"
-        echo -e "${GREEN}✓ Backup complete${NC}"
+        printf "${YELLOW}Backing up data to ${BACKUP_DIR}...${NC}\n"
+        
+        docker run --rm \
+            -v smartxdr-core-data:/data:ro \
+            -v "$(pwd)/$BACKUP_DIR":/backup \
+            alpine tar czf /backup/data.tar.gz -C /data .
+        
+        docker run --rm \
+            -v smartxdr-chroma-db:/data:ro \
+            -v "$(pwd)/$BACKUP_DIR":/backup \
+            alpine tar czf /backup/chroma.tar.gz -C /data .
+        
+        printf "${GREEN}Backup complete: ${BACKUP_DIR}${NC}\n"
         ;;
     
-    help|*)
-        echo -e "${BLUE}SmartXDR Deployment Script${NC}"
-        echo ""
-        echo "Usage: ./start [--prod] [command]"
-        echo ""
-        echo "Environment:"
-        echo "  ${GREEN}--prod${NC}      - Use production configuration (docker-compose.prod.yml)"
-        echo "  ${GREEN}(default)${NC}   - Use development configuration (docker-compose.yml)"
-        echo ""
-        echo "Commands:"
-        echo "  ${GREEN}setup${NC}       - Initial setup (create directories, check config)"
-        echo "  ${GREEN}build${NC}       - Build Docker images (dev only)"
-        echo "  ${GREEN}start${NC}       - Start all services"
-        echo "  ${GREEN}stop${NC}        - Stop all services"
-        echo "  ${GREEN}restart${NC}     - Restart all services"
-        echo "  ${GREEN}logs${NC}        - View service logs"
-        echo "  ${GREEN}status${NC}      - Show service status"
-        echo "  ${GREEN}shell${NC}       - Open shell in API container"
-        echo "  ${GREEN}admin-init${NC}  - Initialize admin database (Flask-Security + Flask-Admin)"
-        echo "  ${GREEN}clean${NC}       - Remove all containers and volumes"
-        echo "  ${GREEN}rebuild${NC}     - Rebuild from scratch"
-        echo "  ${GREEN}pull${NC}        - Pull latest images from registry"
-        echo "  ${GREEN}backup${NC}      - Backup data and embeddings"
-        echo "  ${GREEN}help${NC}        - Show this help"
-        echo ""
-        echo "Examples:"
-        echo "  ${YELLOW}# Development${NC}"
-        echo "  ${YELLOW}./start setup${NC}"
-        echo "  ${YELLOW}./start build${NC}"
-        echo "  ${YELLOW}./start start${NC}"
-        echo ""
-        echo "  ${YELLOW}# Production (uses DockerHub images)${NC}"
-        echo "  ${YELLOW}./start --prod pull${NC}"
-        echo "  ${YELLOW}./start --prod start${NC}"
-        echo ""
-        echo "  ${YELLOW}# Management${NC}"
-        echo "  ${YELLOW}./start admin-init${NC}  ${YELLOW}# First time - create admin user and database${NC}"
-        echo "  ${YELLOW}./start logs${NC}"
-        echo ""
-        echo "Access URLs:"
-        echo "  HTTPS: ${BLUE}https://localhost:8443${NC}"
-        echo "  HTTP:  ${BLUE}http://localhost:8080${NC} ${YELLOW}(redirects to HTTPS)${NC}"
-        echo "  Admin Panel: ${BLUE}https://localhost:8443/admin${NC} ${YELLOW}(admin@cyberfortress.local / admin123)${NC}"
-        ;;
-esac
-
-    help|--help|-h|"")
-        echo "Library Management System - Deployment Script"
-        echo ""
-        echo "Usage: ./start [--prod|--dev] <command>"
-        echo ""
-        echo "Environment flags:"
-        echo "  --dev           Use development environment (default)"
-        echo "  --prod          Use production environment"
-        echo ""
-        echo "Commands:"
-        echo "  setup           Initial setup (certificates, .env)"
-        echo "  build           Build Docker images"
-        echo "  up, start       Start all services"
-        echo "  down, stop      Stop all services"
-        echo "  restart         Restart all services"
-        echo "  logs            View logs"
-        echo "  makemigrations  Create new migrations"
-        echo "  migrate         Run database migrations"
-        echo "  initdata        Initialize sample data"
-        echo "  createsuperuser Create Django superuser"
-        echo "  shell           Open Django shell"
-        echo "  collectstatic   Collect static files"
-        echo "  clean           Remove containers and volumes"
-        echo "  rebuild         Clean rebuild"
-        echo "  help            Show this help"
-        echo ""
-        echo "Examples:"
-        echo "  ./start build                 # Build development"
-        echo "  ./start --prod build          # Build production"
-        echo "  ./start --prod up             # Start production"
-        echo "  ./start --dev migrate         # Run dev migrations"
-        echo "  ./start logs                  # View dev logs"
-        echo ""
+    help|--help|-h)
+        printf "${BLUE}SmartXDR Core - Deployment Script${NC}\n"
+        printf "\n"
+        printf "Usage: ./start [--prod] <command>\n"
+        printf "\n"
+        printf "Environment:\n"
+        printf "  ${GREEN}--prod${NC}      Use production configuration\n"
+        printf "  ${GREEN}(default)${NC}   Use development configuration\n"
+        printf "\n"
+        printf "Commands:\n"
+        printf "  ${GREEN}setup${NC}       Initial setup (directories, .env)\n"
+        printf "  ${GREEN}build${NC}       Build Docker images\n"
+        printf "  ${GREEN}start${NC}       Start all services\n"
+        printf "  ${GREEN}stop${NC}        Stop all services\n"
+        printf "  ${GREEN}restart${NC}     Restart all services\n"
+        printf "  ${GREEN}logs${NC}        View service logs (./start logs [service])\n"
+        printf "  ${GREEN}status${NC}      Show service status\n"
+        printf "  ${GREEN}shell${NC}       Open shell in API container\n"
+        printf "  ${GREEN}manage${NC}      Open SmartXDR Manager CLI\n"
+        printf "  ${GREEN}health${NC}      Check API health\n"
+        printf "  ${GREEN}quick_rag${NC}   Ingest documents to RAG (./start quick_rag [path])\n"
+        printf "  ${GREEN}sync_rag${NC}    Copy local chroma_db to container\n"
+        printf "  ${GREEN}clean${NC}       Remove containers and volumes\n"
+        printf "  ${GREEN}rebuild${NC}     Rebuild from scratch\n"
+        printf "  ${GREEN}pull${NC}        Pull latest images\n"
+        printf "  ${GREEN}update${NC}      Pull and restart services\n"
+        printf "  ${GREEN}backup${NC}      Backup data and embeddings\n"
+        printf "  ${GREEN}help${NC}        Show this help\n"
+        printf "\n"
+        printf "Examples:\n"
+        printf "  ${YELLOW}# Quick start${NC}\n"
+        printf "  ./start setup\n"
+        printf "  ./start build\n"
+        printf "  ./start start\n"
+        printf "  ./start manage    # Create admin and API keys\n"
+        printf "\n"
+        printf "  ${YELLOW}# Production${NC}\n"
+        printf "  ./start --prod pull\n"
+        printf "  ./start --prod start\n"
+        printf "\n"
+        printf "  ${YELLOW}# Maintenance${NC}\n"
+        printf "  ./start logs api\n"
+        printf "  ./start backup\n"
+        printf "\n"
+        printf "Access URLs:\n"
+        printf "  HTTP:  ${BLUE}http://localhost:8080${NC}\n"
+        printf "  HTTPS: ${BLUE}https://localhost:8443${NC}\n"
         ;;
     
     *)
-        echo -e "${YELLOW}Unknown command: $COMMAND${NC}"
-        echo "Run './start help' for usage information"
+        printf "${RED}Unknown command: $COMMAND${NC}\n"
+        printf "Run './start help' for usage information\n"
         exit 1
         ;;
 esac

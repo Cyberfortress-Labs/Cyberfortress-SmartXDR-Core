@@ -43,10 +43,11 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Copy installed packages from builder
 COPY --from=builder /install /usr/local
 
-# Create non-root user and directories
+# Create non-root user and directories with proper permissions
 RUN useradd -m -u 1000 smartxdr && \
     mkdir -p /app/data /app/logs /app/chroma_db && \
-    chown -R smartxdr:smartxdr /app
+    chown -R smartxdr:smartxdr /app && \
+    chmod -R 755 /app/chroma_db
 
 # Copy application code
 COPY --chown=smartxdr:smartxdr . .

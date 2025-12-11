@@ -26,6 +26,9 @@ numpy>=1.24.0
 # HTTP Client
 requests>=2.31.0
 
+# Elasticsearch
+elasticsearch>=8.0.0
+
 # Microsoft Teams Integration
 msal>=1.24.0
 beautifulsoup4>=4.12.0

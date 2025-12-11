@@ -297,7 +297,3 @@ docker compose -f docker-compose.prod.yml up -d
 This project is licensed under the Open Software License 3.0 (OSL-3.0).
 
 See [LICENSE](LICENSE) for details.
-
----
-
-**Cyberfortress SmartXDR Core** - Intelligent Security Operations Platform

@@ -32,12 +32,15 @@ MITRE_DIR = os.path.join(ASSETS_DIR, "mitre-attck")
 # Database settings
 DB_PATH = str(PROJECT_ROOT / "chroma_db")
 COLLECTION_NAME = "soc_ecosystem"
-CHROMA_DB_PATH = DB_PATH  # Alias for RAG module
+CHROMA_DB_PATH = DB_PATH  # Alias for RAG module (local mode)
+
+# ChromaDB HTTP Client settings (Docker mode)
+CHROMA_HOST = os.environ.get('CHROMA_HOST', None)  # Set to 'chromadb' in Docker
+CHROMA_PORT = int(os.environ.get('CHROMA_PORT', '8000'))
 
 # OpenAI model settings
 EMBEDDING_MODEL = "text-embedding-3-small"
 CHAT_MODEL = "gpt-5-mini"  # OpenAI's efficient small model
-# Note: gpt-4o-mini supports temperature 0-2
 
 # OpenAI client configuration (following best practices)
 # https://platform.openai.com/docs/api-reference

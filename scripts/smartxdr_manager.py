@@ -68,9 +68,20 @@ def generate_password(length: int = 24) -> str:
     return ''.join(password)
 
 
+def safe_input(prompt: str = "") -> str:
+    """Get input with proper UTF-8 encoding handling for Docker"""
+    import builtins
+    try:
+        value = builtins.input(prompt)
+        # Encode and decode to remove surrogate characters
+        return value.encode('utf-8', errors='replace').decode('utf-8').strip()
+    except UnicodeError:
+        return ""
+
+
 def confirm(prompt: str) -> bool:
     """Ask for confirmation"""
-    response = input(f"{prompt} [y/N]: ").strip().lower()
+    response = safe_input(f"{prompt} [y/N]: ").lower()
     return response == 'y'
 
 
@@ -114,14 +125,14 @@ def create_first_admin():
     
     # Get email (normalize to lowercase)
     while True:
-        email = input("  Email: ").strip().lower()
+        email = safe_input("  Email: ").strip().lower()
         if email and '@' in email:
             break
         print("  ✗ Please enter a valid email")
     
     # Get username (normalize to lowercase)
     while True:
-        username = input("  Username: ").strip().lower()
+        username = safe_input("  Username: ").strip().lower()
         if username and len(username) >= 3:
             break
         print("  ✗ Username must be at least 3 characters")
@@ -191,7 +202,7 @@ def login_admin() -> bool:
         remaining = max_attempts - attempt
         print(f"\n  Attempts remaining: {remaining}")
         
-        username_or_email = input("  Username or Email: ").strip().lower()
+        username_or_email = safe_input("  Username or Email: ").strip().lower()
         if not username_or_email:
             continue
             
@@ -262,7 +273,7 @@ def create_user():
     print_header("Create New User")
     
     # Get email (normalize to lowercase)
-    email = input("\n  Email: ").strip().lower()
+    email = safe_input("\n  Email: ").strip().lower()
     if not email or '@' not in email:
         print("  ✗ Invalid email")
         return
@@ -272,7 +283,7 @@ def create_user():
         return
     
     # Get username (normalize to lowercase)
-    username = input("  Username: ").strip().lower()
+    username = safe_input("  Username: ").strip().lower()
     if not username:
         print("  ✗ Username required")
         return
@@ -284,11 +295,11 @@ def create_user():
     # Generate or enter password
     gen_password = generate_password()
     print(f"\n  💡 Generated password: {gen_password}")
-    password = input("  Press Enter to use, or type custom: ").strip() or gen_password
+    password = safe_input("  Press Enter to use, or type custom: ").strip() or gen_password
     
     # Select role
     print("\n  Roles: 1=admin, 2=user")
-    role_choice = input("  Select role [1]: ").strip() or '1'
+    role_choice = safe_input("  Select role [1]: ").strip() or '1'
     role_name = 'admin' if role_choice == '1' else 'user'
     
     role = Role.query.filter_by(name=role_name).first()
@@ -320,7 +331,7 @@ def delete_user():
     print_header("Delete User")
     list_users()
     
-    email = input("\n  Enter email to delete: ").strip().lower()
+    email = safe_input("\n  Enter email to delete: ").strip().lower()
     user = User.query.filter_by(email=email).first()
     
     if not user:
@@ -340,7 +351,7 @@ def reset_password():
     print_header("Reset Password")
     list_users()
     
-    email = input("\n  Enter email: ").strip().lower()
+    email = safe_input("\n  Enter email: ").strip().lower()
     user = User.query.filter_by(email=email).first()
     
     if not user:
@@ -349,7 +360,7 @@ def reset_password():
     
     gen_password = generate_password()
     print(f"\n  💡 Generated password: {gen_password}")
-    password = input("  Press Enter to use, or type custom: ").strip() or gen_password
+    password = safe_input("  Press Enter to use, or type custom: ").strip() or gen_password
     
     user.password = hash_password(password)
     db.session.commit()
@@ -369,7 +380,7 @@ def user_management_menu():
             "Reset Password"
         ])
         
-        choice = input("\n  Select option: ").strip()
+        choice = safe_input("\n  Select option: ").strip()
         
         if choice == '0':
             break
@@ -415,7 +426,7 @@ def create_api_key():
     print_header("Create New API Key")
     
     # Get name (normalize to lowercase)
-    name = input("\n  Key name: ").strip().lower()
+    name = safe_input("\n  Key name: ").strip().lower()
     if not name:
         print("  ✗ Name required")
         return
@@ -425,16 +436,16 @@ def create_api_key():
         return
     
     # Get description
-    description = input("  Description (optional): ").strip()
+    description = safe_input("  Description (optional): ").strip()
     
     # Get permissions
     print("\n  Permissions (comma-separated, or * for all):")
     print("  Examples: *, ai:ask, enrich:*, triage:read")
-    perm_input = input("  Permissions [*]: ").strip() or '*'
+    perm_input = safe_input("  Permissions [*]: ").strip() or '*'
     permissions = [p.strip() for p in perm_input.split(',')]
     
     # Get rate limit
-    rate_input = input("  Rate limit per minute [60]: ").strip() or '60'
+    rate_input = safe_input("  Rate limit per minute [60]: ").strip() or '60'
     try:
         rate_limit = int(rate_input)
     except ValueError:
@@ -446,7 +457,7 @@ def create_api_key():
     print("  2. 30 days")
     print("  3. 90 days")
     print("  4. 1 year")
-    exp_choice = input("  Select [1]: ").strip() or '1'
+    exp_choice = safe_input("  Select [1]: ").strip() or '1'
     
     expires_at = None
     if exp_choice == '2':
@@ -493,7 +504,7 @@ def delete_api_key():
     print_header("Delete API Key")
     list_api_keys()
     
-    name = input("\n  Enter key name to delete: ").strip().lower()
+    name = safe_input("\n  Enter key name to delete: ").strip().lower()
     key = APIKeyModel.query.filter_by(name=name).first()
     
     if not key:
@@ -515,7 +526,7 @@ def toggle_api_key():
     print_header("Enable/Disable API Key")
     list_api_keys()
     
-    name = input("\n  Enter key name: ").strip().lower()
+    name = safe_input("\n  Enter key name: ").strip().lower()
     key = APIKeyModel.query.filter_by(name=name).first()
     
     if not key:
@@ -534,7 +545,7 @@ def view_key_usage():
     print_header("API Key Usage")
     list_api_keys()
     
-    name = input("\n  Enter key name (or Enter for all): ").strip()
+    name = safe_input("\n  Enter key name (or Enter for all): ").strip()
     
     if name:
         key = APIKeyModel.query.filter_by(name=name).first()
@@ -574,7 +585,7 @@ def api_key_management_menu():
             "View Usage Logs"
         ])
         
-        choice = input("\n  Select option: ").strip()
+        choice = safe_input("\n  Select option: ").strip()
         
         if choice == '0':
             break
@@ -650,7 +661,7 @@ def main_menu(app):
 ╚══════════════════════════════════════════════════════════╝
             """)
             
-            choice = input("  Select option: ").strip()
+            choice = safe_input("  Select option: ").strip()
             
             if choice == '0':
                 print("\n  Goodbye! 👋\n")

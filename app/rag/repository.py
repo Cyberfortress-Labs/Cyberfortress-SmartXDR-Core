@@ -36,21 +36,36 @@ class RAGRepository:
         Initialize RAG Repository
         
         Args:
-            persist_directory: Path to ChromaDB persistent storage
+            persist_directory: Path to ChromaDB persistent storage (local mode only)
             collection_name: Name of the collection
             embedding_function: Optional custom embedding function
         """
         self.persist_directory = Path(persist_directory)
         self.collection_name = collection_name
         
-        # Initialize ChromaDB client
-        self.client = chromadb.PersistentClient(
-            path=str(self.persist_directory),
-            settings=Settings(
-                anonymized_telemetry=False,
-                allow_reset=True
+        # Check if we should use HTTP client (Docker mode) or persistent client (local mode)
+        from app.config import CHROMA_HOST, CHROMA_PORT
+        
+        if CHROMA_HOST:
+            # Docker mode: Connect to ChromaDB service via HTTP
+            logger.info(f"Connecting to ChromaDB at {CHROMA_HOST}:{CHROMA_PORT}")
+            self.client = chromadb.HttpClient(
+                host=CHROMA_HOST,
+                port=CHROMA_PORT,
+                settings=Settings(
+                    anonymized_telemetry=False,
+                )
             )
-        )
+        else:
+            # Local mode: Use persistent client
+            logger.info(f"Using local ChromaDB at {self.persist_directory}")
+            self.client = chromadb.PersistentClient(
+                path=str(self.persist_directory),
+                settings=Settings(
+                    anonymized_telemetry=False,
+                    allow_reset=True
+                )
+            )
         
         # Set up embedding function
         if embedding_function is None:
@@ -62,7 +77,7 @@ class RAGRepository:
         # Get or create collection
         self.collection = self._get_or_create_collection()
         
-        logger.info(f"RAGRepository initialized: collection={collection_name}, path={persist_directory}")
+        logger.info(f"RAGRepository initialized: collection={collection_name}")
     
     def _get_or_create_collection(self):
         """Get or create ChromaDB collection"""

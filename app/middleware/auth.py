@@ -366,15 +366,23 @@ def require_api_key(permission_or_func=None):
                     response_time_ms = int((datetime.now() - g.request_start_time).total_seconds() * 1000)
                     status_code = response[1] if isinstance(response, tuple) else 200
                     
-                    manager.api_key_model.log_usage(
-                        api_key=api_key,
-                        endpoint=request.path,
-                        method=request.method,
-                        client_ip=client_ip,
-                        user_agent=request.headers.get('User-Agent', ''),
-                        status_code=status_code,
-                        response_time_ms=response_time_ms
-                    )
+                    from app.models.db_models import APIKeyUsage
+                    
+                    # Find key by hash
+                    key_model = APIKeyModel.query.filter_by(name=key_info['name']).first()
+                    if key_model:
+                        usage_log = APIKeyUsage(
+                            key_hash=key_model.key_hash,
+                            endpoint=request.path,
+                            method=request.method,
+                            client_ip=client_ip,
+                            user_agent=request.headers.get('User-Agent', ''),
+                            status_code=status_code,
+                            response_time_ms=response_time_ms
+                        )
+                        db.session.add(usage_log)
+                        db.session.commit()
+                        logger.info(f"Logged API usage for {key_info['name']}")
                 except Exception as e:
                     logger.warning(f"Failed to log API usage: {e}")
                 
