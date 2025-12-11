@@ -24,6 +24,14 @@ def get_telegram_middleware() -> TelegramMiddlewareService:
         _middleware_instance.get_bot_info()
         _initialized = True
         print(f"[Telegram] Middleware initialized, bot: @{_middleware_instance._bot_info.get('username') if _middleware_instance._bot_info else 'unknown'}")
+        
+        # Auto-start polling if webhook is disabled
+        webhook_enabled = os.getenv('TELEGRAM_WEBHOOK_ENABLED', 'true').lower() == 'true'
+        bot_enabled = os.getenv('TELEGRAM_BOT_ENABLED', 'true').lower() == 'true'
+        
+        if bot_enabled and not webhook_enabled:
+            print("[Telegram] Auto-starting polling mode (webhook disabled)...")
+            _middleware_instance.start_polling(threaded=True)
     return _middleware_instance
 
 
