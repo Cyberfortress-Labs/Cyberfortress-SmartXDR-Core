@@ -131,19 +131,16 @@ case "$COMMAND" in
         ;;
     
     sync_rag)
-        printf "${YELLOW}Note: sync_rag is deprecated with volume mounting.${NC}\n"
+        printf "${BLUE}RAG Database Management:${NC}\n"
         printf "\n"
-        printf "${BLUE}Use these methods instead:${NC}\n"
-        printf "  1. ${GREEN}Mount local DB:${NC} Place chroma_db/ folder and restart\n"
-        printf "     ./start restart\n"
+        printf "  ${GREEN}1. Mount existing DB:${NC}\n"
+        printf "     Place chroma_db/ in project root → ./start restart\n"
         printf "\n"
-        printf "  2. ${GREEN}Ingest documents:${NC} Use quick_rag command\n"
-        printf "     ./start quick_rag <documents_path>\n"
+        printf "  ${GREEN}2. Ingest documents:${NC}\n"
+        printf "     ./start quick_rag <path>\n"
         printf "\n"
-        printf "  3. ${GREEN}Restore backup:${NC} Extract backup to current directory and restart\n"
-        printf "     mkdir -p chroma_db\n"
-        printf "     tar xzf backup/chroma.tar.gz -C .\n"
-        printf "     ./start restart\n"
+        printf "  ${GREEN}3. Restore backup:${NC}\n"
+        printf "     tar xzf backup/chroma.tar.gz -C . && ./start restart\n"
         ;;
     
     clean)
