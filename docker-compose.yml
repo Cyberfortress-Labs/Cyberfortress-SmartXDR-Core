@@ -44,9 +44,9 @@ services:
       chromadb:
         condition: service_started
     volumes:
-      # Persistent data
-      - api-data:/app/data
-      - api-logs:/app/logs
+      # Persistent data - bind mount to preserve data on host
+      - ./data:/app/data
+      - ./logs:/app/logs
       # Read-only configs
       - ./certs:/app/certs:ro
       - ./prompts:/app/prompts:ro
@@ -95,20 +95,10 @@ networks:
     name: smartxdr-network
 
 volumes:
-  # API data (API keys database, cache)
-  api-data:
-    driver: local
-    name: smartxdr-core-data
-  
   # Vector embeddings database
   chroma-db:
     driver: local
     name: smartxdr-chroma-db
-  
-  # Application logs
-  api-logs:
-    driver: local
-    name: smartxdr-core-logs
   
   # Nginx logs
   nginx-logs:
