@@ -45,17 +45,41 @@ class RAGRepository:
         
         # Check if we should use HTTP client (Docker mode) or persistent client (local mode)
         from app.config import CHROMA_HOST, CHROMA_PORT
+        import socket
         
+        # Try to connect to ChromaDB service (Docker or external)
         if CHROMA_HOST:
-            # Docker mode: Connect to ChromaDB service via HTTP
-            logger.info(f"Connecting to ChromaDB at {CHROMA_HOST}:{CHROMA_PORT}")
-            self.client = chromadb.HttpClient(
-                host=CHROMA_HOST,
-                port=CHROMA_PORT,
-                settings=Settings(
-                    anonymized_telemetry=False,
+            try:
+                # Test if ChromaDB service is reachable
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(2)
+                result = sock.connect_ex((CHROMA_HOST, CHROMA_PORT))
+                sock.close()
+                
+                if result == 0:
+                    # Service is reachable - use HTTP client
+                    logger.info(f"Connecting to ChromaDB at {CHROMA_HOST}:{CHROMA_PORT}")
+                    self.client = chromadb.HttpClient(
+                        host=CHROMA_HOST,
+                        port=CHROMA_PORT,
+                        settings=Settings(
+                            anonymized_telemetry=False,
+                        )
+                    )
+                else:
+                    # Service not reachable - fall back to local mode
+                    logger.warning(f"ChromaDB service at {CHROMA_HOST}:{CHROMA_PORT} not reachable, using local persistent client")
+                    raise ConnectionError("ChromaDB service not available")
+            except Exception as e:
+                # Connection failed - use local persistent client
+                logger.warning(f"Failed to connect to ChromaDB service: {e}")
+                logger.info(f"Using local ChromaDB at {self.persist_directory}")
+                self.client = chromadb.PersistentClient(
+                    path=str(self.persist_directory),
+                    settings=Settings(
+                        anonymized_telemetry=False,
+                    )
                 )
-            )
         else:
             # Local mode: Use persistent client
             logger.info(f"Using local ChromaDB at {self.persist_directory}")

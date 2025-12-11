@@ -3,6 +3,13 @@ Cyberfortress SmartXDR Core - Flask Application Entry Point
 """
 import os
 import sys
+
+# Fix UTF-8 encoding for Windows console
+if sys.platform == 'win32':
+    os.environ['PYTHONIOENCODING'] = 'utf-8'
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+
 import time
 import signal
 import atexit
