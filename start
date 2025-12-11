@@ -69,10 +69,16 @@ case "$COMMAND" in
             export CHROMA_DB_SOURCE="chroma-db"
         fi
         
+        # Check for local SQLite database
+        if [ -f "data/smartxdr.db" ]; then
+            printf "${GREEN}✓ Found local database - mounting data/smartxdr.db${NC}\n"
+        else
+            printf "${YELLOW}⚠ No local database found - will create new database${NC}\n"
+        fi
+        
         docker compose -f "$COMPOSE_FILE" up -d
         printf "\n"
         printf "${GREEN}Services started successfully!${NC}\n"
-        printf "  API:    ${BLUE}http://localhost:8080${NC}\n"
         printf "  HTTPS:  ${BLUE}https://localhost:8443${NC}\n"
         printf "  Logs:   ${YELLOW}./start logs${NC}\n"
         printf "  Manage: ${YELLOW}./start manage${NC}\n"
