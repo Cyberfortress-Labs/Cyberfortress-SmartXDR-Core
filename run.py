@@ -33,12 +33,23 @@ def find_cloudflared():
         return cloudflared
     
     # Common paths on Windows
-    paths = [
+    windows_paths = [
         r"C:\Program Files\cloudflared\cloudflared.exe",
         r"C:\Program Files (x86)\cloudflared\cloudflared.exe",
         os.path.expandvars(r"%LOCALAPPDATA%\cloudflared\cloudflared.exe"),
     ]
-    for path in paths:
+    
+    # Common paths on Linux
+    linux_paths = [
+        "/usr/local/bin/cloudflared",
+        "/usr/bin/cloudflared",
+        "/opt/cloudflared/cloudflared",
+        os.path.expanduser("~/.local/bin/cloudflared"),
+    ]
+    
+    # Try all paths based on OS
+    all_paths = windows_paths if os.name == 'nt' else linux_paths
+    for path in all_paths:
         if os.path.exists(path):
             return path
     return None

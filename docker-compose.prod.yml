@@ -78,7 +78,8 @@ services:
     ports:
       - "${CHROMA_PORT:-8000}:8000"  # ChromaDB API
     volumes:
-      - chroma-db:/chroma/chroma
+      # Mount to /data (ChromaDB's default persist path)
+      - ${CHROMA_DB_SOURCE:-chroma-db}:/data
     environment:
       - IS_PERSISTENT=TRUE
       - ANONYMIZED_TELEMETRY=FALSE

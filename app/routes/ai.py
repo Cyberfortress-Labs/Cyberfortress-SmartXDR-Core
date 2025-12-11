@@ -65,7 +65,24 @@ def ask_llm():
                 'message': 'Content-Type must be application/json'
             }), 400
         
-        data = request.get_json()
+        # Get JSON with proper UTF-8 encoding handling
+        try:
+            data = request.get_json(force=True, silent=False)
+            if data is None:
+                # Fallback: manually decode with UTF-8
+                import json
+                data = json.loads(request.get_data(as_text=True))
+        except UnicodeDecodeError:
+            # Handle non-UTF-8 encoded requests
+            import json
+            raw_data = request.get_data()
+            data = json.loads(raw_data.decode('utf-8', errors='replace'))
+        except Exception as e:
+            logger.error(f"Failed to parse JSON: {e}")
+            return jsonify({
+                'status': 'error',
+                'message': f'Invalid JSON format: {str(e)}'
+            }), 400
         
         # Validate required fields
         if 'query' not in data:

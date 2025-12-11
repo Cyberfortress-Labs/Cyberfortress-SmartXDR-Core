@@ -264,7 +264,7 @@ def require_api_key(permission_or_func=None):
                 response_time_ms = int((datetime.now() - g.request_start_time).total_seconds() * 1000)
                 status_code = response[1] if isinstance(response, tuple) else 200
                 
-                # Find key by hash
+                # Find key by name
                 key_model = APIKeyModel.query.filter_by(name=key_info['name']).first()
                 if key_model:
                     usage_log = APIKeyUsage(
@@ -278,8 +278,10 @@ def require_api_key(permission_or_func=None):
                     )
                     db.session.add(usage_log)
                     db.session.commit()
+                else:
+                    logger.debug(f"API key model not found for logging: {key_info['name']}")
             except Exception as e:
-                logger.warning(f"Failed to log API usage: {e}")
+                logger.warning(f"Failed to log API usage: {e}", exc_info=True)
             
             return response
         return api_key_protected_function
@@ -368,7 +370,7 @@ def require_api_key(permission_or_func=None):
                     
                     from app.models.db_models import APIKeyUsage
                     
-                    # Find key by hash
+                    # Find key by name
                     key_model = APIKeyModel.query.filter_by(name=key_info['name']).first()
                     if key_model:
                         usage_log = APIKeyUsage(
@@ -383,8 +385,10 @@ def require_api_key(permission_or_func=None):
                         db.session.add(usage_log)
                         db.session.commit()
                         logger.info(f"Logged API usage for {key_info['name']}")
+                    else:
+                        logger.debug(f"API key model not found for logging: {key_info['name']}")
                 except Exception as e:
-                    logger.warning(f"Failed to log API usage: {e}")
+                    logger.warning(f"Failed to log API usage: {e}", exc_info=True)
                 
                 return response
             return api_key_protected_function

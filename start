@@ -56,6 +56,19 @@ case "$COMMAND" in
     
     up|start)
         printf "${YELLOW}Starting SmartXDR services...${NC}\n"
+        
+        # Check for local chroma_db and set environment variable
+        if [ -d "chroma_db" ] && [ -n "$(ls -A chroma_db 2>/dev/null)" ]; then
+            printf "${GREEN}✓ Found local chroma_db - mounting as volume${NC}\n"
+            export CHROMA_DB_SOURCE="./chroma_db"
+        else
+            printf "${YELLOW}⚠ No local chroma_db found - using Docker volume${NC}\n"
+            if [ "$ENV" = "prod" ]; then
+                printf "${YELLOW}  RAG will start empty. Ingest documents after deployment.${NC}\n"
+            fi
+            export CHROMA_DB_SOURCE="chroma-db"
+        fi
+        
         docker compose -f "$COMPOSE_FILE" up -d
         printf "\n"
         printf "${GREEN}Services started successfully!${NC}\n"
@@ -63,6 +76,11 @@ case "$COMMAND" in
         printf "  HTTPS:  ${BLUE}https://localhost:8443${NC}\n"
         printf "  Logs:   ${YELLOW}./start logs${NC}\n"
         printf "  Manage: ${YELLOW}./start manage${NC}\n"
+        
+        if [ "$CHROMA_DB_SOURCE" = "chroma-db" ]; then
+            printf "\n"
+            printf "${BLUE}ℹ To ingest documents: ${YELLOW}./start quick_rag <path>${NC}\n"
+        fi
         ;;
     
     down|stop)
@@ -113,16 +131,19 @@ case "$COMMAND" in
         ;;
     
     sync_rag)
-        if [ -d "chroma_db" ]; then
-            printf "${BLUE}Syncing local chroma_db to ChromaDB container...${NC}\n"
-            # Copy data to chromadb container volume (correct path is /chroma/chroma)
-            docker cp chroma_db/. smartxdr-chromadb:/chroma/chroma/
-            printf "${GREEN}Sync complete! Restart chromadb to apply.${NC}\n"
-            printf "Run: ./start restart\n"
-        else
-            printf "${YELLOW}No local chroma_db directory found.${NC}\n"
-            printf "Run './start quick_rag <path>' to ingest documents first.\n"
-        fi
+        printf "${YELLOW}Note: sync_rag is deprecated with volume mounting.${NC}\n"
+        printf "\n"
+        printf "${BLUE}Use these methods instead:${NC}\n"
+        printf "  1. ${GREEN}Mount local DB:${NC} Place chroma_db/ folder and restart\n"
+        printf "     ./start restart\n"
+        printf "\n"
+        printf "  2. ${GREEN}Ingest documents:${NC} Use quick_rag command\n"
+        printf "     ./start quick_rag <documents_path>\n"
+        printf "\n"
+        printf "  3. ${GREEN}Restore backup:${NC} Extract backup to current directory and restart\n"
+        printf "     mkdir -p chroma_db\n"
+        printf "     tar xzf backup/chroma.tar.gz -C .\n"
+        printf "     ./start restart\n"
         ;;
     
     clean)
