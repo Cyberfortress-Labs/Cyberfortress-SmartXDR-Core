@@ -4,6 +4,10 @@ SmartXDR Management Console
 CLI tool for managing Users and API Keys
 Usage: python scripts/smartxdr_manager.py
 """
+import warnings
+warnings.filterwarnings('ignore', category=UserWarning, module='passlib')
+warnings.filterwarnings('ignore', category=DeprecationWarning)
+
 import sys
 import os
 import secrets
@@ -504,7 +508,6 @@ def main_menu(app):
 def main():
     """Main entry point"""
     try:
-        print("\n  🚀 Initializing SmartXDR...")
         app = create_app()
         main_menu(app)
     except KeyboardInterrupt:
