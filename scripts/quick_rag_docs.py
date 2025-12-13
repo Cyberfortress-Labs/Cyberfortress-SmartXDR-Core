@@ -14,14 +14,14 @@ Features:
 
 Usage:
     # Direct mode (fastest)
-    python scripts/ingest_optimized.py /path/to/docs --limit 10
-    python scripts/ingest_optimized.py docs-for-rag
+    python scripts/quick_rag_docs.py /path/to/docs --limit 10
+    python scripts/quick_rag_docs.py docs-for-rag
     
     # API mode (requires running server)
-    python scripts/ingest_optimized.py /path/to/docs --api --api-url http://localhost:8080 --api-key YOUR_KEY
+    python scripts/quick_rag_docs.py /path/to/docs --api --api-url http://localhost:8080 --api-key YOUR_KEY
     
     # Dry run
-    python scripts/ingest_optimized.py /path/to/docs --dry-run
+    python scripts/quick_rag_docs.py /path/to/docs --dry-run
 """
 import argparse
 import sys
@@ -457,14 +457,14 @@ def main():
         epilog="""
 Examples:
   # Direct mode (fastest)
-  python scripts/ingest_optimized.py docs-for-rag --limit 10
-  python scripts/ingest_optimized.py /path/to/my/docs
+  python scripts/quick_rag_docs.py docs-for-rag --limit 10
+  python scripts/quick_rag_docs.py /path/to/my/docs
   
   # API mode (requires running server)
-  python scripts/ingest_optimized.py docs-for-rag --api --api-url http://localhost:8080 --api-key YOUR_KEY
+  python scripts/quick_rag_docs.py docs-for-rag --api --api-url http://localhost:8080 --api-key YOUR_KEY
   
   # Dry run (test without upload)
-  python scripts/ingest_optimized.py docs-for-rag --dry-run --limit 5
+  python scripts/quick_rag_docs.py docs-for-rag --dry-run --limit 5
         """
     )
     

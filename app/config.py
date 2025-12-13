@@ -28,6 +28,11 @@ NETWORK_DIR = os.path.join(ASSETS_DIR, "network")
 ARCH_DIR = os.path.join(ASSETS_DIR, "architecture")
 MITRE_DIR = os.path.join(ASSETS_DIR, "mitre-attck")
 
+# New RAG data source directories
+PLAYBOOKS_DIR = os.path.join(ASSETS_DIR, "playbooks")
+KNOWLEDGE_BASE_DIR = os.path.join(ASSETS_DIR, "knowledge_base")
+POLICIES_DIR = os.path.join(ASSETS_DIR, "policies")
+
 
 # Database settings
 DB_PATH = str(PROJECT_ROOT / "chroma_db")

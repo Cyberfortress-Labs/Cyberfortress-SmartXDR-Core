@@ -244,3 +244,206 @@ def load_topology_context() -> str:
     except Exception as e:
         print(f"WARNING: Cannot load topology: {e}")
         return ""
+
+
+def markdown_to_chunks(content: str, filename: str, max_chunk_size: int = 2000) -> List[str]:
+    """
+    Convert Markdown content to semantic chunks.
+    Splits by headers (##, ###) and limits chunk size.
+    
+    Args:
+        content: Raw markdown content
+        filename: Source filename for context
+        max_chunk_size: Maximum characters per chunk
+    
+    Returns:
+        List of text chunks optimized for RAG
+    """
+    import re
+    
+    chunks = []
+    
+    # Split by major headers (## or ###)
+    sections = re.split(r'\n(?=#{1,3}\s)', content)
+    
+    current_chunk = f"Source: {filename}\n\n"
+    
+    for section in sections:
+        section = section.strip()
+        if not section:
+            continue
+        
+        # If adding this section would exceed limit, save current and start new
+        if len(current_chunk) + len(section) > max_chunk_size:
+            if current_chunk.strip() and len(current_chunk) > 50:
+                chunks.append(current_chunk.strip())
+            current_chunk = f"Source: {filename}\n\n{section}\n\n"
+        else:
+            current_chunk += section + "\n\n"
+    
+    # Don't forget the last chunk
+    if current_chunk.strip() and len(current_chunk) > 50:
+        chunks.append(current_chunk.strip())
+    
+    # If no chunks were created (no headers), split by paragraphs
+    if not chunks:
+        return text_to_chunks(content, filename, max_chunk_size)
+    
+    return chunks
+
+
+def text_to_chunks(content: str, filename: str, max_chunk_size: int = 2000) -> List[str]:
+    """
+    Convert plain text content to semantic chunks.
+    Splits by paragraphs (double newlines) and limits chunk size.
+    
+    Args:
+        content: Raw text content
+        filename: Source filename for context
+        max_chunk_size: Maximum characters per chunk
+    
+    Returns:
+        List of text chunks optimized for RAG
+    """
+    chunks = []
+    
+    # Split by paragraph (double newline)
+    paragraphs = content.split('\n\n')
+    
+    current_chunk = f"Source: {filename}\n\n"
+    
+    for para in paragraphs:
+        para = para.strip()
+        if not para:
+            continue
+        
+        # If adding this paragraph would exceed limit, save current and start new
+        if len(current_chunk) + len(para) > max_chunk_size:
+            if current_chunk.strip() and len(current_chunk) > 50:
+                chunks.append(current_chunk.strip())
+            current_chunk = f"Source: {filename}\n\n{para}\n\n"
+        else:
+            current_chunk += para + "\n\n"
+    
+    # Don't forget the last chunk
+    if current_chunk.strip() and len(current_chunk) > 50:
+        chunks.append(current_chunk.strip())
+    
+    # Fallback: if still no chunks, create one from full content (truncated)
+    if not chunks and content.strip():
+        truncated = content[:max_chunk_size]
+        chunks.append(f"Source: {filename}\n\n{truncated}")
+    
+    return chunks
+
+
+def playbook_json_to_chunks(data: Dict[str, Any], filename: str) -> List[str]:
+    """
+    Convert playbook JSON to semantic chunks.
+    Each playbook becomes a searchable chunk with all steps.
+    
+    Args:
+        data: Parsed JSON data (expected to have 'playbooks' key)
+        filename: Source filename for context
+    
+    Returns:
+        List of text chunks optimized for RAG
+    """
+    chunks = []
+    
+    if isinstance(data, dict) and "playbooks" in data:
+        playbooks = data["playbooks"]
+    elif isinstance(data, list):
+        playbooks = data
+    else:
+        return []
+    
+    for playbook in playbooks:
+        playbook_id = playbook.get("id", "unknown")
+        name = playbook.get("name", "Unknown Playbook")
+        description = playbook.get("description", "")
+        trigger = playbook.get("trigger", {})
+        steps = playbook.get("steps", [])
+        
+        # Build playbook text
+        chunk_text = f"""Security Playbook: {name}
+ID: {playbook_id}
+Description: {description}
+
+Trigger Conditions:
+- Type: {trigger.get('type', 'manual')}
+- Condition: {trigger.get('condition', 'N/A')}
+
+Steps:
+"""
+        for i, step in enumerate(steps, 1):
+            step_name = step.get("name", f"Step {i}")
+            step_action = step.get("action", "N/A")
+            step_desc = step.get("description", "")
+            chunk_text += f"{i}. {step_name}: {step_action}\n   {step_desc}\n"
+        
+        chunk_text += f"\nSource: {filename}"
+        chunks.append(chunk_text)
+    
+    return chunks
+
+
+def knowledge_base_json_to_chunks(data: Dict[str, Any], filename: str) -> List[str]:
+    """
+    Convert knowledge base JSON to semantic chunks.
+    Each issue/solution pair becomes a searchable chunk.
+    
+    Args:
+        data: Parsed JSON data (expected to have 'issues' or similar key)
+        filename: Source filename for context
+    
+    Returns:
+        List of text chunks optimized for RAG
+    """
+    chunks = []
+    
+    # Handle different possible structures
+    if isinstance(data, dict):
+        if "issues" in data:
+            items = data["issues"]
+        elif "entries" in data:
+            items = data["entries"]
+        elif "knowledge_base" in data:
+            items = data["knowledge_base"]
+        else:
+            # Try to process as individual items
+            items = [data]
+    elif isinstance(data, list):
+        items = data
+    else:
+        return []
+    
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+            
+        item_id = item.get("id", "unknown")
+        title = item.get("title", item.get("name", "Unknown Issue"))
+        description = item.get("description", item.get("problem", ""))
+        solution = item.get("solution", item.get("resolution", ""))
+        category = item.get("category", "General")
+        tags = item.get("tags", [])
+        
+        chunk_text = f"""Knowledge Base Entry: {title}
+ID: {item_id}
+Category: {category}
+Tags: {', '.join(tags) if tags else 'N/A'}
+
+Problem/Description:
+{description}
+
+Solution/Resolution:
+{solution}
+
+Source: {filename}
+Keywords: {title}, {category}, {', '.join(tags[:5]) if tags else ''}"""
+        
+        chunks.append(chunk_text)
+    
+    return chunks
+

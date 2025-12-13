@@ -1,0 +1,952 @@
+[
+    {
+        "category": "Playbook Fundamentals",
+        "question": "Playbook trong hệ thống SOC của chúng ta được định nghĩa như thế nào?",
+        "answer": "Playbook là một tập hợp các quy trình logic tự động hóa được xây dựng trên n8n (Middle Server 192.168.100.158), nhằm phản ứng lại các cảnh báo từ ElastAlert2 hoặc Wazuh."
+    },
+    {
+        "category": "Playbook Fundamentals",
+        "question": "Thành phần kích hoạt (Trigger) chính cho các playbook là gì?",
+        "answer": "Trigger chính là Webhook nhận tín hiệu JSON từ ElastAlert2 (khi phát hiện bất thường trên Elastic) hoặc từ Wazuh Manager (qua Active Response integration)."
+    },
+    {
+        "category": "Playbook Fundamentals",
+        "question": "Mục tiêu của playbook 'Enrichment' là gì?",
+        "answer": "Tự động thu thập thêm thông tin về IOC (IP, Hash, Domain) từ các nguồn như MISP, IntelOwl, VirusTotal trước khi chuyên gia phân tích bắt đầu điều tra."
+    },
+    {
+        "category": "Playbook Fundamentals",
+        "question": "Playbook 'Containment' (Cô lập) thực hiện những hành động gì?",
+        "answer": "Thực hiện chặn IP trên pfSense Firewall, cô lập máy trạm thông qua Wazuh Agent, hoặc block domain trên DNS Server."
+    },
+    {
+        "category": "Playbook Fundamentals",
+        "question": "Sự khác biệt giữa Playbook tự động hoàn toàn và bán tự động?",
+        "answer": "Tự động hoàn toàn thực thi ngay lập tức khi có alert. Bán tự động (Human-in-the-loop) sẽ gửi thông báo yêu cầu phê duyệt (Approval) qua Telegram/Email trước khi thực thi hành động chặn."
+    },
+    {
+        "category": "n8n Integration",
+        "question": "Làm thế nào để n8n kết nối với Wazuh API?",
+        "answer": "Sử dụng node HTTP Request trong n8n, xác thực bằng Basic Auth hoặc JWT Token tới https://192.168.100.138:55000."
+    },
+    {
+        "category": "n8n Integration",
+        "question": "Cấu hình Webhook node trong n8n để nhận alert từ ElastAlert2?",
+        "answer": "Chọn Method: POST, Authentication: None (hoặc Header Auth), và copy URL (ví dụ: http://192.168.100.158:5678/webhook/alert) dán vào file cấu hình rule của ElastAlert2."
+    },
+    {
+        "category": "n8n Integration",
+        "question": "Làm sao để parse dữ liệu JSON từ ElastAlert2 trong n8n?",
+        "answer": "Dữ liệu nằm trong `body` của node Webhook. Sử dụng expression `{{ $json.body.match_body }}` để truy cập các trường như source_ip, username."
+    },
+    {
+        "category": "n8n Integration",
+        "question": "Node nào dùng để gửi thông báo về Telegram?",
+        "answer": "Sử dụng node 'Telegram', cần cấu hình Bot Token và Chat ID (được lấy từ BotFather và user ID)."
+    },
+    {
+        "category": "n8n Integration",
+        "question": "Cách xử lý lỗi (Error Handling) trong n8n playbook?",
+        "answer": "Sử dụng 'Error Trigger' workflow hoặc setting 'Continue On Fail' trong node, sau đó nối nhánh lỗi vào node thông báo cho Admin."
+    },
+    {
+        "category": "Network Response (pfSense)",
+        "question": "Playbook chặn IP tấn công trên pfSense hoạt động ra sao?",
+        "answer": "n8n gọi API (hoặc SSH) vào pfSense (10.81.85.2/192.168.100.2), thêm IP độc hại vào Alias 'Blocked_IPs'. Rule firewall sẽ tự động chặn traffic từ Alias này."
+    },
+    {
+        "category": "Network Response (pfSense)",
+        "question": "Cần quyền gì để n8n thực thi lệnh trên pfSense?",
+        "answer": "Cần user có quyền admin hoặc quyền ghi vào config firewall trên pfSense. Nên dùng SSH Key-based authentication."
+    },
+    {
+        "category": "Network Response (pfSense)",
+        "question": "Làm sao để tự động gỡ bỏ IP bị chặn sau 24h?",
+        "answer": "Sử dụng node 'Wait' trong n8n hoặc thiết lập cronjob định kỳ chạy script xóa IP khỏi Alias trên pfSense."
+    },
+    {
+        "category": "Network Response (pfSense)",
+        "question": "Playbook xử lý khi phát hiện DDoS traffic?",
+        "answer": "Kích hoạt rate-limiting rule trên pfSense cho IP nguồn, hoặc chuyển hướng traffic qua Scrubbing Center (nếu có)."
+    },
+    {
+        "category": "Network Response (pfSense)",
+        "question": "Lệnh SSH để add IP vào bảng pf (packet filter) trực tiếp?",
+        "answer": "`easyrule block wan <source_ip>` hoặc thao tác trực tiếp với bảng `pfctl -t blocklist -T add <ip>`."
+    },
+    {
+        "category": "Endpoint Response (Wazuh)",
+        "question": "Playbook cô lập máy nhiễm malware (Isolate Host)?",
+        "answer": "n8n gọi API Wazuh để trigger Active Response 'host-deny' hoặc 'firewall-drop' trên Agent tương ứng (ví dụ 192.168.85.115)."
+    },
+    {
+        "category": "Endpoint Response (Wazuh)",
+        "question": "Quy trình kill malicious process trên Windows Server?",
+        "answer": "Wazuh Agent nhận lệnh từ Manager, thực thi script `taskkill /PID <pid> /F` thông qua module Active Response."
+    },
+    {
+        "category": "Endpoint Response (Wazuh)",
+        "question": "Làm sao để restart service Wazuh Agent từ xa?",
+        "answer": "Gửi lệnh `restart-wazuh` qua API `/agents/{agent_id}/restart`."
+    },
+    {
+        "category": "Endpoint Response (Wazuh)",
+        "question": "Playbook xóa file độc hại vừa phát hiện?",
+        "answer": "Cảnh báo file độc -> n8n -> Wazuh Active Response -> chạy script `active-response/bin/remove-threat.exe` (cần custom script) với đường dẫn file."
+    },
+    {
+        "category": "Endpoint Response (Wazuh)",
+        "question": "Cơ chế 'Active Response' hoạt động như thế nào?",
+        "answer": "Wazuh Manager gửi command xuống Agent. Agent thực thi script (bash/powershell) được định nghĩa trong `ossec.conf` và trả kết quả về Manager."
+    },
+    {
+        "category": "Phishing Playbook",
+        "question": "Bước đầu tiên khi nhận cảnh báo Phishing Email?",
+        "answer": "Trích xuất các artifact: Sender Email, Subject, URL/Domain trong body, File Attachment hash."
+    },
+    {
+        "category": "Phishing Playbook",
+        "question": "Làm sao để kiểm tra uy tín của URL trong email?",
+        "answer": "Sử dụng n8n HTTP Request gọi tới VirusTotal API hoặc URLScan.io để scan URL."
+    },
+    {
+        "category": "Phishing Playbook",
+        "question": "Hành động khi xác nhận URL là độc hại?",
+        "answer": "1. Block domain trên pfSense/DNS. 2. Tìm kiếm email này trong inbox của user khác (via Exchange/Office365 API). 3. Xóa email (nếu có quyền)."
+    },
+    {
+        "category": "Phishing Playbook",
+        "question": "Xử lý người dùng đã click vào link phishing?",
+        "answer": "Tự động reset mật khẩu AD của người dùng đó. Gửi thông báo yêu cầu tham gia đào tạo bảo mật lại."
+    },
+    {
+        "category": "Phishing Playbook",
+        "question": "Tích hợp IntelOwl trong kịch bản Phishing?",
+        "answer": "Gửi file attachment hash hoặc URL tới IntelOwl (192.168.100.148) để phân tích tĩnh/động và lấy report."
+    },
+    {
+        "category": "Malware/Ransomware Playbook",
+        "question": "Dấu hiệu kích hoạt Playbook Ransomware?",
+        "answer": "Wazuh alert: 'File deleted/modified with high frequency', 'Known ransomware extension detected', hoặc Suricata alert 'C2 communication'."
+    },
+    {
+        "category": "Malware/Ransomware Playbook",
+        "question": "Hành động ưu tiên số 1 khi nghi ngờ Ransomware?",
+        "answer": "Cô lập máy trạm (Network Isolation) ngay lập tức để ngăn lây lan ngang (Lateral Movement)."
+    },
+    {
+        "category": "Malware/Ransomware Playbook",
+        "question": "Làm sao để dump RAM máy nhiễm để phân tích?",
+        "answer": "Kích hoạt script chạy tool dump RAM (như WinPMEM) qua Wazuh Active Response và upload lên server lưu trữ evidence."
+    },
+    {
+        "category": "Malware/Ransomware Playbook",
+        "question": "Quy trình thông báo khi có Ransomware?",
+        "answer": "Gửi SMS/Call ngay cho CISO/SOC Lead. Tạo kênh chat War Room trên Slack/Teams. Gửi email cảnh báo toàn công ty (nếu cần)."
+    },
+    {
+        "category": "Malware/Ransomware Playbook",
+        "question": "Kiểm tra backup sau khi bị tấn công?",
+        "answer": "Playbook trigger quy trình kiểm tra tính toàn vẹn của bản backup gần nhất trên Backup Server."
+    },
+    {
+        "category": "Brute Force Playbook",
+        "question": "Kịch bản SSH Brute Force Response?",
+        "answer": "Nếu phát hiện > 5 lần login fail trong 1 phút từ cùng 1 IP: 1. Block IP tạm thời (1h) trên pfSense. 2. Gửi thông báo cho owner của server."
+    },
+    {
+        "category": "Brute Force Playbook",
+        "question": "Xử lý khi Brute Force thành công (Successful Login after multiple fails)?",
+        "answer": "Cảnh báo mức Critical. Disable user account ngay lập tức. Force logout session. Bắt đầu quy trình điều tra xâm nhập."
+    },
+    {
+        "category": "Brute Force Playbook",
+        "question": "Làm sao phân biệt User quên mật khẩu và Attacker?",
+        "answer": "Kiểm tra IP nguồn và User Agent. Nếu IP nội bộ/quen thuộc -> User quên pass. Nếu IP lạ/nước ngoài -> Attacker."
+    },
+    {
+        "category": "Brute Force Playbook",
+        "question": "Playbook xử lý 'Password Spraying'?",
+        "answer": "Phát hiện 1 IP thử đăng nhập nhiều user khác nhau. Block IP đó vĩnh viễn và cross-check với Threat Intel DB."
+    },
+    {
+        "category": "Brute Force Playbook",
+        "question": "Tự động hóa việc reset mật khẩu?",
+        "answer": "Gửi email hướng dẫn reset mật khẩu an toàn cho người dùng, yêu cầu xác thực MFA."
+    },
+    {
+        "category": "Case Management (DFIR-IRIS)",
+        "question": "Làm sao để n8n tự động tạo case trên DFIR-IRIS?",
+        "answer": "Sử dụng node HTTP Request gọi API `POST /case/add` tới server IRIS (192.168.100.148) kèm theo title, description, và severity."
+    },
+    {
+        "category": "Case Management (DFIR-IRIS)",
+        "question": "Thêm IOC vào case trên IRIS tự động?",
+        "answer": "Gọi API `POST /case/ioc/add` với thông tin IP/Domain/Hash lấy từ alert."
+    },
+    {
+        "category": "Case Management (DFIR-IRIS)",
+        "question": "Cập nhật trạng thái case từ 'New' sang 'In Progress'?",
+        "answer": "Khi Analyst bấm nút 'Acknowledge' trên Telegram, n8n gọi API update status case trên IRIS."
+    },
+    {
+        "category": "Case Management (DFIR-IRIS)",
+        "question": "Tự động gắn tag (ví dụ: 'Malware', 'Critical') cho case?",
+        "answer": "Dựa trên rule category của ElastAlert, map sang tag ID của IRIS và gửi qua API."
+    },
+    {
+        "category": "Case Management (DFIR-IRIS)",
+        "question": "Làm sao đính kèm file log raw vào case?",
+        "answer": "Lưu file log ra file tạm, sau đó dùng API upload file của IRIS để đính kèm vào case làm bằng chứng."
+    },
+    {
+        "category": "Threat Intel Automation (MISP)",
+        "question": "Kịch bản check IP trong MISP?",
+        "answer": "n8n query MISP API `GET /attributes/restSearch` với value là IP. Nếu có hit -> Alert Critical."
+    },
+    {
+        "category": "Threat Intel Automation (MISP)",
+        "question": "Tự động publish event mới lên MISP?",
+        "answer": "Nếu phát hiện IOC mới chưa từng thấy (sau khi confirm là malicious), n8n tạo event mới trên MISP để chia sẻ cộng đồng."
+    },
+    {
+        "category": "Threat Intel Automation (MISP)",
+        "question": "Làm sao để đồng bộ IOC từ MISP về pfSense để chặn?",
+        "answer": "Dùng n8n định kỳ (Cron) pull danh sách IP từ MISP (format text), sau đó update Alias URL trên pfSense."
+    },
+    {
+        "category": "Threat Intel Automation (MISP)",
+        "question": "Xử lý False Positive từ Threat Intel?",
+        "answer": "Có quy trình Whitelist. Nếu IP nằm trong Whitelist, bỏ qua cảnh báo và không thực hiện action chặn."
+    },
+    {
+        "category": "Threat Intel Automation (MISP)",
+        "question": "Enrichment với SmartXDR ML?",
+        "answer": "Gửi log thô tới SmartXDR Core API (trên 192.168.100.158), nhận về điểm risk score và phân loại tấn công (MITRE technique)."
+    },
+    {
+        "category": "SmartXDR Assistant",
+        "question": "Playbook tương tác với SmartXDR Assistant?",
+        "answer": "Khi có alert, n8n gửi context alert cho SmartXDR Assistant (LLM), nhận về đoạn văn tóm tắt và gợi ý hướng xử lý, sau đó gửi cho Analyst."
+    },
+    {
+        "category": "SmartXDR Assistant",
+        "question": "Làm sao để Chatbot trả lời về trạng thái hệ thống?",
+        "answer": "Chatbot gọi API kiểm tra health check của các service (Elastic, Wazuh, Suricata) và trả lời người dùng."
+    },
+    {
+        "category": "SmartXDR Assistant",
+        "question": "Tự động tạo báo cáo sau sự cố?",
+        "answer": "SmartXDR Assistant tổng hợp timeline từ IRIS, log từ Elastic, tạo file PDF báo cáo và gửi email cho quản lý."
+    },
+    {
+        "category": "SmartXDR Assistant",
+        "question": "Hỏi đáp về quy trình (SOP) với Assistant?",
+        "answer": "Assistant sử dụng RAG với dữ liệu Knowledge Base (file json này) để trả lời các câu hỏi về quy trình xử lý lỗi cho Analyst."
+    },
+    {
+        "category": "SmartXDR Assistant",
+        "question": "Cập nhật tri thức cho Assistant?",
+        "answer": "Định kỳ re-index các tài liệu về ticket đã đóng, các bài post-mortem vào Vector DB của Assistant."
+    },
+    {
+        "category": "Web Application Attack (WAF)",
+        "question": "Playbook xử lý SQL Injection detected by WAF?",
+        "answer": "1. Block IP nguồn trên pfSense (nếu tấn công liên tục). 2. Thông báo cho Dev team kiểm tra endpoint bị tấn công."
+    },
+    {
+        "category": "Web Application Attack (WAF)",
+        "question": "Xử lý khi phát hiện Scanner (như Nikto/Nmap)?",
+        "answer": "Thường Scanner tạo ra nhiều 404. Nếu rate 404 > ngưỡng -> Block IP tạm thời 4h."
+    },
+    {
+        "category": "Web Application Attack (WAF)",
+        "question": "Kịch bản Virtual Patching?",
+        "answer": "Khi có CVE mới mà chưa kịp patch code, dùng n8n push rule mới vào ModSecurity WAF để chặn các request khớp với pattern của exploit."
+    },
+    {
+        "category": "Web Application Attack (WAF)",
+        "question": "Phân tích log WAF tự động?",
+        "answer": "Dùng n8n gửi log WAF (error message) cho SmartXDR ML để phân loại xem là tấn công thật hay False Positive."
+    },
+    {
+        "category": "Web Application Attack (WAF)",
+        "question": "Chặn User-Agent độc hại?",
+        "answer": "Nếu User-Agent match blacklist (sqlmap, hydra...), tự động thêm vào rule chặn vĩnh viễn trên WAF."
+    },
+    {
+        "category": "C2 Communication (Suricata/Zeek)",
+        "question": "Playbook phát hiện kết nối C2 (Command & Control)?",
+        "answer": "Alert từ Suricata (ET MALWARE C2). 1. Xác định máy nội bộ bị nhiễm. 2. Cô lập máy đó. 3. Block IP đích C2."
+    },
+    {
+        "category": "C2 Communication (Suricata/Zeek)",
+        "question": "Xử lý Data Exfiltration (Dữ liệu bị tuồn ra ngoài)?",
+        "answer": "Phát hiện upload lượng lớn dữ liệu (Zeek conn.log byte count). Cảnh báo Critical. Kiểm tra process nào đang gửi dữ liệu trên Endpoint."
+    },
+    {
+        "category": "C2 Communication (Suricata/Zeek)",
+        "question": "Phát hiện DGA Domain (Domain sinh ngẫu nhiên)?",
+        "answer": "Zeek DNS log -> SmartXDR ML (DGA detection model). Nếu score cao -> Block domain trên DNS sinkhole."
+    },
+    {
+        "category": "C2 Communication (Suricata/Zeek)",
+        "question": "Kịch bản Beaconing Detection?",
+        "answer": "Phân tích chu kỳ kết nối (periodicity) trong log Zeek. Nếu phát hiện kết nối đều đặn (heartbeat) -> Cảnh báo nghi ngờ C2."
+    },
+    {
+        "category": "C2 Communication (Suricata/Zeek)",
+        "question": "Chặn kết nối tới Tor Node?",
+        "answer": "Tích hợp danh sách Tor Exit Node vào Suricata/pfSense. Nếu thấy traffic tới IP này -> Drop & Alert."
+    },
+    {
+        "category": "Insider Threat",
+        "question": "Phát hiện User truy cập server không được phép?",
+        "answer": "Rule: User thuộc group 'HR' login vào 'Database Server'. Action: Cảnh báo cho quản lý trực tiếp + Monitor session."
+    },
+    {
+        "category": "Insider Threat",
+        "question": "Phát hiện cắm USB lạ?",
+        "answer": "Wazuh Agent detect USB insert event. Trigger playbook: Scan file trên USB, hoặc Eject/Block USB driver nếu chính sách cấm."
+    },
+    {
+        "category": "Insider Threat",
+        "question": "User copy lượng lớn file ra ổ cứng ngoài?",
+        "answer": "Cảnh báo DLP (Data Loss Prevention). Ghi lại danh sách file đã copy. Thông báo cho bộ phận pháp chế."
+    },
+    {
+        "category": "Insider Threat",
+        "question": "Phát hiện cài đặt phần mềm trái phép (Shadow IT)?",
+        "answer": "Wazuh Inventory scan thấy phần mềm mới (ví dụ: TeamViewer, Torrent). Playbook gửi email yêu cầu user gỡ bỏ hoặc tự động gỡ bỏ."
+    },
+    {
+        "category": "Insider Threat",
+        "question": "Login vào giờ bất thường (3h sáng)?",
+        "answer": "Kích hoạt quy trình xác minh: Gọi điện/SMS cho user. Nếu không confirm -> Khóa tài khoản."
+    },
+    {
+        "category": "Vulnerability Management",
+        "question": "Playbook xử lý khi phát hiện lỗ hổng Critical mới?",
+        "answer": "Wazuh Vulnerability Detector báo CVE Critical. n8n tạo ticket cho IT Helpdesk yêu cầu patch. Gửi thông báo cho Security Team."
+    },
+    {
+        "category": "Vulnerability Management",
+        "question": "Tự động scan lại sau khi patch?",
+        "answer": "Khi ticket được đóng, n8n trigger Wazuh scan lại host đó để verify lỗ hổng đã được vá chưa."
+    },
+    {
+        "category": "Vulnerability Management",
+        "question": "Thông báo các máy chưa update OS?",
+        "answer": "Định kỳ hàng tuần, n8n query Wazuh DB lấy danh sách máy outdated, gửi email nhắc nhở user/admin."
+    },
+    {
+        "category": "Vulnerability Management",
+        "question": "Xử lý CVE-2021-44228 (Log4Shell)?",
+        "answer": "Playbook scan file jar trên toàn hệ thống. Nếu detect -> Cô lập server hoặc apply hotpatch."
+    },
+    {
+        "category": "Vulnerability Management",
+        "question": "Ưu tiên patch dựa trên Threat Intel?",
+        "answer": "Kết hợp dữ liệu CVE từ Wazuh và dữ liệu 'Exploited in the wild' từ IntelOwl để tính điểm ưu tiên (Priority Score)."
+    },
+    {
+        "category": "Compliance & Audit",
+        "question": "Tự động báo cáo tuân thủ PCI-DSS?",
+        "answer": "Định kỳ hàng tháng, n8n trigger Kibana report generation module, xuất PDF báo cáo PCI-DSS và gửi email cho Compliance Officer."
+    },
+    {
+        "category": "Compliance & Audit",
+        "question": "Phát hiện thay đổi file cấu hình hệ thống quan trọng (FIM)?",
+        "answer": "Wazuh FIM module detect change `/etc/passwd`. Playbook check xem có Change Request (CR) nào đang open không. Nếu không -> Alert Critical."
+    },
+    {
+        "category": "Compliance & Audit",
+        "question": "Lưu trữ log dài hạn (Log Retention)?",
+        "answer": "Playbook định kỳ backup log index cũ từ Elasticsearch sang Cold Storage (S3/MinIO) để đảm bảo tuân thủ luật lưu trữ."
+    },
+    {
+        "category": "Compliance & Audit",
+        "question": "Audit quyền Admin?",
+        "answer": "Định kỳ quét danh sách user trong group Domain Admins. So sánh với danh sách phê duyệt chuẩn. Cảnh báo nếu có user lạ."
+    },
+    {
+        "category": "Compliance & Audit",
+        "question": "Kiểm tra chính sách mật khẩu?",
+        "answer": "Playbook query AD để tìm các user có mật khẩu không hết hạn (PasswordNeverExpires) và gửi báo cáo vi phạm."
+    },
+    {
+        "category": "Playbook Maintenance",
+        "question": "Làm sao biết Playbook bị lỗi?",
+        "answer": "Sử dụng 'Error Workflow' trong n8n. Khi node lỗi, nó gửi thông báo 'Workflow Failed' kèm tên node và error message về Telegram Admin."
+    },
+    {
+        "category": "Playbook Maintenance",
+        "question": "Version control cho Playbook?",
+        "answer": "Export workflow n8n ra file JSON và commit lên Git (GitLab/GitHub) định kỳ."
+    },
+    {
+        "category": "Playbook Maintenance",
+        "question": "Test Playbook như thế nào?",
+        "answer": "Sử dụng nút 'Execute Workflow' với dữ liệu giả lập (Mock Data) trong n8n để kiểm tra logic trước khi Activate."
+    },
+    {
+        "category": "Playbook Maintenance",
+        "question": "Sao lưu n8n workflow?",
+        "answer": "Backup thư mục `.n8n` hoặc dùng tính năng export all workflows của n8n CLI."
+    },
+    {
+        "category": "Playbook Maintenance",
+        "question": "Monitor hiệu năng n8n?",
+        "answer": "Theo dõi CPU/RAM của container n8n. Theo dõi Execution Log để xem thời gian chạy của từng workflow."
+    },
+    {
+        "category": "General Automation",
+        "question": "Playbook 'Onboarding User Mới'?",
+        "answer": "Khi có user mới trong AD -> Tự động tạo account trên Wazuh, Kibana, và gửi email chào mừng + chính sách bảo mật."
+    },
+    {
+        "category": "General Automation",
+        "question": "Playbook 'Offboarding User'?",
+        "answer": "Khi user nghỉ việc -> Disable account AD, Revoke VPN access, Revoke các quyền truy cập đặc biệt, Backup dữ liệu user."
+    },
+    {
+        "category": "General Automation",
+        "question": "Tự động kiểm tra SSL Certificate hết hạn?",
+        "answer": "Workflow chạy hàng ngày, check expiry date của các domain công ty. Alert nếu còn < 30 ngày."
+    },
+    {
+        "category": "General Automation",
+        "question": "Sync Time (NTP) check?",
+        "answer": "Playbook so sánh thời gian của các server quan trọng. Nếu lệch > 5s -> Cảnh báo (vì ảnh hưởng đến log correlation)."
+    },
+    {
+        "category": "General Automation",
+        "question": "Health Check hệ thống SOC?",
+        "answer": "Workflow ping các thiết bị (Wazuh, Elastic, pfSense), check service status. Báo cáo uptime hàng ngày."
+    },
+    {
+        "category": "Cloud Security (nếu có tích hợp)",
+        "question": "Phát hiện Login từ location lạ vào AWS/Azure?",
+        "answer": "Dùng GeoIP database để check IP login. Nếu location khác quốc gia cho phép -> Alert + MFA Challenge."
+    },
+    {
+        "category": "Cloud Security (nếu có tích hợp)",
+        "question": "S3 Bucket public exposure?",
+        "answer": "Cloudtrail log detect change ACL. Playbook tự động revert ACL về Private và cảnh báo."
+    },
+    {
+        "category": "Cloud Security (nếu có tích hợp)",
+        "question": "Tạo Instance lạ đào coin?",
+        "answer": "Detect high CPU usage hoặc instance type lạ. Playbook stop instance và notify admin."
+    },
+    {
+        "category": "IoT Security",
+        "question": "Phát hiện thiết bị IoT lạ trong mạng?",
+        "answer": "DHCP log + MAC OUI lookup. Nếu MAC vendor lạ hoặc thiết bị không có trong inventory -> Block port switch."
+    },
+    {
+        "category": "IoT Security",
+        "question": "IoT device connect to Internet?",
+        "answer": "Policy: IoT không được ra Net. Nếu thấy traffic từ IoT IP ra WAN -> Block trên pfSense."
+    },
+    {
+        "category": "Playbook Logic",
+        "question": "Sử dụng node 'Switch' trong n8n để làm gì?",
+        "answer": "Để rẽ nhánh xử lý. Ví dụ: Nếu Alert Level = Critical -> Nhánh 1 (Block ngay). Nếu Alert Level = Low -> Nhánh 2 (Log only)."
+    },
+    {
+        "category": "Playbook Logic",
+        "question": "Dùng node 'Merge' để làm gì?",
+        "answer": "Gộp dữ liệu từ nhiều nguồn. Ví dụ: Gộp thông tin từ VirusTotal và thông tin từ User AD vào cùng 1 bản tin báo cáo."
+    },
+    {
+        "category": "Playbook Logic",
+        "question": "Node 'Cron' (Schedule) dùng khi nào?",
+        "answer": "Dùng cho các playbook chạy định kỳ, ví dụ: Báo cáo hàng ngày, Quét dọn DB, Backup log."
+    },
+    {
+        "category": "Playbook Logic",
+        "question": "Node 'Split In Batches' dùng để làm gì?",
+        "answer": "Xử lý mảng dữ liệu lớn. Chia nhỏ ra để xử lý từng item một (ví dụ: duyệt qua danh sách 100 IP để check threat intel)."
+    },
+    {
+        "category": "Playbook Logic",
+        "question": "Làm sao để lưu trạng thái giữa các lần chạy?",
+        "answer": "Sử dụng Static Data (trong node Function) hoặc ghi ra file/database ngoài."
+    },
+    {
+        "category": "Custom Scripts",
+        "question": "Script python trong n8n chạy ở đâu?",
+        "answer": "Chạy trong container n8n hoặc gọi ra một service (worker) bên ngoài nếu script nặng."
+    },
+    {
+        "category": "Custom Scripts",
+        "question": "Làm sao cài thêm thư viện Python cho n8n?",
+        "answer": "Cần build custom docker image cho n8n hoặc dùng node 'Execute Command' để pip install (không khuyến khích trên production)."
+    },
+    {
+        "category": "Custom Scripts",
+        "question": "Wazuh Active Response script nằm ở đâu?",
+        "answer": "Trên Windows: `C:\\Program Files (x86)\\ossec-agent\\active-response\\bin`. Trên Linux: `/var/ossec/active-response/bin`."
+    },
+    {
+        "category": "Custom Scripts",
+        "question": "Ngôn ngữ hỗ trợ cho Wazuh AR script?",
+        "answer": "Bash, Python, Perl, PowerShell, Batch, VBScript."
+    },
+    {
+        "category": "Custom Scripts",
+        "question": "Làm sao debug script Active Response?",
+        "answer": "Ghi log ra file text trong quá trình chạy script để kiểm tra input/output."
+    },
+    {
+        "category": "User Interaction",
+        "question": "Playbook xin phê duyệt qua Telegram (Approval Button)?",
+        "answer": "Gửi tin nhắn kèm Inline Keyboard (Yes/No). n8n chờ Webhook callback từ nút bấm đó để tiếp tục workflow."
+    },
+    {
+        "category": "User Interaction",
+        "question": "ChatOps: Query IP info qua chat?",
+        "answer": "User chat '/ip 1.1.1.1'. Bot n8n nhận webhook -> Query Threat Intel -> Trả kết quả về chat."
+    },
+    {
+        "category": "User Interaction",
+        "question": "ChatOps: Block IP khẩn cấp?",
+        "answer": "User chat '/block 1.2.3.4'. Bot check quyền user. Nếu OK -> Trigger pfSense block playbook -> Confirm lại."
+    },
+    {
+        "category": "User Interaction",
+        "question": "Thông báo đa kênh (Multi-channel)?",
+        "answer": "Alert Critical -> Gọi điện + SMS + Telegram + Email. Alert High -> Telegram + Email. Alert Low -> Email."
+    },
+    {
+        "category": "User Interaction",
+        "question": "Shift Handover Automation?",
+        "answer": "Cuối ca trực, chạy playbook tổng hợp các ticket chưa đóng, các alert quan trọng để bàn giao cho ca sau."
+    },
+    {
+        "category": "Evidence Collection",
+        "question": "Tự động chụp màn hình website độc hại?",
+        "answer": "Dùng thư viện/service như Puppeteer hoặc URLScan trong n8n để chụp screenshot URL và đính kèm vào case."
+    },
+    {
+        "category": "Evidence Collection",
+        "question": "PCAP Automation?",
+        "answer": "Khi có alert mạng, trigger Suricata/tcpdump ghi lại PCAP trong 5 phút quanh thời điểm alert và lưu lại."
+    },
+    {
+        "category": "Evidence Collection",
+        "question": "Thu thập danh sách tiến trình (Running Processes)?",
+        "answer": "Trigger Wazuh syscollector hoặc chạy lệnh `tasklist`/`ps` và gửi kết quả về case."
+    },
+    {
+        "category": "Evidence Collection",
+        "question": "Thu thập lịch sử duyệt web?",
+        "answer": "Dùng công cụ forensic (như BrowsingHistoryView) qua Active Response để dump history và upload về."
+    },
+    {
+        "category": "Evidence Collection",
+        "question": "Hash file automation?",
+        "answer": "Tính hash MD5/SHA256 của file nghi ngờ và so sánh với whitelist/blacklist."
+    },
+    {
+        "category": "Advanced Scenarios",
+        "question": "Playbook 'Impossible Travel' (Đăng nhập từ 2 nơi xa nhau)?",
+        "answer": "Tính khoảng cách địa lý và thời gian giữa 2 lần login. Nếu vận tốc di chuyển > 1000km/h -> Alert/Block."
+    },
+    {
+        "category": "Advanced Scenarios",
+        "question": "Playbook 'New Admin User Created'?",
+        "answer": "Monitor Event ID 4720 + Group Admin. Nếu user tạo không phải là Account Management Service -> Critical Alert."
+    },
+    {
+        "category": "Advanced Scenarios",
+        "question": "Playbook 'Mimikatz Detection'?",
+        "answer": "Detect các lệnh PowerShell nghi ngờ hoặc access LSASS process. Isolate host ngay lập tức."
+    },
+    {
+        "category": "Advanced Scenarios",
+        "question": "Playbook 'Emotet/Trickbot activity'?",
+        "answer": "Dựa trên các partern network traffic C2 đặc thù hoặc process tree injection. Thực hiện quy trình Full Cleanup."
+    },
+    {
+        "category": "Advanced Scenarios",
+        "question": "Playbook 'Data Exfiltration via DNS'?",
+        "answer": "Detect high volume DNS query hoặc long subdomain. Block domain và DNS server rogue."
+    },
+    {
+        "category": "Metrics & Reporting",
+        "question": "Đo lường MTTR (Mean Time To Respond)?",
+        "answer": "Tính thời gian từ lúc Alert trigger đến lúc Action hoàn thành trong n8n. Lưu vào DB để report."
+    },
+    {
+        "category": "Metrics & Reporting",
+        "question": "Đếm số lượng Alert theo loại?",
+        "answer": "Elasticsearch Aggregation query. Hiển thị trên Kibana Dashboard."
+    },
+    {
+        "category": "Metrics & Reporting",
+        "question": "Đánh giá hiệu quả Playbook?",
+        "answer": "Theo dõi tỷ lệ False Positive, tỷ lệ Successful Execution, và Feedback của Analyst."
+    },
+    {
+        "category": "Metrics & Reporting",
+        "question": "Báo cáo ROI của Automation?",
+        "answer": "Tính toán thời gian tiết kiệm được (ví dụ: 10 phút/alert * số alert tự động xử lý) quy ra tiền."
+    },
+    {
+        "category": "Metrics & Reporting",
+        "question": "Top Talkers/Attackers Report?",
+        "answer": "Tổng hợp top IP nguồn tấn công nhiều nhất trong tuần từ pfSense/Suricata logs."
+    },
+    {
+        "category": "System Maintenance",
+        "question": "Tự động dọn dẹp disk space?",
+        "answer": "Khi disk usage > 90%, playbook xóa bớt log cũ, xóa file temp, docker prune."
+    },
+    {
+        "category": "System Maintenance",
+        "question": "Backup config pfSense tự động?",
+        "answer": "Playbook login pfSense, download file `config.xml` và lưu vào Secure Storage."
+    },
+    {
+        "category": "System Maintenance",
+        "question": "Check blacklist IP của chính mình?",
+        "answer": "Kiểm tra xem IP Public của công ty có bị lọt vào blacklist (Spamhaus, v.v.) không. Alert nếu có."
+    },
+    {
+        "category": "System Maintenance",
+        "question": "Monitor SSL Certificate của internal services?",
+        "answer": "Check cert của Web Server, ESXi, vCenter... Alert nếu sắp hết hạn."
+    },
+    {
+        "category": "System Maintenance",
+        "question": "Tự động restart service treo?",
+        "answer": "Nếu health check fail 3 lần liên tiếp -> SSH vào server -> `systemctl restart service`."
+    },
+    {
+        "category": "SmartXDR Specific",
+        "question": "Playbook gọi SmartXDR Ingest Pipeline?",
+        "answer": "Thường chạy ngầm (backend), nhưng có thể trigger thủ công qua API để re-ingest log cũ."
+    },
+    {
+        "category": "SmartXDR Specific",
+        "question": "Retrain SmartXDR ML Model?",
+        "answer": "Khi Analyst đánh dấu False Positive nhiều, trigger pipeline thu thập mẫu sai, đóng gói dataset và retrain model."
+    },
+    {
+        "category": "SmartXDR Specific",
+        "question": "Update SmartXDR Assistant Knowledge Base?",
+        "answer": "Khi có tài liệu mới (PDF policy, Incident Report), upload qua API để embedding vào Vector DB."
+    },
+    {
+        "category": "SmartXDR Specific",
+        "question": "SmartXDR Confidence Score threshold?",
+        "answer": "Trong playbook, nếu Score > 0.9 -> Auto Block. Nếu 0.5 < Score < 0.9 -> Manual Review. Score < 0.5 -> Log only."
+    },
+    {
+        "category": "SmartXDR Specific",
+        "question": "SmartXDR Correlation Rule update?",
+        "answer": "Tự động pull rule mới từ repo Git của SOC team và apply vào ElastAlert2/SmartXDR engine."
+    },
+    {
+        "category": "Email Security",
+        "question": "Playbook xử lý BEC (Business Email Compromise)?",
+        "answer": "Phát hiện hành vi lạ (login từ nước lạ, forward rule lạ). Alert Critical. Lock account. Check mailbox audit log."
+    },
+    {
+        "category": "Email Security",
+        "question": "Phân tích file đính kèm email sandbox?",
+        "answer": "Gửi file vào Cuckoo Sandbox/Hybrid Analysis qua API. Nhận kết quả behavior analysis."
+    },
+    {
+        "category": "Email Security",
+        "question": "Chặn Sender Domain độc hại?",
+        "answer": "Update Blacklist trên Email Gateway (SpamAssassin/Exchange) qua API."
+    },
+    {
+        "category": "Email Security",
+        "question": "Report email spam từ user?",
+        "answer": "Khi user forward mail nghi ngờ tới `abuse@company.com`, trigger playbook phân tích header và body."
+    },
+    {
+        "category": "Email Security",
+        "question": "Kiểm tra SPF/DKIM/DMARC failure?",
+        "answer": "Alert nếu thấy email giả mạo domain công ty (spoofing)."
+    },
+    {
+        "category": "Identity Security (AD/IAM)",
+        "question": "Playbook xử lý 'Account Lockout' liên tục?",
+        "answer": "Tìm nguồn gây lock (service, mobile device, script). Thông báo cho user biết thiết bị nào đang sai pass."
+    },
+    {
+        "category": "Identity Security (AD/IAM)",
+        "question": "Phát hiện thêm user vào Domain Admin?",
+        "answer": "Alert Critical. Kiểm tra xem ai add. Nếu không có Change Request -> Remove user khỏi group ngay lập tức."
+    },
+    {
+        "category": "Identity Security (AD/IAM)",
+        "question": "Disable inactive users?",
+        "answer": "Định kỳ check user không login > 90 ngày. Disable account và move vào OU 'Disabled Users'."
+    },
+    {
+        "category": "Identity Security (AD/IAM)",
+        "question": "Phát hiện Golden Ticket attack?",
+        "answer": "Monitor Kerberos TGT request bất thường (lifetime quá dài, encryption type lạ). Isolate DC và reset KRBTGT password (manual process procedure)."
+    },
+    {
+        "category": "Identity Security (AD/IAM)",
+        "question": "Monitor Service Account login?",
+        "answer": "Service Account thường không login interactive. Nếu thấy Event ID 4624 Type 2/10 -> Alert."
+    },
+    {
+        "category": "Playbook Development",
+        "question": "Quy trình đưa Playbook mới vào hoạt động?",
+        "answer": "Draft -> Test (Dev env) -> Review -> Deploy (Prod - Monitor Mode) -> Enable Active Mode."
+    },
+    {
+        "category": "Playbook Development",
+        "question": "Đặt tên Playbook như thế nào?",
+        "answer": "Nên theo chuẩn: `[Category] - [Name] - [Action]`. Ví dụ: `Phishing - Suspicious URL - Block Domain`."
+    },
+    {
+        "category": "Playbook Development",
+        "question": "Biến môi trường trong n8n?",
+        "answer": "Lưu các API Key, URL, Credentials vào Credentials Store hoặc Environment Variables, không hardcode trong node."
+    },
+    {
+        "category": "Playbook Development",
+        "question": "Document cho Playbook?",
+        "answer": "Mỗi playbook cần có mô tả (Description) trong n8n, và tài liệu wiki giải thích logic flow."
+    },
+    {
+        "category": "Playbook Development",
+        "question": "Module hóa Playbook?",
+        "answer": "Tách các chức năng chung (Gửi Telegram, Check VirusTotal) thành các Sub-workflow để tái sử dụng."
+    },
+    {
+        "category": "Troubleshooting Playbooks",
+        "question": "Tại sao Webhook n8n không nhận được tín hiệu?",
+        "answer": "Kiểm tra firewall (port 5678), kiểm tra method (POST/GET), kiểm tra URL chính xác chưa."
+    },
+    {
+        "category": "Troubleshooting Playbooks",
+        "question": "Lỗi 'ECONNREFUSED' khi gọi API?",
+        "answer": "Server đích down hoặc bị chặn bởi firewall. Kiểm tra kết nối mạng từ n8n server tới đích."
+    },
+    {
+        "category": "Troubleshooting Playbooks",
+        "question": "Lỗi 'Unauthorized' (401)?",
+        "answer": "Sai API Key hoặc Token hết hạn. Kiểm tra lại Credential."
+    },
+    {
+        "category": "Troubleshooting Playbooks",
+        "question": "Workflow chạy mãi không xong (Timeout)?",
+        "answer": "Có thể do loop vô hạn hoặc node chờ phản hồi quá lâu. Set timeout cho node HTTP Request."
+    },
+    {
+        "category": "Troubleshooting Playbooks",
+        "question": "JSON parse error trong n8n?",
+        "answer": "Dữ liệu đầu vào không phải JSON hợp lệ. Kiểm tra lại nguồn gửi hoặc dùng node 'Move Binary Data' nếu là file."
+    },
+    {
+        "category": "Playbook Security",
+        "question": "Bảo mật cho n8n Webhook?",
+        "answer": "Luôn sử dụng Authentication (Header Auth) cho webhook. Chỉ allow IP của ElastAlert/Wazuh truy cập port webhook."
+    },
+    {
+        "category": "Playbook Security",
+        "question": "Quản lý quyền truy cập n8n?",
+        "answer": "Sử dụng User Management của n8n. Phân quyền Editor/Member. Bật MFA nếu có thể."
+    },
+    {
+        "category": "Playbook Security",
+        "question": "Mã hóa dữ liệu nhạy cảm trong n8n?",
+        "answer": "n8n tự động mã hóa credentials lưu trong DB. Đảm bảo file cấu hình `.n8n` được bảo vệ."
+    },
+    {
+        "category": "Playbook Security",
+        "question": "Audit log hành động trên n8n?",
+        "answer": "Bật log execution chi tiết (nếu cần debug) hoặc log các hành động thay đổi workflow (nếu bản Enterprise)."
+    },
+    {
+        "category": "Playbook Security",
+        "question": "Ngăn chặn Loop làm sập hệ thống?",
+        "answer": "Thiết lập giới hạn số lần thực thi (Rate Limit) cho workflow. Kiểm tra logic loop cẩn thận."
+    },
+    {
+        "category": "Specific Scenario",
+        "question": "Xử lý khi phát hiện 'Port Scan' từ Internal IP?",
+        "answer": "1. Xác định máy đang scan. 2. Scan virus máy đó. 3. Nếu không phải admin -> Cô lập và cảnh báo."
+    },
+    {
+        "category": "Specific Scenario",
+        "question": "Xử lý 'Log Deletion' event?",
+        "answer": "Event ID 1102 (Windows Security Log cleared). Đây là dấu hiệu xóa dấu vết. Alert Critical + Isolate host."
+    },
+    {
+        "category": "Specific Scenario",
+        "question": "Xử lý 'Impossible Travel' alert giả (VPN)?",
+        "answer": "Nếu user dùng VPN công ty -> Whitelist IP VPN gateway. Nếu dùng VPN cá nhân -> Cảnh báo user."
+    },
+    {
+        "category": "Specific Scenario",
+        "question": "Xử lý khi server mất kết nối Wazuh Agent?",
+        "answer": "Nếu mất kết nối > 1h -> Alert 'Agent Disconnected'. Check xem server down hay network issue."
+    },
+    {
+        "category": "Specific Scenario",
+        "question": "Xử lý khi phát hiện mining process (xmrig)?",
+        "answer": "Kill process. Delete file executable. Tìm persistence (Scheduled Task/Registry). Scan malware."
+    },
+    {
+        "category": "Specific Scenario",
+        "question": "Playbook 'New Service Installed'?",
+        "answer": "Kiểm tra tên service, đường dẫn exe. Nếu không nằm trong whitelist -> Alert High."
+    },
+    {
+        "category": "Specific Scenario",
+        "question": "Playbook 'Suspicious PowerShell Command'?",
+        "answer": "Detect base64 encoded command, download string. Kill process powershell.exe."
+    },
+    {
+        "category": "Specific Scenario",
+        "question": "Playbook 'RDP Brute Force'?",
+        "answer": "Block IP nguồn trên Windows Firewall (dùng Wazuh Active Response) hoặc trên pfSense nếu qua WAN."
+    },
+    {
+        "category": "Specific Scenario",
+        "question": "Playbook 'SQLi attack on DVWA'?",
+        "answer": "WAF log alert. 1. Block IP 1h. 2. Gửi report cho Web Admin."
+    },
+    {
+        "category": "Specific Scenario",
+        "question": "Playbook 'Suricata ET Trojan' alert?",
+        "answer": "High confidence signature. Auto block IP src/dst. Create IRIS case."
+    },
+    {
+        "category": "Visualization",
+        "question": "Dashboard theo dõi Playbook activity?",
+        "answer": "Tạo dashboard trên Kibana visualize số liệu từ index `n8n-executions` (nếu đẩy log n8n về Elastic)."
+    },
+    {
+        "category": "Visualization",
+        "question": "Hiển thị Alert map (GeoIP)?",
+        "answer": "Dùng Kibana Maps để hiển thị nguồn gốc các cuộc tấn công bị chặn bởi Playbook."
+    },
+    {
+        "category": "Visualization",
+        "question": "Biểu đồ trend tấn công theo giờ?",
+        "answer": "Giúp xác định khung giờ cao điểm để tối ưu hóa tài nguyên cho Playbook server."
+    },
+    {
+        "category": "Visualization",
+        "question": "Top Playbook được trigger?",
+        "answer": "Thống kê xem loại tấn công nào phổ biến nhất (ví dụ: Brute Force Playbook chạy nhiều nhất)."
+    },
+    {
+        "category": "Visualization",
+        "question": "Thời gian xử lý trung bình của Analyst?",
+        "answer": "Đo từ lúc Case created đến lúc Case closed trên IRIS."
+    },
+    {
+        "category": "Integration Details",
+        "question": "Port mặc định của n8n?",
+        "answer": "5678 (http) hoặc 443 (https nếu có reverse proxy)."
+    },
+    {
+        "category": "Integration Details",
+        "question": "Port mặc định của Wazuh API?",
+        "answer": "55000."
+    },
+    {
+        "category": "Integration Details",
+        "question": "Port mặc định của Elastic API?",
+        "answer": "9200."
+    },
+    {
+        "category": "Integration Details",
+        "question": "Port mặc định của IRIS?",
+        "answer": "8000 hoặc 443 tùy cấu hình."
+    },
+    {
+        "category": "Integration Details",
+        "question": "URL Webhook chuẩn của n8n?",
+        "answer": "http://<n8n-ip>:5678/webhook/<path>"
+    },
+    {
+        "category": "Advanced Response",
+        "question": "Honeypot redirection?",
+        "answer": "Thay vì block, redirect traffic tấn công sang Honeypot (DVWA) để thu thập thêm hành vi."
+    },
+    {
+        "category": "Advanced Response",
+        "question": "Active Defense?",
+        "answer": "Gửi fake response cho attacker để làm chậm quá trình tấn công (Tarpit)."
+    },
+    {
+        "category": "Advanced Response",
+        "question": "Forensic Snapshot?",
+        "answer": "Tự động snapshot VM trên VMware/Cloud khi phát hiện sự cố nghiêm trọng."
+    },
+    {
+        "category": "Advanced Response",
+        "question": "Network Quarantine VLAN?",
+        "answer": "Switch port configuration change. Chuyển port của máy nhiễm sang VLAN cô lập."
+    },
+    {
+        "category": "Advanced Response",
+        "question": "DNS Sinkhole automation?",
+        "answer": "Cấu hình DNS server trả về IP của Sinkhole server cho các domain độc hại."
+    },
+    {
+        "category": "Human Process",
+        "question": "Khi nào cần kích hoạt quy trình BCP/DR?",
+        "answer": "Khi sự cố lan rộng, ảnh hưởng đến hoạt động kinh doanh cốt lõi (ví dụ: Ransomware toàn bộ server farm)."
+    },
+    {
+        "category": "Human Process",
+        "question": "Ai có quyền authorize 'Shutdown hệ thống'?",
+        "answer": "CISO hoặc CIO/CTO."
+    },
+    {
+        "category": "Human Process",
+        "question": "Quy trình gọi hỗ trợ bên ngoài (Vendor)?",
+        "answer": "Khi sự cố vượt quá khả năng xử lý nội bộ hoặc liên quan đến lỗi phần mềm của Vendor."
+    },
+    {
+        "category": "Human Process",
+        "question": "Pháp lý & Tuân thủ khi xử lý sự cố?",
+        "answer": "Đảm bảo thu thập chứng cứ đúng quy trình (Chain of Custody) để có thể dùng trước tòa."
+    },
+    {
+        "category": "Human Process",
+        "question": "Communication Plan?",
+        "answer": "Ai được phép phát ngôn ra ngoài/báo chí? (Thường là PR/Marketing dept, không phải SOC)."
+    },
+    {
+        "category": "SmartXDR Core",
+        "question": "SmartXDR Core API chạy port nào?",
+        "answer": "Port 5000 trên server 192.168.100.158."
+    },
+    {
+        "category": "SmartXDR Core",
+        "question": "Chức năng 'Analyze Log' của SmartXDR?",
+        "answer": "Gửi log text -> Nhận về JSON phân tích (Category, Severity, Explanation)."
+    },
+    {
+        "category": "SmartXDR Core",
+        "question": "Chức năng 'Generate Report' của SmartXDR?",
+        "answer": "Gửi Case ID -> Nhận về file PDF báo cáo chi tiết."
+    },
+    {
+        "category": "SmartXDR Core",
+        "question": "Chức năng 'Recommend Action' của SmartXDR?",
+        "answer": "Gửi Alert info -> Nhận về danh sách action nên làm (Block IP, Disable User...)."
+    },
+    {
+        "category": "SmartXDR Core",
+        "question": "SmartXDR dùng model AI nào?",
+        "answer": "Có thể là OpenAI GPT-4, Local LLM (Llama 3), hoặc custom ML model tùy cấu hình."
+    }
+]

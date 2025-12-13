@@ -1,0 +1,1337 @@
+[
+    {
+        "category": "Network Infrastructure",
+        "question": "Tại sao từ máy Windows Server (192.168.85.115) không ping được ra Internet?",
+        "answer": "Kiểm tra default gateway trên Windows Server có trỏ về 192.168.85.2 (pfSense LAN IP) không. Kiểm tra rule firewall trên pfSense cho phép traffic từ LAN ra WAN. Kiểm tra NAT Outbound trên pfSense cho subnet 192.168.85.0/24."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "Tại sao không truy cập được Web UI của pfSense từ máy Host?",
+        "answer": "Kiểm tra IP truy cập là 10.81.85.2 (WAN) hoặc 192.168.100.2 (SOC). Đảm bảo máy Host có route đến dải mạng này hoặc đang kết nối đúng VMnet (VMnet 2 hoặc VMnet 5). Kiểm tra rule 'Anti-Lockout' trên pfSense."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "Lỗi kết nối giữa Linux Router (192.168.71.5) và pfSense (10.81.85.2)?",
+        "answer": "Kiểm tra cấu hình IP trên interface eth1 của Linux Router và interface WAN của pfSense. Đảm bảo cả hai đều nằm trong VMnet 2 và subnet 10.81.85.0/24. Thử ping chéo giữa 2 IP."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "Guest Device (192.168.95.10) không kết nối được đến máy Attacker nội bộ?",
+        "answer": "Kiểm tra xem cả hai máy có cùng nằm trong VMnet 10 không. Kiểm tra firewall rule trên pfSense interface GUEST (192.168.95.2) có chặn traffic nội mạng không."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "Tại sao Suricata Inline làm mất mạng toàn bộ LAN?",
+        "answer": "Kiểm tra service Suricata có đang chạy không (`systemctl status suricata`). Nếu service chết, bridge giữa ens37 và ens38 sẽ bị gãy. Kiểm tra xem cấu hình bridge interface trong file config hệ điều hành có chính xác không."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Suricata không ghi log vào file eve.json?",
+        "answer": "Kiểm tra file cấu hình suricata.yaml xem output 'eve-log' đã được enable chưa. Kiểm tra quyền ghi vào thư mục /var/log/suricata/."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Zeek không bắt được traffic HTTP?",
+        "answer": "Kiểm tra xem interface ens37 (Ingress) của Zeek có đang ở chế độ promiscuous không (`ip link set ens37 promisc on`). Đảm bảo traffic đi qua đúng luồng VMnet 3."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Suricata báo lỗi 'Interface ens37 not found' khi khởi động?",
+        "answer": "Kiểm tra lại cấu hình VM Network Adapter trên VMware. Đảm bảo Network Adapter tương ứng đã được add và gán đúng VMnet 3."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Zeek cluster bị crash liên tục?",
+        "answer": "Kiểm tra dung lượng disk trên server Zeek (192.168.100.172). Zeek sinh log rất lớn, nếu đầy ổ cứng process sẽ crash. Cấu hình log rotation."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Tại sao Suricata ở chế độ IPS nhưng không chặn được tấn công?",
+        "answer": "Kiểm tra xem Suricata đang chạy mode 'IDS' hay 'IPS' (NFQ/AF_PACKET). Đảm bảo rule có action là 'drop' hoặc 'reject' thay vì 'alert'. Kiểm tra biến HOME_NET trong suricata.yaml."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Không truy cập được Kibana tại http://192.168.100.128:5601?",
+        "answer": "Kiểm tra service kibana (`systemctl status kibana`). Kiểm tra file `kibana.yml`, đảm bảo `server.host` được set là \"0.0.0.0\" hoặc \"192.168.100.128\" thay vì \"localhost\"."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Elasticsearch bị lỗi 'Cluster health is RED'?",
+        "answer": "Có thể do thiếu node hoặc lỗi shard chưa được gán. Dùng lệnh `GET /_cluster/health` để kiểm tra. Kiểm tra dung lượng ổ cứng, nếu >90% Elasticsearch sẽ chuyển sang read-only."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Logstash không nhận được data từ Filebeat?",
+        "answer": "Kiểm tra port 5044 trên Elastic Server có đang mở không. Kiểm tra cấu hình output của Filebeat xem đã trỏ đúng IP 192.168.100.128 chưa. Kiểm tra file log của Logstash để xem lỗi parsing."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Không tìm thấy index pattern cho Suricata trong Kibana?",
+        "answer": "Đảm bảo Filebeat module suricata đã được enable và setup (`filebeat setup`). Kiểm tra xem đã có data thực tế đẩy về Elasticsearch chưa."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Kibana báo lỗi 'Kibana server is not ready yet'?",
+        "answer": "Đây thường là do Elasticsearch chưa khởi động xong hoặc Kibana không kết nối được với Elasticsearch. Kiểm tra log Kibana và trạng thái service Elasticsearch."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Wazuh Agent trên Windows Server (192.168.85.115) báo 'Disconnected'?",
+        "answer": "Kiểm tra kết nối đến Wazuh Manager IP 192.168.100.138 port 1514/TCP. Kiểm tra firewall trên Windows Server có chặn outbound port 1514 không."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Wazuh Dashboard không hiển thị alert mới?",
+        "answer": "Kiểm tra service `wazuh-manager` và `filebeat` trên Wazuh Server. Kiểm tra xem indexer (Elasticsearch/Opensearch) có bị đầy disk không."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Lỗi 'Invalid agent key' khi restart Wazuh Agent?",
+        "answer": "Key xác thực giữa Agent và Manager không khớp. Xóa agent trên Manager và đăng ký lại (`agent-auth`) trên máy Agent."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Wazuh không phát hiện được file thay đổi (FIM)?",
+        "answer": "Kiểm tra cấu hình `ossec.conf` trên Agent, đảm bảo module `syscheck` được enable và đường dẫn file cần theo dõi đã được khai báo chính xác. Tần suất quét mặc định có thể chậm."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Không thể cài đặt Wazuh Agent trên máy Linux Guest?",
+        "answer": "Kiểm tra xem máy Linux Guest có kết nối Internet hoặc repo nội bộ để tải gói cài đặt không. Kiểm tra tính tương thích của OS version."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "Webhook từ ElastAlert2 đến n8n bị lỗi 404?",
+        "answer": "Kiểm tra URL Webhook trong rule ElastAlert2. Đảm bảo workflow n8n đã được kích hoạt (Active) và node Webhook được cấu hình đúng method (POST)."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "n8n không gửi được email cảnh báo?",
+        "answer": "Kiểm tra cấu hình node SMTP/Email trong n8n. Kiểm tra xem port 25/587 có bị chặn bởi firewall SOC hoặc NAT Gateway không. Xác thực thông tin credential email."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "IntelOwl không trả về kết quả phân tích IOC?",
+        "answer": "Kiểm tra API Key của IntelOwl trong cấu hình n8n hoặc IRIS. Kiểm tra service Docker của IntelOwl trên SOAR Server (192.168.100.148)."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "IRIS Case không tự động tạo khi có Alert?",
+        "answer": "Kiểm tra log của n8n workflow 'Create Case'. Kiểm tra kết nối API từ n8n (192.168.100.158) đến IRIS (192.168.100.148). Đảm bảo IRIS API Key có quyền tạo case."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "SmartXDR Assistant không trả lời câu hỏi?",
+        "answer": "Kiểm tra service SmartXDR API trên port 5000 của server n8n. Kiểm tra kết nối đến LLM (OpenAI/Gemini) hoặc vector database nội bộ."
+    },
+    {
+        "category": "Application Layer (WAF/Web)",
+        "question": "Website DVWA (192.168.85.112) truy cập rất chậm?",
+        "answer": "Kiểm tra tài nguyên (CPU/RAM) trên máy DVWA. Kiểm tra xem có đang bị tấn công DoS không (xem log Suricata/Zeek). Kiểm tra WAF ModSecurity có đang chặn nhầm request hợp lệ (false positive) gây delay không."
+    },
+    {
+        "category": "Application Layer (WAF/Web)",
+        "question": "WAF ModSecurity chặn sai người dùng hợp lệ (403 Forbidden)?",
+        "answer": "Kiểm tra log `/var/log/modsec_audit.log` để tìm Rule ID gây chặn. Thêm Rule ID đó vào whitelist hoặc điều chỉnh mức độ paranoia của CRS."
+    },
+    {
+        "category": "Application Layer (WAF/Web)",
+        "question": "Không đăng nhập được vào DVWA?",
+        "answer": "Kiểm tra service MySQL trên máy DVWA. Reset database nếu cần thiết thông qua trang setup.php của DVWA."
+    },
+    {
+        "category": "Application Layer (WAF/Web)",
+        "question": "Nginx trên WAF Server không khởi động được?",
+        "answer": "Kiểm tra cú pháp file config nginx (`nginx -t`). Lỗi thường gặp là sai đường dẫn file cấu hình ModSecurity hoặc thiếu module."
+    },
+    {
+        "category": "Threat Intel (MISP)",
+        "question": "Không thể sync event từ MISP khác về?",
+        "answer": "Kiểm tra kết nối mạng port 443/80 giữa các MISP instance. Kiểm tra Sync User Auth Key. Đảm bảo server time (NTP) đồng bộ."
+    },
+    {
+        "category": "Threat Intel (MISP)",
+        "question": "MISP web interface báo lỗi 'Internal Server Error'?",
+        "answer": "Kiểm tra log tại `/var/www/MISP/app/tmp/logs/error.log`. Thường do lỗi quyền file (permission) hoặc lỗi kết nối database MySQL/Redis."
+    },
+    {
+        "category": "Threat Intel (MISP)",
+        "question": "Workers trong MISP không chạy?",
+        "answer": "Kiểm tra trạng thái của supervisord. Restart lại các worker: `supervisorctl restart all`."
+    },
+    {
+        "category": "Alerting (ElastAlert2)",
+        "question": "ElastAlert2 không gửi cảnh báo dù có sự kiện trong Elastic?",
+        "answer": "Kiểm tra time-frame trong rule (ví dụ `buffer_time`). Đảm bảo đồng bộ thời gian giữa ElastAlert server và Elasticsearch. Dùng lệnh `elastalert-test-rule` để debug."
+    },
+    {
+        "category": "Alerting (ElastAlert2)",
+        "question": "ElastAlert2 bị crash với lỗi kết nối Elasticsearch?",
+        "answer": "Kiểm tra cấu hình `es_host` và `es_port` trong `config.yaml`. Đảm bảo user/pass dùng để query Elasticsearch là chính xác."
+    },
+    {
+        "category": "General System",
+        "question": "Hệ thống bị lệch giờ giữa các log?",
+        "answer": "Cấu hình NTP client trên tất cả các máy (Suricata, Zeek, Servers) trỏ về cùng một NTP server (ví dụ pfSense hoặc pool public). Sai lệch giờ sẽ làm hỏng khả năng correlation của SIEM."
+    },
+    {
+        "category": "General System",
+        "question": "VMware báo lỗi 'Bridge network'?",
+        "answer": "Vào Virtual Network Editor trên máy Host, restore default hoặc kiểm tra xem card mạng vật lý có đang bị disable không."
+    },
+    {
+        "category": "General System",
+        "question": "Disk trên máy Elastic Server bị đầy 100%?",
+        "answer": "Xóa bớt các index cũ không cần thiết (`DELETE /log-2023-*`). Cấu hình Index Lifecycle Management (ILM) để tự động xóa log sau X ngày."
+    },
+    {
+        "category": "General System",
+        "question": "Làm sao để backup cấu hình pfSense?",
+        "answer": "Truy cập Web UI -> Diagnostics -> Backup & Restore. Chọn 'Download configuration as XML'."
+    },
+    {
+        "category": "General System",
+        "question": "Service Filebeat chiếm quá nhiều CPU?",
+        "answer": "Kiểm tra file cấu hình, giảm bớt `bulk_max_size` hoặc tăng `scan_frequency`. Nếu đang theo dõi file log quá lớn, hãy xoay vòng log (log rotation) trước."
+    },
+    {
+        "category": "General System",
+        "question": "Quên mật khẩu root của máy Linux (Ubuntu)?",
+        "answer": "Khởi động lại VM, giữ Shift để vào GRUB. Chọn Advanced options -> Recovery mode -> Root -> Remount RW -> `passwd root` -> Reboot."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "Ping từ SOC Subnet (192.168.100.0/24) sang Guest Subnet (192.168.95.0/24) bị time out?",
+        "answer": "Kiểm tra rule firewall trên pfSense interface SOC và GUEST. Mặc định pfSense chặn traffic giữa các subnet trừ khi có rule allow."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "IP conflict trên mạng LAN?",
+        "answer": "Kiểm tra xem có thiết bị nào đặt IP tĩnh trùng với dải DHCP pool của pfSense không. Check log DHCP trên pfSense."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Suricata báo lỗi 'ET Open Ruleset update failed'?",
+        "answer": "Kiểm tra kết nối Internet của Suricata server (192.168.100.171). Thử chạy lệnh `suricata-update` thủ công để xem lỗi chi tiết."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Zeek log hiển thị IP nguồn là IP Gateway thay vì IP thật?",
+        "answer": "Đây là vấn đề NAT. Đảm bảo Zeek tap vào interface trước khi NAT (Inside) hoặc cấu hình port mirroring chính xác."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Wazuh Agent trên Linux báo lỗi thư viện OpenSSL?",
+        "answer": "Cài đặt lại hoặc update gói `openssl` và `libssl` trên máy Linux Agent để tương thích với phiên bản Wazuh Agent."
+    },
+    {
+        "category": "Application Layer (WAF/Web)",
+        "question": "DVWA không kết nối được Database?",
+        "answer": "Kiểm tra file `config.inc.php` trong source code DVWA, xác nhận user/pass/host của MySQL. Đảm bảo service mysql đang chạy."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "n8n workflow bị treo (Status: Executing) mãi mãi?",
+        "answer": "Restart service n8n. Kiểm tra xem có node nào bị vòng lặp vô hạn (infinite loop) hoặc chờ đợi external request quá lâu không. Set timeout cho các node HTTP Request."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "Lỗi 'RabbitMQ connection refused' trên SOAR Server?",
+        "answer": "RabbitMQ là message broker cho Celery (dùng bởi IRIS/IntelOwl). Kiểm tra service rabbitmq-server. Nếu bị lỗi partition, cần reset lại node RabbitMQ."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "Mất kết nối Internet trên toàn bộ hệ thống lab?",
+        "answer": "Kiểm tra VM 'NAT Gateway / Linux Router' (192.168.71.5). Ping từ máy này ra 8.8.8.8. Nếu không thông, kiểm tra card mạng VMnet 8 (NAT) trên máy chủ VMware."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Không thể SSH vào Elastic Server (192.168.100.128)?",
+        "answer": "Kiểm tra service sshd (`systemctl status ssh`). Kiểm tra xem có rule iptables hoặc firewall chặn port 22 không."
+    },
+    {
+        "category": "Threat Intel (MISP)",
+        "question": "MISP API trả về lỗi 401 Unauthorized?",
+        "answer": "Kiểm tra lại Auth Key trong header request. Đảm bảo key chưa hết hạn và user sở hữu key có đủ quyền truy cập."
+    },
+    {
+        "category": "General System",
+        "question": "Máy ảo khởi động rất chậm?",
+        "answer": "Kiểm tra tài nguyên RAM/CPU cấp phát cho VM. Nếu ổ cứng HDD bị 100% active time trên Host, hiệu năng VM sẽ giảm sút nghiêm trọng."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "DNS resolution bị lỗi trên các server trong SOC Subnet?",
+        "answer": "Kiểm tra file `/etc/resolv.conf`. Nameserver nên trỏ về 192.168.100.2 (pfSense Interface SOC) hoặc 8.8.8.8 nếu cho phép đi thẳng."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Suricata alert quá nhiều false positive với rule ICMP?",
+        "answer": "Disable rule ICMP trong file `threshold.config` hoặc suppress rule đó thông qua SID (Signature ID)."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Active Response của Wazuh không block IP trên Linux Agent?",
+        "answer": "Kiểm tra xem script `firewall-drop` có quyền execute không. Kiểm tra log `/var/ossec/logs/active-responses.log` trên Agent."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Kibana Dashboard không hiển thị dữ liệu mới nhất?",
+        "answer": "Kiểm tra time picker ở góc trên bên phải, đảm bảo đang chọn \"Last 15 minutes\" hoặc thời gian phù hợp. Refresh lại field list trong Stack Management."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "Telegram Bot không gửi tin nhắn?",
+        "answer": "Kiểm tra Bot Token và Chat ID. Đảm bảo bot đã được start và user đã chat với bot ít nhất 1 lần để mở session."
+    },
+    {
+        "category": "Application Layer (WAF/Web)",
+        "question": "Upload file lên DVWA bị lỗi?",
+        "answer": "Kiểm tra quyền ghi của thư mục upload trên server (`chmod 777` hoặc `chown www-data`). Kiểm tra cấu hình `upload_max_filesize` trong `php.ini`."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "pfSense báo lỗi 'Gateway Down'?",
+        "answer": "Kiểm tra kết nối đến next-hop gateway (10.81.85.3). Có thể do mất gói tin monitor (ping check). Vào System -> Routing để xem chi tiết packet loss."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Zeek không detect được malware hash?",
+        "answer": "Đảm bảo script tính năng hash (MD5/SHA256) đã được load trong `local.zeek`. Kiểm tra file `files.log` xem file có được extract không."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Logstash báo lỗi 'Json parse error'?",
+        "answer": "Định dạng log đầu vào không đúng chuẩn JSON mà Logstash filter mong đợi. Kiểm tra lại cấu hình codec json_lines hoặc json."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Wazuh Manager service không start được?",
+        "answer": "Kiểm tra log `/var/ossec/logs/ossec.log`. Lỗi thường gặp: trùng port, lỗi cú pháp trong `ossec.conf`, hoặc thiếu RAM."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "Không thể import workflow vào n8n?",
+        "answer": "Kiểm tra phiên bản n8n. Workflow export từ bản mới hơn có thể không import được vào bản cũ. Kiểm tra format JSON của file workflow."
+    },
+    {
+        "category": "General System",
+        "question": "Lỗi 'No space left on device' trên Linux server?",
+        "answer": "Dùng lệnh `df -h` để kiểm tra phân vùng đầy. `du -sh *` để tìm thư mục chiếm dung lượng. Thường là `/var/log` hoặc `/var/lib/docker`."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "ARP Spoofing detected trong LAN?",
+        "answer": "Có thể do máy Attacker đang chạy Arpspoof. Kiểm tra bảng ARP trên các máy (`arp -a`) xem có nhiều IP trỏ về cùng 1 MAC không."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Suricata chiếm 100% CPU 1 core?",
+        "answer": "Cấu hình `af-packet` trong `suricata.yaml` để sử dụng cluster mode `cluster_flow` giúp load balance traffic ra nhiều core CPU."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Elasticsearch báo lỗi 'CircuitBreakingException'?",
+        "answer": "Java Heap Space của Elasticsearch bị quá tải. Cần tăng RAM cho JVM trong file `jvm.options` hoặc giảm tải query."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "SCA scan trên Wazuh chạy quá lâu?",
+        "answer": "SCA (Security Configuration Assessment) scan toàn bộ hệ thống. Có thể cấu hình lại `sca` block trong `ossec.conf` để scan ít thư mục hơn hoặc skip check không cần thiết."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "IRIS không hiển thị graph visualize?",
+        "answer": "Kiểm tra browser console log. Có thể do lỗi thư viện JS hoặc dữ liệu quan hệ giữa các object trong case bị lỗi."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "Traffic HTTP đi qua nhưng WAF không log?",
+        "answer": "Đảm bảo traffic đi qua đúng IP của WAF (Reverse Proxy). Nếu client kết nối thẳng đến Web Server backend thì WAF sẽ bị bỏ qua."
+    },
+    {
+        "category": "General System",
+        "question": "SSH connection bị ngắt liên tục (Broken pipe)?",
+        "answer": "Thêm `ServerAliveInterval 60` vào config SSH client hoặc `/etc/ssh/sshd_config` trên server để giữ kết nối (keepalive)."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Zeek báo lỗi 'packet loss' trong capture_loss.log?",
+        "answer": "Server quá tải, không xử lý kịp tốc độ gói tin đến. Cần tăng buffer size của ring buffer hoặc giảm bớt các script phân tích nặng."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Filebeat gửi log trùng lặp (duplicate)?",
+        "answer": "Xóa file registry của Filebeat (`/var/lib/filebeat/registry`) sẽ khiến nó gửi lại từ đầu. Đảm bảo cấu hình `ignore_older` để không gửi lại log quá cũ."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Rootcheck không phát hiện rootkit mẫu?",
+        "answer": "Đảm bảo database rootkit (`rootkit_files.txt`, `rootkit_trojans.txt`) đã được cập nhật. Rootcheck mặc định chạy định kỳ, có thể trigger thủ công để test."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "SmartXDR API trả về 500 Internal Server Error?",
+        "answer": "Kiểm tra log của Flask app trên server n8n. Có thể code Python bị lỗi exception chưa được handle."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "VPN Site-to-Site trên pfSense không kết nối?",
+        "answer": "Kiểm tra Phase 1 và Phase 2 proposal (encryption, hash, DH group) phải khớp nhau giữa 2 đầu. Kiểm tra Pre-Shared Key. Đảm bảo port UDP 500/4500 được mở."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Suricata log time stamp không khớp với hệ thống?",
+        "answer": "Kiểm tra timezone trong `suricata.yaml` và timezone của hệ điều hành. Nên set tất cả về UTC."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Kibana Discover không hiện field mong muốn?",
+        "answer": "Vào Stack Management -> Index Patterns -> Refresh field list. Nếu field mới xuất hiện trong log, Kibana cần refresh mapping mới nhận diện được."
+    },
+    {
+        "category": "General System",
+        "question": "Không thể update ubuntu (`apt update` failed)?",
+        "answer": "Kiểm tra kết nối Internet và DNS. Nếu dùng local mirror, kiểm tra source list `/etc/apt/sources.list`."
+    },
+    {
+        "category": "Application Layer (WAF/Web)",
+        "question": "ModSecurity chặn file upload hợp lệ?",
+        "answer": "Tăng giới hạn `SecRequestBodyLimit` trong cấu hình ModSecurity. Mặc định giới hạn này có thể thấp hơn kích thước file upload."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "Mất kết nối quản trị đến Switch ảo (nếu có)?",
+        "answer": "Trên VMware Workstation, kiểm tra Virtual Network Editor. Đảm bảo subnet IP không bị thay đổi tự động."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "Nút 'Execute' trong n8n bị mờ (disable)?",
+        "answer": "Có thể workflow chưa được save hoặc đang có node lỗi validate (thiếu tham số bắt buộc)."
+    },
+    {
+        "category": "Threat Intel (MISP)",
+        "question": "MISP feed update bị treo?",
+        "answer": "Kiểm tra job queue trong Administration -> Server Settings & Maintenance. Xóa các job bị kẹt (stuck)."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Wazuh Agent chiếm băng thông mạng quá lớn?",
+        "answer": "Kiểm tra module `syscheck` (FIM) hoặc `logcollector`. Nếu file log biến động liên tục, agent sẽ gửi traffic lớn. Dùng `leaky bucket` trong cấu hình để giới hạn rate."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Elasticsearch bootstrap check failed?",
+        "answer": "Đây là cơ chế an toàn của Elastic khi chạy production mode. Cần cấu hình hệ thống: tắt swap, tăng `vm.max_map_count` (sysctl)."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Cảnh báo 'ET MALWARE' xuất hiện liên tục từ 1 IP nội bộ?",
+        "answer": "Máy đó có thể đã nhiễm mã độc. Cô lập máy khỏi mạng ngay lập tức và scan virus."
+    },
+    {
+        "category": "General System",
+        "question": "Docker container tự động restart liên tục?",
+        "answer": "Dùng `docker logs <container_id>` để xem nguyên nhân crash. Thường do lỗi config hoặc thiếu biến môi trường (ENV)."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "DHCP Server trên pfSense không cấp IP?",
+        "answer": "Kiểm tra xem DHCP service có đang enable trên interface đó không. Kiểm tra range IP pool có bị hết không."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "HTTP Request trong n8n báo lỗi SSL Certificate?",
+        "answer": "Nếu server đích dùng self-signed cert, hãy bật tùy chọn 'Ignore SSL Issues' trong node HTTP Request."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Không thể delete index trong Elasticsearch (403 Forbidden)?",
+        "answer": "Index có thể đang bị set `read_only_allow_delete`. Chạy câu lệnh PUT settings để gỡ bỏ block này."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Agent status 'Never connected'?",
+        "answer": "Agent chưa bao giờ liên lạc được với Manager. Kiểm tra kỹ IP Manager trong file config của Agent và Firewall đường truyền."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Zeek báo 'checksum invalid'?",
+        "answer": "Thường xảy ra khi capture trên interface có tính năng 'checksum offloading' của card mạng. Tắt tính năng này bằng `ethtool -K <interface> rx off tx off`."
+    },
+    {
+        "category": "Application Layer (WAF/Web)",
+        "question": "Web Server trả về 502 Bad Gateway?",
+        "answer": "Nginx (Reverse Proxy) không kết nối được đến backend (PHP-FPM hoặc Apache). Kiểm tra service backend đang chạy và port lắng nghe."
+    },
+    {
+        "category": "Threat Intel (MISP)",
+        "question": "Không thể export event từ MISP sang IDS format?",
+        "answer": "Kiểm tra xem tính năng export module đã được enable chưa. Kiểm tra log error của module export."
+    },
+    {
+        "category": "General System",
+        "question": "Lệnh `curl` báo lỗi 'Could not resolve host'?",
+        "answer": "Lỗi DNS. Kiểm tra `/etc/resolv.conf`. Thử ping IP trực tiếp để loại trừ lỗi mạng."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "Mạng chập chờn, ping loss ngẫu nhiên?",
+        "answer": "Có thể do trùng IP hoặc loop mạng. Kiểm tra cấu hình switch ảo và physical cabling (nếu có)."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "SmartXDR ML model dự đoán sai severity?",
+        "answer": "Model cần được retrain với dữ liệu mới. Kiểm tra dataset training xem có bị bias không."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Shard allocation failed?",
+        "answer": "Dùng `GET /_cluster/allocation/explain` để xem lý do. Thường do disk đầy hoặc node rời cluster quá lâu."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Wazuh API trả về lỗi 'Too many requests'?",
+        "answer": "Giới hạn rate limit của API. Tăng giới hạn trong cấu hình `api.yaml` của Wazuh Manager."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Suricata không start sau khi thêm rule mới?",
+        "answer": "Lỗi cú pháp trong rule mới thêm. Chạy `suricata -T -c suricata.yaml` để test config và rule trước khi restart."
+    },
+    {
+        "category": "Application Layer (WAF/Web)",
+        "question": "DVWA báo lỗi 'PHP module missing'?",
+        "answer": "Cài đặt các module PHP còn thiếu (ví dụ `php-mysql`, `php-gd`) bằng `apt install`."
+    },
+    {
+        "category": "General System",
+        "question": "Server Linux bị treo cứng (freeze)?",
+        "answer": "Có thể do hết RAM (OOM Killer chưa kịp chạy) hoặc lỗi kernel panic. Hard reset VM và kiểm tra `/var/log/syslog` hoặc `/var/log/kern.log`."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "Không thể RDP vào Windows Server?",
+        "answer": "Kiểm tra service Remote Desktop trên Windows đã enable chưa. Kiểm tra Firewall Windows cho phép port 3389. Kiểm tra Network Level Authentication (NLA)."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "n8n workflow chạy thành công nhưng không có output?",
+        "answer": "Kiểm tra logic của các node IF/Switch. Có thể dữ liệu đi vào nhánh false/empty nên không có kết quả."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Ingest pipeline không hoạt động?",
+        "answer": "Kiểm tra cấu hình Ingest Node Pipeline trong Elasticsearch (`GET /_ingest/pipeline`). Test pipeline với document mẫu `_simulate`."
+    },
+    {
+        "category": "Threat Intel (MISP)",
+        "question": "Redis connection failed trên MISP?",
+        "answer": "MISP dùng Redis để queue job. Kiểm tra service redis-server. Check file config `database.php` của MISP."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Logcollector không đọc được file log custom?",
+        "answer": "Kiểm tra format thời gian của log (`log_format`). Kiểm tra quyền đọc của user `wazuh` đối với file log đó."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Zeek báo lỗi 'plugin not found'?",
+        "answer": "Kiểm tra biến môi trường `ZEEK_PLUGIN_PATH`. Cài đặt lại plugin qua `zkg`."
+    },
+    {
+        "category": "General System",
+        "question": "Crontab job không chạy?",
+        "answer": "Kiểm tra service cron. Đảm bảo script trong crontab có quyền execute (+x) và đường dẫn tuyệt đối."
+    },
+    {
+        "category": "Application Layer (WAF/Web)",
+        "question": "SQL Injection attack không bị chặn?",
+        "answer": "Rule SQLi trong WAF có thể chưa được bật hoặc payload tấn công đã được obfuscate (mã hóa) để bypass. Cần tunning rule hoặc bật level paranoia cao hơn."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "Packet loss cao trên đường truyền WAN?",
+        "answer": "Kiểm tra băng thông, nghẽn mạng. Kiểm tra duplex mismatch trên các interface router."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "Workflow n8n trigger liên tục không kiểm soát?",
+        "answer": "Cẩn thận với các trigger dạng 'Polling' hoặc 'Cron' với tần suất quá cao. Điều chỉnh interval lớn hơn."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Elasticsearch snapshot backup failed?",
+        "answer": "Kiểm tra quyền ghi vào repo path (thư mục lưu backup). Đảm bảo path đã được khai báo trong `path.repo` ở `elasticsearch.yml`."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Wazuh Cluster không đồng bộ (unsync)?",
+        "answer": "Kiểm tra kết nối port 1516 (cluster communication) giữa các node worker và master."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Suricata báo lỗi 'detect-engine: ... signature failed to parse'?",
+        "answer": "Lỗi cú pháp trong file rule. Log sẽ chỉ ra dòng nào bị lỗi. Sửa hoặc comment dòng đó lại."
+    },
+    {
+        "category": "General System",
+        "question": "Không thể paste text vào console máy ảo VMware?",
+        "answer": "Cài đặt VMware Tools hoặc Open-VM-Tools trên máy ảo để hỗ trợ copy/paste và shared folder."
+    },
+    {
+        "category": "Application Layer (WAF/Web)",
+        "question": "Website bị lỗi font/css khi qua WAF?",
+        "answer": "WAF có thể chặn nhầm các request lấy file static (.css, .woff) do hiểu nhầm là tấn công. Check log và whitelist extension này."
+    },
+    {
+        "category": "Threat Intel (MISP)",
+        "question": "MISP email notification không gửi được?",
+        "answer": "Kiểm tra cấu hình SMTP trong MISP Settings. Test gửi email thủ công từ server để xác minh kết nối mail server."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "Không thể ping tên miền (vd: google.com) dù ping IP (8.8.8.8) được?",
+        "answer": "Lỗi phân giải tên miền (DNS). Kiểm tra cấu hình DNS server trên thiết bị hoặc trên pfSense DNS Resolver."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "Giá trị JSON trả về từ API bị lỗi encoding?",
+        "answer": "Đảm bảo header 'Content-Type' là 'application/json; charset=utf-8'. Xử lý encoding trong code xử lý response."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Field data type bị conflict (long vs keyword)?",
+        "answer": "Do log gửi lên có format không đồng nhất. Cần reindex dữ liệu và định nghĩa mapping cố định (Explicit Mapping) cho index."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Wazuh Agent trên macOS không chạy?",
+        "answer": "Cấp quyền Full Disk Access cho Wazuh Agent trong System Preferences -> Security & Privacy."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Zeek báo lỗi 'analyzers failure'?",
+        "answer": "Gói tin bị phân mảnh (fragmented) hoặc sai protocol standard. Zeek analyzer không parse được."
+    },
+    {
+        "category": "General System",
+        "question": "Time sync failed (NTP)?",
+        "answer": "Firewall chặn port UDP 123. Server NTP không phản hồi. Thử đổi NTP server pool khác."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "Mất kết nối VPN Client-to-Site?",
+        "answer": "Kiểm tra certificate đã hết hạn chưa. Kiểm tra user credential. Xem log OpenVPN trên pfSense."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "n8n báo lỗi 'Memory limit exceeded'?",
+        "answer": "Workflow xử lý lượng dữ liệu quá lớn trong 1 lần (batch). Tăng RAM cho Node.js process n8n (`NODE_OPTIONS=--max-old-space-size=4096`)."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Watcher alert trong Elastic không trigger?",
+        "answer": "Kiểm tra điều kiện trigger (condition). Dùng Simulate Watch API để test logic."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Không thể remote upgrade Wazuh Agent?",
+        "answer": "Kiểm tra file WPK (Wazuh Package) có đúng với OS và version không. Kiểm tra kết nối port 1515."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Suricata capture performance thấp?",
+        "answer": "Sử dụng driver PF_RING hoặc DPDK thay vì AF_PACKET thường để tăng tốc độ capture."
+    },
+    {
+        "category": "Application Layer (WAF/Web)",
+        "question": "Lỗi 'Too many redirects' trên trình duyệt?",
+        "answer": "Cấu hình Redirect Loop giữa WAF và Backend (ví dụ HTTP -> HTTPS -> HTTP). Kiểm tra cấu hình SSL Offloading."
+    },
+    {
+        "category": "General System",
+        "question": "Log file tăng dung lượng quá nhanh làm đầy ổ cứng?",
+        "answer": "Cấu hình Logrotate cho các file log hệ thống và ứng dụng. Nén log cũ (gzip)."
+    },
+    {
+        "category": "Threat Intel (MISP)",
+        "question": "GPG key error khi import feed?",
+        "answer": "Key GPG dùng để sign feed không tồn tại trong keyring của MISP. Cần import public key của nguồn feed."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "VLAN Tagging không hoạt động?",
+        "answer": "Kiểm tra cấu hình port trên switch ảo (VMware không hỗ trợ VLAN tag trên NAT/Host-only adapter mặc định, cần cấu hình VGT hoặc dùng LAN segment)."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "Credential trong n8n bị mất sau khi restart?",
+        "answer": "Kiểm tra biến môi trường `N8N_ENCRYPTION_KEY`. Nếu key này thay đổi, toàn bộ credential đã lưu sẽ không giải mã được."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Elasticsearch node rời khỏi cluster liên tục?",
+        "answer": "Mạng chập chờn hoặc Garbage Collection (GC) pause quá lâu khiến master node tưởng node kia đã chết. Tăng `discovery.zen.ping_timeout`."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Alert Wazuh bị delay so với thời gian thực?",
+        "answer": "Hàng đợi xử lý (Analysis queue) bị đầy. Tăng `analysisd` threads hoặc tối ưu hóa ruleset."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Zeek cluster không start được logger node?",
+        "answer": "Process logger không thể bind port. Kiểm tra xem port đó có bị process khác chiếm dụng không (`netstat -tulnp`)."
+    },
+    {
+        "category": "Application Layer (WAF/Web)",
+        "question": "Brute force attack không bị ban IP?",
+        "answer": "Kiểm tra tích hợp giữa WAF log và Fail2Ban hoặc Wazuh Active Response. Regex parse log có thể bị sai."
+    },
+    {
+        "category": "General System",
+        "question": "Không thể login SSH bằng root?",
+        "answer": "Mặc định `PermitRootLogin` thường set là `prohibit-password` hoặc `no`. Sửa `/etc/ssh/sshd_config` nếu muốn cho phép (không khuyến nghị)."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "pfSense Traffic Shaper làm mạng chậm?",
+        "answer": "Cấu hình băng thông trong Traffic Shaper không đúng với băng thông thực tế. Reset wizard Traffic Shaper."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "SmartXDR Core không kết nối được Database?",
+        "answer": "Kiểm tra connection string trong config. Đảm bảo database server đang chạy và user/pass đúng."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Kibana report generation failed?",
+        "answer": "Timeout khi sinh report PDF/PNG. Tăng `xpack.reporting.queue.timeout` trong `kibana.yml`."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Command inventory không lấy được thông tin hardware?",
+        "answer": "Lệnh `dmidecode` hoặc `lshw` có thể chưa được cài trên Agent. Cài đặt các gói này."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Suricata memcap error?",
+        "answer": "Bộ nhớ cấp phát cho flow/stream reassembly bị thiếu. Tăng các chỉ số `memcap` trong `suricata.yaml`."
+    },
+    {
+        "category": "Threat Intel (MISP)",
+        "question": "MISP scheduler không chạy task định kỳ?",
+        "answer": "Kiểm tra cronjob của user `www-data` (hoặc user chạy web server). Đảm bảo script scheduler được gọi đúng giờ."
+    },
+    {
+        "category": "General System",
+        "question": "Lỗi 'Permission denied' khi chạy script?",
+        "answer": "Thêm quyền thực thi (`chmod +x script.sh`). Hoặc chạy với `sudo`."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "Static Route không hoạt động?",
+        "answer": "Kiểm tra next-hop IP có reach được không. Gateway phải nằm cùng subnet với interface."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "Workflow bị lỗi do API Rate Limit của bên thứ 3 (VirusTotal)?",
+        "answer": "Thêm node 'Wait' hoặc 'Split In Batches' để giảm tốc độ gửi request. Nâng cấp gói API key."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Logstash pipeline bị tắc nghẽn (backpressure)?",
+        "answer": "Output (Elasticsearch) không ghi kịp. Tăng số lượng worker của Logstash hoặc tối ưu hóa Elasticsearch indexing speed."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Wazuh Agent trên Windows ngốn RAM?",
+        "answer": "Có thể do module `syscollector` quét quá nhiều thông tin. Giảm tần suất scan hoặc disable các scan không cần thiết."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Zeek intelligence framework không load file intel?",
+        "answer": "Kiểm tra định dạng file intel (tab-separated). Đảm bảo header file đúng chuẩn Zeek Intel Framework."
+    },
+    {
+        "category": "Application Layer (WAF/Web)",
+        "question": "Web socket connection bị drop?",
+        "answer": "Nginx/WAF cần cấu hình hỗ trợ Upgrade header cho Websocket. Proxy timeout có thể quá ngắn."
+    },
+    {
+        "category": "General System",
+        "question": "System load average quá cao?",
+        "answer": "Dùng `top` hoặc `htop` để xem process nào chiếm CPU/IO. Load cao có thể do IO wait (ổ cứng chậm)."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "Lỗi MTU size packet fragmentation?",
+        "answer": "Kiểm tra MTU trên các interface. Nếu qua VPN/Tunnel, cần giảm MSS (MSS Clamping) trên pfSense."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "n8n không lưu được file binary download về?",
+        "answer": "Cấu hình biến môi trường `N8N_DEFAULT_BINARY_DATA_MODE` là `filesystem` để lưu file lớn xuống đĩa thay vì RAM."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Search query quá chậm?",
+        "answer": "Query chứa wildcard đầu chuỗi (`*keyword`) rất chậm. Index quá lớn mà không chia nhỏ (shard). Dùng Profile API để debug query."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Wazuh Ruleset custom không hoạt động?",
+        "answer": "Kiểm tra file `local_rules.xml`. Restart Wazuh Manager để áp dụng rule mới. Kiểm tra cú pháp XML."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Suricata báo lỗi 'hyperscan: cpu not supported'?",
+        "answer": "CPU không hỗ trợ tập lệnh cần thiết cho Hyperscan. Cần biên dịch lại Hyperscan hoặc Suricata với flag tương thích hoặc đổi CPU/VM config."
+    },
+    {
+        "category": "Threat Intel (MISP)",
+        "question": "Attribute warning list không hoạt động?",
+        "answer": "Cập nhật warning list (update warning lists). Đảm bảo warning list được enable trong config."
+    },
+    {
+        "category": "General System",
+        "question": "User bị lock out khỏi Linux do nhập sai pass nhiều lần?",
+        "answer": "Kiểm tra `faillog -u <user>`. Reset count bằng `faillog -r -u <user>`. Kiểm tra cấu hình pam_tally2 hoặc pam_faillock."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "HSRP/CARP (HA) trên pfSense bị lỗi (Split Brain)?",
+        "answer": "Kiểm tra interface sync (thường là link trực tiếp). Đảm bảo rule firewall cho phép giao thức CARP/VRRP trên interface đó."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "Lỗi 'Execution Timeout' trong n8n?",
+        "answer": "Workflow chạy quá thời gian giới hạn (mặc định có thể là 2 phút). Tăng `N8N_DEFAULT_EXECUTION_TIMEOUT`."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Mapping exception khi gửi log mới?",
+        "answer": "Log mới có field cùng tên với field cũ nhưng khác kiểu dữ liệu (vd: text vs object). Cần đổi tên field hoặc reindex."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Wazuh Vulnerability Detector data bị out-of-date?",
+        "answer": "Kiểm tra kết nối Internet của Manager để tải feed CVE. Kiểm tra log `wazuh-modulesd` xem quá trình update có lỗi không."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Zeek cluster worker bị lag so với manager?",
+        "answer": "Đồng bộ thời gian giữa các node chưa chuẩn hoặc mạng giữa worker-manager bị nghẽn."
+    },
+    {
+        "category": "Application Layer (WAF/Web)",
+        "question": "CSRF Token mismatch lỗi trên ứng dụng Web?",
+        "answer": "Session cookie không được gửi kèm hoặc bị WAF chặn. Kiểm tra SameSite attribute của Cookie."
+    },
+    {
+        "category": "General System",
+        "question": "Swap space being used 100%?",
+        "answer": "Hệ thống thiếu RAM vật lý. Tăng RAM cho VM hoặc điều chỉnh `vm.swappiness` giảm xuống để ưu tiên dùng RAM."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "Port Forwarding (NAT) không hoạt động?",
+        "answer": "Kiểm tra xem rule NAT Port Forward đã tự động tạo rule Firewall liên kết chưa (Filter rule association). Đích đến phải là IP LAN."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "SmartXDR Assistant trả lời sai thông tin ngữ cảnh?",
+        "answer": "Dữ liệu trong Vector DB có thể đã cũ hoặc Chunking tài liệu không tốt. Cần re-index lại tài liệu Knowledge Base."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "ILM Policy không xóa index cũ?",
+        "answer": "Kiểm tra xem ILM policy đã được gán vào index template chưa. Kiểm tra xem index có đang bị lỗi (red/yellow) ngăn cản việc rollover/delete không."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Wazuh Agent service stop đột ngột?",
+        "answer": "Có thể do Out Of Memory (OOM) killer của OS. Kiểm tra log system (`dmesg | grep -i oom`)."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Suricata bỏ qua traffic mã hóa (TLS)?",
+        "answer": "Suricata không thể decrypt TLS nếu không có key. Nó chỉ inspect được handshake và certificate. Cần giải pháp SSL inspection chuyên dụng hoặc cài certificate lên endpoint."
+    },
+    {
+        "category": "Threat Intel (MISP)",
+        "question": "Lỗi kết nối Taxii Server?",
+        "answer": "Kiểm tra URL discovery service của Taxii. Xác thực user/pass hoặc certificate client."
+    },
+    {
+        "category": "General System",
+        "question": "Lệnh `pip install` quá chậm?",
+        "answer": "Đổi PyPI mirror sang server gần hơn hoặc dùng cache proxy."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "Lỗi 'Destination Host Unreachable'?",
+        "answer": "Không có route đến đích. Kiểm tra bảng định tuyến (`route -n` hoặc `netstat -rn`)."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "n8n Webhook không nhận được POST request từ bên ngoài?",
+        "answer": "Nếu n8n chạy trong mạng nội bộ (192.168.100.158), bên ngoài Internet không gọi trực tiếp được. Cần cấu hình NAT Port Forward trên pfSense và Linux Router."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Logstash filter grok parse failure?",
+        "answer": "Mẫu Grok pattern không khớp với log message. Dùng Grok Debugger trên Kibana để test và điều chỉnh pattern."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Wazuh Group Configuration không apply xuống Agent?",
+        "answer": "Kiểm tra file `agent.conf` trên Manager. Restart Wazuh Manager. Chờ một khoảng thời gian để Agent sync config."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Zeek báo 'reporter error'?",
+        "answer": "Lỗi nội bộ của Zeek script hoặc core. Kiểm tra file `reporter.log` để biết chi tiết."
+    },
+    {
+        "category": "Application Layer (WAF/Web)",
+        "question": "File upload bị chặn bởi Nginx (Client Body Too Large)?",
+        "answer": "Tăng `client_max_body_size` trong config Nginx."
+    },
+    {
+        "category": "General System",
+        "question": "Không thể mount ổ đĩa ngoài (USB/Shared Folder)?",
+        "answer": "Kiểm tra module kernel (`modprobe usb-storage`). Cài đặt `open-vm-tools-desktop` cho Shared Folder VMware."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "Ping loopback (127.0.0.1) thành công nhưng ping IP LAN thất bại?",
+        "answer": "Stack TCP/IP hoạt động tốt nhưng card mạng hoặc driver có vấn đề, hoặc dây cáp/switch ảo lỗi."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "IRIS module IntelOwl bị lỗi connection?",
+        "answer": "Kiểm tra cấu hình module trong IRIS Admin panel. Verify URL và Token của IntelOwl."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Elasticsearch field limit exceeded?",
+        "answer": "Mặc định 1000 field/index. Tăng `index.mapping.total_fields.limit`. Tuy nhiên nên review lại data model để tránh mapping explosion."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Wazuh Agent ID bị trùng lặp?",
+        "answer": "Do clone VM mà không xóa file `client.keys` và reset Agent ID. Cần chạy `agent-auth` lại để lấy ID mới."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Suricata log file quá lớn không mở được?",
+        "answer": "Dùng lệnh `less`, `tail`, `grep` để xem thay vì mở bằng text editor. Cấu hình log rotation ngay lập tức."
+    },
+    {
+        "category": "Threat Intel (MISP)",
+        "question": "MISP object template missing?",
+        "answer": "Cập nhật MISP Object Templates (update object templates) trong menu quản trị."
+    },
+    {
+        "category": "General System",
+        "question": "Lỗi 'Bash: command not found'?",
+        "answer": "Gõ sai lệnh hoặc chưa cài đặt gói phần mềm chứa lệnh đó, hoặc biến PATH không chứa đường dẫn đến lệnh."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "Traceroute chỉ thấy dấu * * *?",
+        "answer": "Các hop router chặn gói tin ICMP Time Exceeded. Đây là behavior bình thường của một số firewall."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "SmartXDR Assistant không hiểu câu hỏi tiếng Việt?",
+        "answer": "Prompt system chưa được tối ưu cho tiếng Việt hoặc model LLM hỗ trợ tiếng Việt kém. Cần điều chỉnh prompt engineering."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Kibana Visualize báo 'No results found'?",
+        "answer": "Kiểm tra lại time range. Kiểm tra filter query. Đảm bảo index pattern có chứa dữ liệu."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Wazuh Integrity Monitoring báo quá nhiều thay đổi file rác?",
+        "answer": "Thêm rule `ignore` cho các đường dẫn thư mục tạm (`/tmp`, `/var/cache`) trong `ossec.conf`."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Zeek input framework không đọc được file feed?",
+        "answer": "Kiểm tra quyền đọc file của user chạy zeek. Đảm bảo định dạng file input đúng chuẩn."
+    },
+    {
+        "category": "Application Layer (WAF/Web)",
+        "question": "DVWA Setup check báo 'GD module: Missing'?",
+        "answer": "Cài đặt `php-gd` và restart Apache/Nginx."
+    },
+    {
+        "category": "General System",
+        "question": "Service MySQL không start được (PID file not found)?",
+        "answer": "Kiểm tra log mysql error. Thường do sai quyền thư mục `/var/lib/mysql` hoặc file cấu hình my.cnf lỗi."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "Mạng WiFi Guest cô lập hoàn toàn?",
+        "answer": "Kiểm tra cấu hình VLAN hoặc Interface Group trên AP và pfSense. Đảm bảo rule firewall chặn truy cập đến các Subnet nội bộ khác."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "n8n merge node không hoạt động như ý?",
+        "answer": "Kiểm tra mode của Merge Node (Append, Merge by Index, Merge by Key). Dữ liệu đầu vào 2 nhánh phải đồng bộ nếu merge by index."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Logstash geoip filter failure?",
+        "answer": "Database GeoIP chưa được update hoặc IP là IP nội bộ (Private IP) nên không có thông tin Geo."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Wazuh Agent buffer full?",
+        "answer": "Sự kiện sinh ra quá nhanh, agent không gửi kịp. Tăng `client_buffer` queue_size và events_per_second."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Suricata bỏ sót traffic trên interface tốc độ cao?",
+        "answer": "Cần tune ring buffer size của card mạng (`ethtool -G`). Cân nhắc dùng giải pháp phần cứng chuyên dụng hoặc DPDK."
+    },
+    {
+        "category": "Threat Intel (MISP)",
+        "question": "MISP galaxy clusters not updating?",
+        "answer": "Update MISP Galaxies trong menu quản trị."
+    },
+    {
+        "category": "General System",
+        "question": "Lỗi 'Segfault' khi chạy ứng dụng?",
+        "answer": "Lỗi truy cập bộ nhớ trái phép. Thường do lỗi code C/C++ hoặc RAM bị lỗi phần cứng."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "Không thể ping Broadcast address?",
+        "answer": "Hầu hết các OS hiện đại mặc định chặn ping broadcast để chống tấn công Smurf."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "SmartXDR Core API response chậm?",
+        "answer": "Có thể do xử lý logic nặng hoặc query database lâu. Profile code để tìm bottleneck."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Elasticsearch Master Not Discovered Exception?",
+        "answer": "Cluster không bầu chọn được Master node. Kiểm tra cấu hình `cluster.initial_master_nodes` và `discovery.seed_hosts`."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Wazuh Agent trên Windows không tự update?",
+        "answer": "Tính năng auto-upgrade cần được enable trong config manager (WPK repo). Kiểm tra log upgrade trên Agent."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Zeek notice log quá nhiều thông tin rác?",
+        "answer": "Tune lại policy script để suppress các notice không quan trọng."
+    },
+    {
+        "category": "Application Layer (WAF/Web)",
+        "question": "DVWA ReCaptcha key missing?",
+        "answer": "Cần đăng ký Google ReCaptcha API key và điền vào config của DVWA (nếu bật tính năng này)."
+    },
+    {
+        "category": "General System",
+        "question": "Lỗi 'Temporary failure in name resolution'?",
+        "answer": "Lỗi DNS client. Kiểm tra file `/etc/resolv.conf` và kết nối UDP 53."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "BGP Session (nếu có) không establish?",
+        "answer": "Kiểm tra AS Number, IP neighbor, MD5 password. Đảm bảo TCP 179 được mở."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "n8n expression bị lỗi cú pháp?",
+        "answer": "Kiểm tra cú pháp JavaScript trong expression. Preview data để debug."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Kibana Saved Object bị mất?",
+        "answer": "Có thể do lỡ tay xóa index `.kibana`. Cần restore từ backup."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Wazuh Agent không gửi log IIS?",
+        "answer": "Cấu hình `localfile` trong `ossec.conf` trỏ đến đường dẫn log IIS. Đảm bảo Wazuh có quyền đọc thư mục log."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Suricata stream reassembly failed?",
+        "answer": "Stream quá lớn hoặc packet bị mất quá nhiều. Tăng `stream.reassembly.depth`."
+    },
+    {
+        "category": "Threat Intel (MISP)",
+        "question": "MISP correlation graph quá chậm?",
+        "answer": "Do quá nhiều correlation link. Giới hạn độ sâu (depth) của graph hoặc disable correlation cho một số attribute phổ biến."
+    },
+    {
+        "category": "General System",
+        "question": "Lỗi 'Too many open files'?",
+        "answer": "Process mở quá nhiều file handle vượt giới hạn ulimit. Tăng `ulimit -n`."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "Proxy ARP không hoạt động?",
+        "answer": "Kiểm tra cấu hình Proxy ARP trên interface router. Đảm bảo IP range đúng."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "SmartXDR ML training data thiếu?",
+        "answer": "Cần thu thập thêm log mẫu, gán nhãn thủ công để bổ sung dataset."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Logstash TCP input connection reset?",
+        "answer": "Sender gửi dữ liệu sai format hoặc đóng kết nối đột ngột. Kiểm tra log phía sender."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Wazuh Agent trên Docker host không thấy log container?",
+        "answer": "Cấu hình module `docker-listener` trên Agent. Add user wazuh vào group docker."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Zeek intel matching chậm?",
+        "answer": "File intel quá lớn. Dùng Input Framework để đọc hiệu quả hơn hoặc dùng Broker."
+    },
+    {
+        "category": "Application Layer (WAF/Web)",
+        "question": "DVWA Command Injection không thực thi được?",
+        "answer": "Có thể user chạy web server (www-data) bị hạn chế quyền shell hoặc bị chặn bởi AppArmor/SELinux."
+    },
+    {
+        "category": "General System",
+        "question": "Systemd service timeout?",
+        "answer": "Service khởi động quá lâu. Kiểm tra log service. Tăng TimeoutStartSec trong unit file."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "Lỗi Duplex Mismatch trên switch port?",
+        "answer": "Một bên Full Duplex, bên kia Half Duplex gây collision và error/slow. Cần set cứng (hard code) speed/duplex ở 2 đầu."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "n8n Split In Batches node không lặp hết?",
+        "answer": "Logic loop sai. Cần nối đầu ra của node xử lý quay lại input của SplitInBatches (qua node Merge/NoOp nếu cần)."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Elasticsearch script compilation limit hit?",
+        "answer": "Quá nhiều script inline động. Dùng stored script hoặc tăng `script.max_compilations_rate`."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Wazuh Agent không report process list?",
+        "answer": "Lệnh `ossec-agentd` không có quyền truy cập `/proc`. Kiểm tra policy SELinux/AppArmor."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Suricata log rotate đè mất file cũ?",
+        "answer": "Cấu hình logrotate để rename file cũ (thêm timestamp) thay vì overwrite."
+    },
+    {
+        "category": "Threat Intel (MISP)",
+        "question": "MISP Redis server went away?",
+        "answer": "Redis crash hoặc restart. Kiểm tra log Redis."
+    },
+    {
+        "category": "General System",
+        "question": "Lỗi 'Read-only file system'?",
+        "answer": "File system bị lỗi structure, OS tự remount read-only để bảo vệ data. Cần chạy `fsck` để sửa lỗi disk."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "IPSec VPN Phase 2 fail?",
+        "answer": "Mismatched Proxy ID (Subnet). Cấu hình Local/Remote Subnet phải khớp chính xác giữa 2 peer."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "SmartXDR Assistant trả lời lan man?",
+        "answer": "Điều chỉnh tham số `temperature` của LLM xuống thấp (0.1 - 0.3) để câu trả lời tập trung hơn."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Kibana Space không truy cập được?",
+        "answer": "User không có quyền truy cập Space đó. Kiểm tra Role Mapping."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Wazuh Agent key polling failed?",
+        "answer": "Agent không thể request key mới từ Manager. Kiểm tra password authd (nếu set)."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Zeek weird.log quá nhiều event?",
+        "answer": "Mạng có nhiều traffic không chuẩn RFC. Có thể ignore một số loại weird notice."
+    },
+    {
+        "category": "Application Layer (WAF/Web)",
+        "question": "DVWA XSS Stored không lưu vào DB?",
+        "answer": "Input bị cắt ngắn do giới hạn độ dài column trong DB. Hoặc bị sanitize bởi code PHP (nếu security level > low)."
+    },
+    {
+        "category": "General System",
+        "question": "Lỗi 'Unable to resolve host' khi dùng sudo?",
+        "answer": "Hostname của máy không có trong file `/etc/hosts`. Thêm `127.0.0.1 <hostname>` vào."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "GRE Tunnel không up?",
+        "answer": "Kiểm tra IP endpoint public. Đảm bảo protocol GRE (IP protocol 47) được allow qua firewall."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "n8n báo lỗi 'workflow is not active' khi gọi webhook?",
+        "answer": "Bấm nút Activate (góc trên bên phải) để bật workflow cho production mode."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Elasticsearch translog corrupted?",
+        "answer": "File transaction log bị hỏng. Cần dùng công cụ `elasticsearch-translog` để truncate (chấp nhận mất dữ liệu chưa commit)."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Wazuh Agent chiếm dụng port lạ?",
+        "answer": "Dùng `netstat -tulpn` để check. Có thể xung đột với ứng dụng khác."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Suricata rule update không có tác dụng?",
+        "answer": "Chưa reload rule. Chạy `suricata -c suricata.yaml -s rules.files` hoặc gửi signal USR2: `kill -USR2 $(pidof suricata)`."
+    },
+    {
+        "category": "Threat Intel (MISP)",
+        "question": "MISP tag không hiển thị?",
+        "answer": "Tag có thể bị disable hoặc user không có quyền view tag đó."
+    },
+    {
+        "category": "General System",
+        "question": "Package manager bị lock?",
+        "answer": "Có process apt/yum đang chạy ngầm hoặc bị crash. Xóa file lock `/var/lib/dpkg/lock` (cẩn thận)."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "Multicast traffic không đi qua router?",
+        "answer": "Router mặc định không forward multicast. Cần cấu hình IGMP Proxy hoặc PIM."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "SmartXDR Core không load được module mới?",
+        "answer": "Restart service Flask/SmartXDR. Kiểm tra file `requirements.txt` đã cài đủ thư viện chưa."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Kibana Advanced Settings bị lỗi?",
+        "answer": "Một số setting format sai làm crash UI. Xóa setting đó trực tiếp trong index `.kibana` qua API."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Wazuh Agent trên Windows XP (Legacy) lỗi?",
+        "answer": "Version agent mới không hỗ trợ OS quá cũ. Cần dùng version agent cũ hơn tương thích."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Zeek cluster node mất kết nối?",
+        "answer": "Kiểm tra firewall giữa các node. Broker communication dùng port 9999 (mặc định)."
+    },
+    {
+        "category": "Application Layer (WAF/Web)",
+        "question": "Web App bị chậm khi bật log debug?",
+        "answer": "Log I/O làm chậm disk. Tắt debug log trên production."
+    },
+    {
+        "category": "General System",
+        "question": "Lỗi 'Kernel panic - not syncing'?",
+        "answer": "Lỗi nghiêm trọng phần cứng hoặc driver, file system root bị hỏng. Cần boot vào rescue mode hoặc restore backup."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "QoS không hoạt động đúng?",
+        "answer": "Packet không được match vào đúng queue. Kiểm tra rule classification của QoS."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "n8n Cron node không chạy đúng giờ?",
+        "answer": "Kiểm tra timezone của container n8n (`GENERIC_TIMEZONE`)."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Elasticsearch fielddata circuit breaker?",
+        "answer": "Query sort/agg trên field text tốn nhiều heap. Đổi sang field keyword hoặc tăng limit (không khuyến nghị)."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Wazuh Agent log flood?",
+        "answer": "Một ứng dụng ghi log liên tục lỗi. Cần fix ứng dụng hoặc ignore log đó trong `ossec.conf`."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Suricata flow emergency mode?",
+        "answer": "Số lượng flow vượt quá `flow.memcap`. Hệ thống chuyển sang emergency mode (timeout ngắn hơn) để giải phóng bộ nhớ."
+    },
+    {
+        "category": "Threat Intel (MISP)",
+        "question": "MISP server settings không lưu?",
+        "answer": "File `config.php` không có quyền ghi cho user web server."
+    },
+    {
+        "category": "General System",
+        "question": "Màn hình console Linux bị trắng xóa/đen?",
+        "answer": "Lỗi driver đồ họa hoặc chế độ hiển thị console. Thử SSH vào máy."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "Jumbo Frame bị drop?",
+        "answer": "MTU không đồng nhất trên toàn đường truyền (Server, Switch, Router). Tất cả phải support Jumbo Frame (MTU 9000)."
+    },
+    {
+        "category": "Automation (n8n/SOAR)",
+        "question": "SmartXDR Assistant hallucination (bịa đặt)?",
+        "answer": "Giới hạn ngữ cảnh trả lời (context) chỉ trong tài liệu RAG cung cấp. Cảnh báo trong System Prompt."
+    },
+    {
+        "category": "SIEM (Elastic Stack)",
+        "question": "Logstash ruby filter lỗi code?",
+        "answer": "Kiểm tra cú pháp Ruby. Exception trong code Ruby sẽ làm drop event và ghi log error."
+    },
+    {
+        "category": "Endpoint (Wazuh)",
+        "question": "Wazuh Agent không gửi inventory data?",
+        "answer": "Module `wodle_syscollector` bị disable hoặc khoảng thời gian scan (`interval`) quá dài."
+    },
+    {
+        "category": "Security Sensors (Suricata/Zeek)",
+        "question": "Zeek capture filter sai?",
+        "answer": "Kiểm tra cú pháp BPF filter trong `networks.cfg` hoặc dòng lệnh start zeek."
+    },
+    {
+        "category": "Application Layer (WAF/Web)",
+        "question": "DVWA SQL Injection Blind không ra kết quả?",
+        "answer": "Kiểm tra output của trang web. Blind injection dựa vào time-based hoặc boolean (đúng/sai), không hiển thị data trực tiếp."
+    },
+    {
+        "category": "General System",
+        "question": "Lỗi 'Bad file descriptor'?",
+        "answer": "Chương trình cố gắng đọc/ghi vào file đã bị đóng hoặc không mở được."
+    },
+    {
+        "category": "General System",
+        "question": "Tại sao không thể kết nối SSH từ máy ngoài vào máy ảo trong VMnet Host-Only?",
+        "answer": "Mạng Host-Only cô lập với bên ngoài. Cần cấu hình NAT Port Forward trên máy Host (Virtual Network Editor -> NAT Settings) nếu muốn truy cập, hoặc dùng VPN."
+    },
+    {
+        "category": "Network Infrastructure",
+        "question": "Ping thấy độ trễ (latency) rất cao >1000ms trong mạng LAN ảo?",
+        "answer": "Kiểm tra tải CPU của máy Host VMware. Nếu Host bị quá tải, việc ảo hóa mạng sẽ bị chậm. Kiểm tra xem có loop mạng nào không."
+    }
+]

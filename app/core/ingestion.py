@@ -5,8 +5,14 @@ import json
 import os
 import hashlib
 import glob
-from app.config import ASSETS_DIR, ECOSYSTEM_DIR, NETWORK_DIR, MITRE_DIR
-from app.core.chunking import json_to_natural_text, load_topology_context, mitre_to_natural_text
+from app.config import (
+    ASSETS_DIR, ECOSYSTEM_DIR, NETWORK_DIR, MITRE_DIR,
+    PLAYBOOKS_DIR, KNOWLEDGE_BASE_DIR, POLICIES_DIR
+)
+from app.core.chunking import (
+    json_to_natural_text, load_topology_context, mitre_to_natural_text,
+    markdown_to_chunks, text_to_chunks, playbook_json_to_chunks, knowledge_base_json_to_chunks
+)
 
 
 def get_file_hash(filepath):
@@ -55,9 +61,22 @@ def ingest_data(collection):
     ]
     json_files.extend([f for f in mitre_files if os.path.exists(f)])
     
+    # Include playbooks JSON files
+    if os.path.exists(PLAYBOOKS_DIR):
+        playbook_files = glob.glob(os.path.join(PLAYBOOKS_DIR, "*.json"))
+        json_files.extend(playbook_files)
+        print(f"Found {len(playbook_files)} playbook JSON files.")
+    
+    # Include knowledge base JSON files
+    if os.path.exists(KNOWLEDGE_BASE_DIR):
+        kb_files = glob.glob(os.path.join(KNOWLEDGE_BASE_DIR, "*.json"))
+        json_files.extend(kb_files)
+        print(f"Found {len(kb_files)} knowledge base JSON files.")
+    
     if not json_files:
         print("WARNING: No JSON files found.")
-        return
+    else:
+        print(f"Found {len(json_files)} total JSON files to process.")
 
     total_chunks = 0
     for filepath in json_files:
@@ -146,6 +165,30 @@ Purpose: {net.get('description', 'N/A')}"""
                             "file_hash": current_hash,
                             "type": "network_config"
                         })
+            
+            # === PLAYBOOKS JSON ===
+            elif filepath.startswith(PLAYBOOKS_DIR) or "playbook" in filename.lower():
+                text_chunks = playbook_json_to_chunks(data, filename)
+                for idx, chunk in enumerate(text_chunks):
+                    ids.append(f"{filename}-playbook-{idx}")
+                    documents.append(chunk)
+                    metadatas.append({
+                        "source": filename,
+                        "file_hash": current_hash,
+                        "type": "playbook"
+                    })
+            
+            # === KNOWLEDGE BASE JSON ===
+            elif filepath.startswith(KNOWLEDGE_BASE_DIR) or "knowledge" in filename.lower():
+                text_chunks = knowledge_base_json_to_chunks(data, filename)
+                for idx, chunk in enumerate(text_chunks):
+                    ids.append(f"{filename}-kb-{idx}")
+                    documents.append(chunk)
+                    metadatas.append({
+                        "source": filename,
+                        "file_hash": current_hash,
+                        "type": "knowledge_base"
+                    })
             
             elif isinstance(data, dict) and "id" in data:
                 # Individual device file - use semantic chunking
@@ -251,5 +294,137 @@ Keywords: {group_id}, {group.get("name", "")}, {', '.join(aliases[:3])}"""
         except Exception as e:
             print(f"ERROR reading {filename}: {e}")
     
+    # ============ PROCESS MARKDOWN FILES ============
+    print("\n--- Processing Markdown (.md) files ---")
+    md_files = []
+    
+    # Policies directory
+    if os.path.exists(POLICIES_DIR):
+        md_files.extend(glob.glob(os.path.join(POLICIES_DIR, "*.md")))
+    
+    # Also search in other common locations
+    for subdir in ["docs", "documentation", "guides"]:
+        subdir_path = os.path.join(ASSETS_DIR, subdir)
+        if os.path.exists(subdir_path):
+            md_files.extend(glob.glob(os.path.join(subdir_path, "*.md")))
+    
+    print(f"Found {len(md_files)} Markdown files.")
+    
+    for filepath in md_files:
+        filename = os.path.basename(filepath)
+        current_hash = get_file_hash(filepath)
+        
+        # Check if file already indexed and unchanged
+        existing_items = collection.get(
+            where={"source": filename},
+            limit=1,
+            include=["metadatas"]
+        )
+        
+        if existing_items["ids"]:
+            stored_hash = existing_items["metadatas"][0].get("file_hash") if existing_items["metadatas"] else None
+            if stored_hash == current_hash:
+                print(f"{filename}: Unchanged. Skipped.")
+                continue
+            else:
+                print(f"{filename}: Changed. Updating...")
+                collection.delete(where={"source": filename})
+        else:
+            print(f"{filename}: New file. Indexing...")
+        
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                content = f.read()
+            
+            text_chunks = markdown_to_chunks(content, filename)
+            
+            ids = []
+            documents = []
+            metadatas = []
+            
+            # Determine type based on directory
+            doc_type = "policy" if POLICIES_DIR in filepath else "documentation"
+            
+            for idx, chunk in enumerate(text_chunks):
+                ids.append(f"{filename}-md-{idx}")
+                documents.append(chunk)
+                metadatas.append({
+                    "source": filename,
+                    "file_hash": current_hash,
+                    "type": doc_type,
+                    "format": "markdown"
+                })
+            
+            if documents:
+                collection.add(ids=ids, documents=documents, metadatas=metadatas)
+                total_chunks += len(documents)
+                print(f"   -> Indexed {len(documents)} chunks.")
+        
+        except Exception as e:
+            print(f"ERROR reading {filename}: {e}")
+    
+    # ============ PROCESS PLAIN TEXT FILES ============
+    print("\n--- Processing Plain Text (.txt) files ---")
+    txt_files = []
+    
+    # Search all assets subdirectories for .txt files
+    for root, dirs, files in os.walk(ASSETS_DIR):
+        for file in files:
+            if file.endswith(".txt"):
+                txt_files.append(os.path.join(root, file))
+    
+    print(f"Found {len(txt_files)} Text files.")
+    
+    for filepath in txt_files:
+        filename = os.path.basename(filepath)
+        current_hash = get_file_hash(filepath)
+        
+        # Check if file already indexed and unchanged
+        existing_items = collection.get(
+            where={"source": filename},
+            limit=1,
+            include=["metadatas"]
+        )
+        
+        if existing_items["ids"]:
+            stored_hash = existing_items["metadatas"][0].get("file_hash") if existing_items["metadatas"] else None
+            if stored_hash == current_hash:
+                print(f"{filename}: Unchanged. Skipped.")
+                continue
+            else:
+                print(f"{filename}: Changed. Updating...")
+                collection.delete(where={"source": filename})
+        else:
+            print(f"{filename}: New file. Indexing...")
+        
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                content = f.read()
+            
+            text_chunks = text_to_chunks(content, filename)
+            
+            ids = []
+            documents = []
+            metadatas = []
+            
+            for idx, chunk in enumerate(text_chunks):
+                ids.append(f"{filename}-txt-{idx}")
+                documents.append(chunk)
+                metadatas.append({
+                    "source": filename,
+                    "file_hash": current_hash,
+                    "type": "text_document",
+                    "format": "plain_text"
+                })
+            
+            if documents:
+                collection.add(ids=ids, documents=documents, metadatas=metadatas)
+                total_chunks += len(documents)
+                print(f"   -> Indexed {len(documents)} chunks.")
+        
+        except Exception as e:
+            print(f"ERROR reading {filename}: {e}")
+    
     print(f"\nCompleted! Total {total_chunks} chunks indexed in ChromaDB.")
     print(f"Total documents in collection: {collection.count()}")
+
