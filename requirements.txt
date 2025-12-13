@@ -42,3 +42,6 @@ gunicorn>=21.2.0
 # Testing Dependencies
 pytest>=7.4.0
 pytest-cov>=4.1.0
+
+# Redis Cache
+redis>=5.0.0

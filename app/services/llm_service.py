@@ -104,7 +104,8 @@ class LLMService:
         query: str,
         top_k: int = DEFAULT_RESULTS,
         filters: Optional[Dict[str, Any]] = None,
-        use_cache: bool = True
+        use_cache: bool = True,
+        session_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         RAG Query - Search and answer questions using RAGService
@@ -114,6 +115,10 @@ class LLMService:
             top_k: Number of documents to retrieve
             filters: Optional metadata filters (e.g., {"is_active": True, "tags": "security"})
             use_cache: Whether to use cache (default: True). Set False for queries with dynamic context.
+            session_id: Optional session ID for conversation memory. If provided, enables:
+                       - Including recent conversation history in context
+                       - Storing messages for future reference
+                       - Semantic search for relevant past conversations
         
         Returns:
             {
@@ -121,11 +126,14 @@ class LLMService:
                 "answer": "...",
                 "cached": bool,
                 "sources": [...],
+                "session_id": "..." (if session was used),
                 "error": "..." (if error)
             }
         """
         if DEBUG_MODE:
             print(f"\n[LLM Service] Question: {query}")
+            if session_id:
+                print(f"[LLM Service] Session: {session_id[:8]}...")
         
         # Check rate limit
         if not self.usage_tracker.check_rate_limit():
@@ -139,8 +147,44 @@ class LLMService:
         from app.rag.service import RAGService
         rag_service = RAGService()
         
-        # Check cache (skip if use_cache=False)
-        if use_cache:
+        # Initialize conversation memory if session_id provided
+        conversation_memory = None
+        conversation_history_text = ""
+        
+        if session_id:
+            try:
+                from app.services.conversation_memory import get_conversation_memory
+                conversation_memory = get_conversation_memory()
+                
+                # Get recent conversation history (In-Memory - fast)
+                recent_messages = conversation_memory.get_recent_history(session_id, limit=6)
+                
+                if recent_messages:
+                    conversation_history_text = conversation_memory.format_history_for_prompt(recent_messages)
+                    if DEBUG_MODE:
+                        print(f"[LLM Service] Loaded {len(recent_messages)} messages from history")
+                
+                # Also try semantic search for relevant past context (ChromaDB)
+                semantic_context = conversation_memory.get_semantic_context(session_id, query, limit=2)
+                if semantic_context:
+                    # Format and add semantic context to history
+                    semantic_text = conversation_memory.format_semantic_context(semantic_context)
+                    if semantic_text:
+                        if conversation_history_text:
+                            conversation_history_text += f"\n\n{semantic_text}"
+                        else:
+                            conversation_history_text = semantic_text
+                    if DEBUG_MODE:
+                        print(f"[LLM Service] Added {len(semantic_context)} relevant past messages from semantic search")
+                    
+            except Exception as e:
+                if DEBUG_MODE:
+                    print(f"[LLM Service] Conversation memory error: {e}")
+                # Continue without conversation memory
+        
+        # Check cache (skip if use_cache=False or if using session)
+        # When using sessions, we want fresh responses that consider history
+        if use_cache and not session_id:
             cache_key = self.response_cache.get_cache_key(query, "")
             cached_response = self.response_cache.get(cache_key, query)
             
@@ -161,9 +205,15 @@ class LLMService:
             filters=filters
         )
         
+        # Combine RAG context with conversation history
+        if conversation_history_text:
+            enhanced_context = f"{conversation_history_text}\n\n---\n\n{context_text}"
+        else:
+            enhanced_context = context_text
+        
         # Build API request
         system_instructions = self.prompt_builder.build_rag_prompt()
-        user_input = self._build_rag_user_input(context_text, query)
+        user_input = self._build_rag_user_input(enhanced_context, query)
         
         # Call API
         try:
@@ -178,18 +228,46 @@ class LLMService:
             if sources:
                 answer += f"\n\nSources: {', '.join(sorted(sources))}"
             
-            # Cache the response (only if use_cache=True)
-            if use_cache:
+            # Cache the response (only if use_cache=True and no session)
+            if use_cache and not session_id:
                 cache_key = self.response_cache.get_cache_key(query, "")
                 self.response_cache.set(cache_key, answer, query)
             
-            return {
+            # Store in conversation memory if session_id provided
+            if session_id and conversation_memory:
+                try:
+                    # Store user message
+                    conversation_memory.add_message(
+                        session_id=session_id,
+                        role="user",
+                        content=query,
+                        metadata={"sources_count": len(sources) if sources else 0}
+                    )
+                    
+                    # Store assistant response
+                    conversation_memory.add_message(
+                        session_id=session_id,
+                        role="assistant",
+                        content=answer,
+                        metadata={"sources": list(sources) if sources else [], "cost": actual_cost}
+                    )
+                except Exception as e:
+                    if DEBUG_MODE:
+                        print(f"[LLM Service] Failed to store in conversation memory: {e}")
+            
+            result = {
                 "status": "success",
                 "answer": answer,
                 "cached": False,
                 "sources": list(sources),
                 "cost": actual_cost
             }
+            
+            # Include session_id in response if used
+            if session_id:
+                result["session_id"] = session_id
+            
+            return result
             
         except RateLimitError as e:
             return {

@@ -734,12 +734,17 @@ class TelegramMiddlewareService:
             # Send query directly to API
             query_to_send = query
             
-            # Call SmartXDR API with original query
-            logger.info(f"Sending query to SmartXDR: {query_to_send[:50]}...")
+            # Call SmartXDR API with session_id for conversation memory
+            # Use chat_id as session identifier so each Telegram chat has its own context
+            session_id = f"telegram-{chat_id}"
+            logger.info(f"Sending query to SmartXDR: {query_to_send[:50]}... [session: {session_id}]")
             
             response = self._session.post(
                 f"{self.smartxdr_api_url}/api/ai/ask",
-                json={"query": query_to_send},
+                json={
+                    "query": query_to_send,
+                    "session_id": session_id  # Enable conversation memory
+                },
                 timeout=60
             )
             
@@ -1144,8 +1149,10 @@ class TelegramMiddlewareService:
             user_query = f"{system_prompt}\n\nCÂU HỎI: {question}\n\nDỮ LIỆU LOGS:\n{logs_context_ai}"
             
             # Call LLM with RAG (disable cache - index/time-specific queries)
+            # Use session_id for conversation memory
+            session_id = f"telegram-{chat_id}"
             llm_service = LLMService()
-            ai_response = llm_service.ask_rag(query=user_query, use_cache=False)
+            ai_response = llm_service.ask_rag(query=user_query, use_cache=False, session_id=session_id)
             
             if ai_response.get('status') != 'success':
                 self.send_message(

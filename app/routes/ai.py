@@ -1,5 +1,5 @@
 """
-AI/LLM API Routes - RAG Query Endpoint
+AI/LLM API Routes - RAG Query Endpoint with Conversation Memory
 """
 import traceback
 import logging
@@ -32,7 +32,8 @@ def ask_llm():
         {
             "query": "What is Suricata's management IP?",
             "n_results": 10,  // optional, default: 10
-            "filter": {}      // optional, metadata filter
+            "filter": {},     // optional, metadata filter
+            "session_id": "uuid"  // optional, for conversation memory
         }
     
     Response:
@@ -40,7 +41,8 @@ def ask_llm():
             "status": "success",
             "query": "What is Suricata's management IP?",
             "answer": "Suricata's management IP is 10.10.21.11...",
-            "cached": false
+            "cached": false,
+            "session_id": "uuid"  // returned if session was used
         }
     
     Error Response:
@@ -101,6 +103,7 @@ def ask_llm():
         # Optional parameters
         n_results = data.get('n_results', 10)
         filter_metadata = data.get('filter', None)
+        session_id = data.get('session_id', None)  # NEW: conversation memory
         
         # Validate n_results
         if not isinstance(n_results, int) or n_results < 1 or n_results > 50:
@@ -109,13 +112,21 @@ def ask_llm():
                 'message': 'n_results must be an integer between 1 and 50'
             }), 400
         
-        logger.info(f"Processing query: {query[:100]}...")
+        # Validate session_id if provided
+        if session_id is not None and not isinstance(session_id, str):
+            return jsonify({
+                'status': 'error',
+                'message': 'session_id must be a string'
+            }), 400
+        
+        logger.info(f"Processing query: {query[:100]}..." + (f" [session: {session_id[:8]}...]" if session_id else ""))
         
         # Call LLM Service with new RAG architecture
         result = llm_service.ask_rag(
             query=query,
             top_k=n_results,
-            filters=filter_metadata
+            filters=filter_metadata,
+            session_id=session_id  # NEW: pass session_id
         )
         
         # Handle response
@@ -133,14 +144,20 @@ def ask_llm():
         
         logger.info(f"Query successful: {len(result.get('answer', ''))} chars")
         
-        return jsonify({
+        response = {
             'status': 'success',
             'query': query,
             'answer': result['answer'],
             'cached': result.get('cached', False),
             'sources': result.get('sources', []),
             'n_results': n_results
-        }), 200
+        }
+        
+        # Include session_id if used
+        if result.get('session_id'):
+            response['session_id'] = result['session_id']
+        
+        return jsonify(response), 200
         
     except ValueError as e:
         logger.error(f"Validation error: {e}")
@@ -156,6 +173,118 @@ def ask_llm():
         return jsonify({
             'status': 'error',
             'message': f'Internal server error: {str(e)}'
+        }), 500
+
+
+@ai_bp.route('/sessions/<session_id>/history', methods=['GET'])
+@require_api_key('ai:ask')
+def get_session_history(session_id: str):
+    """
+    Get conversation history for a session
+    
+    Response:
+        {
+            "status": "success",
+            "session_id": "...",
+            "history": [
+                {"role": "user", "content": "...", "timestamp": ...},
+                {"role": "assistant", "content": "...", "timestamp": ...}
+            ],
+            "message_count": 4
+        }
+    """
+    try:
+        from app.services.conversation_memory import get_conversation_memory
+        memory = get_conversation_memory()
+        
+        history = memory.get_session_history(session_id)
+        info = memory.get_session_info(session_id)
+        
+        return jsonify({
+            'status': 'success',
+            'session_id': session_id,
+            'history': history,
+            'message_count': info.get('message_count', 0),
+            'exists': info.get('exists', False)
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Failed to get session history: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to get history: {str(e)}'
+        }), 500
+
+
+@ai_bp.route('/sessions/<session_id>', methods=['DELETE'])
+@require_api_key('ai:admin')
+def clear_session(session_id: str):
+    """
+    Clear a conversation session
+    
+    Response:
+        {
+            "status": "success",
+            "message": "Session cleared successfully"
+        }
+    """
+    try:
+        from app.services.conversation_memory import get_conversation_memory
+        memory = get_conversation_memory()
+        
+        cleared = memory.clear_session(session_id)
+        
+        if cleared:
+            return jsonify({
+                'status': 'success',
+                'message': f'Session {session_id} cleared successfully'
+            }), 200
+        else:
+            return jsonify({
+                'status': 'success',
+                'message': f'Session {session_id} not found (may already be cleared)'
+            }), 200
+        
+    except Exception as e:
+        logger.error(f"Failed to clear session: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to clear session: {str(e)}'
+        }), 500
+
+
+@ai_bp.route('/sessions/stats', methods=['GET'])
+@require_api_key('ai:stats')
+def get_conversation_stats():
+    """
+    Get conversation memory statistics
+    
+    Response:
+        {
+            "status": "success",
+            "stats": {
+                "active_sessions": 5,
+                "in_memory_messages": 42,
+                "chromadb_messages": 150
+            }
+        }
+    """
+    try:
+        from app.services.conversation_memory import get_conversation_memory
+        memory = get_conversation_memory()
+        
+        stats = memory.get_stats()
+        
+        return jsonify({
+            'status': 'success',
+            'stats': stats
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Failed to get conversation stats: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to get stats: {str(e)}'
         }), 500
 
 
@@ -231,3 +360,4 @@ def clear_cache():
             'status': 'error',
             'message': f'Failed to clear cache: {str(e)}'
         }), 500
+

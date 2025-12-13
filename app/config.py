@@ -37,6 +37,7 @@ POLICIES_DIR = os.path.join(ASSETS_DIR, "policies")
 # Database settings
 DB_PATH = str(PROJECT_ROOT / "chroma_db")
 COLLECTION_NAME = "soc_ecosystem"
+CONVERSATION_COLLECTION_NAME = "conversation_history"  # For conversation memory
 CHROMA_DB_PATH = DB_PATH  # Alias for RAG module (local mode)
 
 # ChromaDB HTTP Client settings (Docker mode)
