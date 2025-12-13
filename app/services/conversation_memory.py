@@ -14,7 +14,7 @@ import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
-
+from app.config import *
 logger = logging.getLogger('smartxdr.conversation')
 
 
@@ -155,20 +155,20 @@ class ConversationMemory:
                         logger.info(f"✓ Connected to conversation ChromaDB at {conv_host}:{conv_port}")
                     except Exception as e:
                         logger.warning(f"ChromaDB conv service not available ({e}), using local fallback")
-                        conv_db_path = str(DB_PATH).replace("chroma_db", "chroma_conv")
+                        from app.config import CONV_DB_PATH
                         self._chroma_client = chromadb.PersistentClient(
-                            path=conv_db_path,
+                            path=CONV_DB_PATH,
                             settings=Settings(anonymized_telemetry=False)
                         )
                 else:
                     # Local development: Use separate local directory
-                    conv_db_path = str(DB_PATH).replace("chroma_db", "chroma_conv")
-                    os.makedirs(conv_db_path, exist_ok=True)
+                    from app.config import CONV_DB_PATH
+                    os.makedirs(CONV_DB_PATH, exist_ok=True)
                     self._chroma_client = chromadb.PersistentClient(
-                        path=conv_db_path,
+                        path=CONV_DB_PATH,
                         settings=Settings(anonymized_telemetry=False)
                     )
-                    logger.info(f"Using local conversation ChromaDB at {conv_db_path}")
+                    logger.info(f"Using local conversation ChromaDB at {CONV_DB_PATH}")
                 
                 # Create embedding function
                 embedding_function = OpenAIEmbeddingFunction()
@@ -569,7 +569,7 @@ class ConversationMemory:
             ])
             
             response = client.chat.completions.create(
-                model="gpt-4o-mini",  # Cheap model for summarization
+                model=SUMMARIZE_MODEL,  # Cheap model for summarization
                 messages=[
                     {
                         "role": "system",
@@ -580,7 +580,7 @@ class ConversationMemory:
                         "content": conversation_text
                     }
                 ],
-                max_tokens=100,
+                max_completion_tokens=100,  # Use max_completion_tokens for newer models
                 temperature=0.3
             )
             

@@ -69,10 +69,10 @@ def create_app():
     app.config['WTF_CSRF_ENABLED'] = True
     app.config['WTF_CSRF_TIME_LIMIT'] = None  # No time limit for CSRF tokens
     
-    # SQLAlchemy configuration - use absolute path for Windows compatibility
-    base_dir = Path(__file__).parent.parent
-    db_path = base_dir / 'data' / 'smartxdr.db'
-    db_path.parent.mkdir(parents=True, exist_ok=True)  # Ensure data directory exists
+    # SQLAlchemy configuration - use db/app_data directory
+    from app.config import APP_DATA_PATH
+    db_path = Path(APP_DATA_PATH) / 'smartxdr.sqlite3'
+    db_path.parent.mkdir(parents=True, exist_ok=True)  # Ensure directory exists
     app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     

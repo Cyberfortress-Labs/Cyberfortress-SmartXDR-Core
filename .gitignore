@@ -180,7 +180,7 @@ chroma_db/
 docs-for-rag/
 
 # Local database
-data/
+db/
 
 # Cloudflare Tunnel credentials
 cloudflared/

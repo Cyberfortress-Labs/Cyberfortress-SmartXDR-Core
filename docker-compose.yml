@@ -52,8 +52,8 @@ services:
       chromadb:
         condition: service_started
     volumes:
-      # Persistent data - bind mount to preserve data on host
-      - ./data:/app/data
+      # Database directory - bind mount to preserve data on host
+      - ./db/app_data:/app/db/app_data
       - ./logs:/app/logs
       # Read-only configs
       - ./certs:/app/certs:ro

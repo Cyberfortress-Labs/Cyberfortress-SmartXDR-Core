@@ -70,8 +70,8 @@ case "$COMMAND" in
         fi
         
         # Check for local SQLite database
-        if [ -f "data/smartxdr.db" ]; then
-            printf "${GREEN}✓ Found local database - mounting data/smartxdr.db${NC}\n"
+        if [ -f "data/smartxdr.sqlite3" ]; then
+            printf "${GREEN}✓ Found local database - mounting data/smartxdr.sqlite3${NC}\n"
         else
             printf "${YELLOW}⚠ No local database found - will create new database${NC}\n"
         fi

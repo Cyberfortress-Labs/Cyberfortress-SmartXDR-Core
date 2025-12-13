@@ -34,8 +34,12 @@ KNOWLEDGE_BASE_DIR = os.path.join(ASSETS_DIR, "knowledge_base")
 POLICIES_DIR = os.path.join(ASSETS_DIR, "policies")
 
 
-# Database settings
-DB_PATH = str(PROJECT_ROOT / "chroma_db")
+# Database settings (all in db/ directory)
+DB_DIR = str(PROJECT_ROOT / "db")
+DB_PATH = str(PROJECT_ROOT / "db" / "chroma_db")  # RAG knowledge base
+CONV_DB_PATH = str(PROJECT_ROOT / "db" / "chroma_conv")  # Conversation history
+APP_DATA_PATH = str(PROJECT_ROOT / "db" / "app_data")  # SQLite and other data
+
 COLLECTION_NAME = "soc_ecosystem"
 CONVERSATION_COLLECTION_NAME = "conversation_history"  # For conversation memory
 CHROMA_DB_PATH = DB_PATH  # Alias for RAG module (local mode)
@@ -47,7 +51,7 @@ CHROMA_PORT = int(os.environ.get('CHROMA_PORT', '8000'))
 # OpenAI model settings
 EMBEDDING_MODEL = "text-embedding-3-small"
 CHAT_MODEL = "gpt-5-mini"  # OpenAI's efficient small model
-
+SUMMARIZE_MODEL = "gpt-5-nano"  # OpenAI's efficient small model
 # OpenAI client configuration (following best practices)
 # https://platform.openai.com/docs/api-reference
 OPENAI_TIMEOUT = 600.0  # 10 minutes default timeout
