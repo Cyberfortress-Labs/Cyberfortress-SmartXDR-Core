@@ -42,6 +42,8 @@ services:
       - ELASTICSEARCH_ENABLED=${ELASTICSEARCH_ENABLED:-true}
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8000
+      - CHROMA_CONV_HOST=chromadb-conv
+      - CHROMA_CONV_PORT=8000
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     env_file:
@@ -74,7 +76,7 @@ services:
         reservations:
           memory: 512M
 
-  # ChromaDB Vector Database Service
+  # ChromaDB Vector Database Service (RAG Knowledge Base)
   chromadb:
     image: chromadb/chroma:latest
     container_name: smartxdr-chromadb
@@ -83,6 +85,26 @@ services:
     volumes:
       # Mount to /data (ChromaDB's default persist path)
       - ${CHROMA_DB_SOURCE:-chroma-db}:/data
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+    networks:
+      - smartxdr-net
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/heartbeat')" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ChromaDB for Conversation History (separate instance)
+  chromadb-conv:
+    image: chromadb/chroma:latest
+    container_name: smartxdr-chromadb-conv
+    ports:
+      - "${CHROMA_CONV_PORT:-8001}:8000" # Different external port
+    volumes:
+      - chroma-conv:/data
     environment:
       - IS_PERSISTENT=TRUE
       - ANONYMIZED_TELEMETRY=FALSE
@@ -132,10 +154,15 @@ networks:
     name: smartxdr-network
 
 volumes:
-  # Vector embeddings database
+  # Vector embeddings database (RAG)
   chroma-db:
     driver: local
     name: smartxdr-chroma-db
+
+  # Conversation history database
+  chroma-conv:
+    driver: local
+    name: smartxdr-chroma-conv
 
   # Redis cache data
   redis-data:

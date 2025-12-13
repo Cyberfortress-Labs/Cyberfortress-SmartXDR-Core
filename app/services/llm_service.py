@@ -156,26 +156,13 @@ class LLMService:
                 from app.services.conversation_memory import get_conversation_memory
                 conversation_memory = get_conversation_memory()
                 
-                # Get recent conversation history (In-Memory - fast)
-                recent_messages = conversation_memory.get_recent_history(session_id, limit=6)
+                # Get summarized history (auto-summarizes when > 4 messages)
+                # Token optimization: 6 messages (~600 tokens) → summary (~100 tokens)
+                conversation_history_text = conversation_memory.get_summarized_history(session_id)
                 
-                if recent_messages:
-                    conversation_history_text = conversation_memory.format_history_for_prompt(recent_messages)
-                    if DEBUG_MODE:
-                        print(f"[LLM Service] Loaded {len(recent_messages)} messages from history")
-                
-                # Also try semantic search for relevant past context (ChromaDB)
-                semantic_context = conversation_memory.get_semantic_context(session_id, query, limit=2)
-                if semantic_context:
-                    # Format and add semantic context to history
-                    semantic_text = conversation_memory.format_semantic_context(semantic_context)
-                    if semantic_text:
-                        if conversation_history_text:
-                            conversation_history_text += f"\n\n{semantic_text}"
-                        else:
-                            conversation_history_text = semantic_text
-                    if DEBUG_MODE:
-                        print(f"[LLM Service] Added {len(semantic_context)} relevant past messages from semantic search")
+                if conversation_history_text and DEBUG_MODE:
+                    is_summary = "summary" in conversation_history_text.lower()
+                    print(f"[LLM Service] History: {'summarized' if is_summary else 'raw'} ({len(conversation_history_text)} chars)")
                     
             except Exception as e:
                 if DEBUG_MODE:

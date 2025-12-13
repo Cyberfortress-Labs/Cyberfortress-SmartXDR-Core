@@ -83,6 +83,11 @@ class ConversationMemory:
         self.session_ttl = 3600  # 1 hour TTL for sessions
         self.redis_key_prefix = "conv:"  # Redis key prefix
         
+        # Summarization config (for token optimization)
+        self.summarize_threshold = 4  # Summarize when > 4 messages
+        self.summarize_max_tokens = 100  # Target summary length
+        self.summary_cache_prefix = "summary:"  # Redis key prefix for summaries
+        
         # Initialize Redis connection
         self._init_redis()
         
@@ -122,51 +127,63 @@ class ConversationMemory:
         return f"{self.redis_key_prefix}{session_id}"
     
     def _get_collection(self):
-        """Lazy load ChromaDB collection for conversation history."""
+        """Lazy load ChromaDB collection for conversation history.
+        
+        Uses SEPARATE ChromaDB instance from RAG (CHROMA_CONV_HOST) for isolation.
+        Falls back to local PersistentClient for development.
+        """
         if self._collection is None:
             try:
-                from app.config import CONVERSATION_COLLECTION_NAME
-                from app.rag.service import RAGService
+                import chromadb
+                from chromadb.config import Settings
+                from app.config import CONVERSATION_COLLECTION_NAME, DB_PATH
+                from app.core.embeddings import OpenAIEmbeddingFunction
                 
-                # Reuse ChromaDB client AND embedding function from RAGService
-                rag_service = RAGService()
-                self._chroma_client = rag_service.repository.client
-                embedding_function = rag_service.repository.embedding_function
+                # Get conversation-specific ChromaDB config
+                conv_host = os.getenv("CHROMA_CONV_HOST")
+                conv_port = int(os.getenv("CHROMA_CONV_PORT", "8000"))
                 
-                # Try to get existing collection first
-                try:
-                    self._collection = self._chroma_client.get_collection(
-                        name=CONVERSATION_COLLECTION_NAME,
-                        embedding_function=embedding_function
+                if conv_host:
+                    # Docker: Use separate ChromaDB instance for conversations
+                    try:
+                        self._chroma_client = chromadb.HttpClient(
+                            host=conv_host,
+                            port=conv_port,
+                            settings=Settings(anonymized_telemetry=False)
+                        )
+                        self._chroma_client.heartbeat()
+                        logger.info(f"✓ Connected to conversation ChromaDB at {conv_host}:{conv_port}")
+                    except Exception as e:
+                        logger.warning(f"ChromaDB conv service not available ({e}), using local fallback")
+                        conv_db_path = str(DB_PATH).replace("chroma_db", "chroma_conv")
+                        self._chroma_client = chromadb.PersistentClient(
+                            path=conv_db_path,
+                            settings=Settings(anonymized_telemetry=False)
+                        )
+                else:
+                    # Local development: Use separate local directory
+                    conv_db_path = str(DB_PATH).replace("chroma_db", "chroma_conv")
+                    os.makedirs(conv_db_path, exist_ok=True)
+                    self._chroma_client = chromadb.PersistentClient(
+                        path=conv_db_path,
+                        settings=Settings(anonymized_telemetry=False)
                     )
-                    logger.info(f"✓ ChromaDB collection '{CONVERSATION_COLLECTION_NAME}' loaded")
-                except Exception:
-                    # Create new collection with OpenAI embedding
-                    self._collection = self._chroma_client.create_collection(
-                        name=CONVERSATION_COLLECTION_NAME,
-                        embedding_function=embedding_function,
-                        metadata={"description": "Conversation history for semantic search"}
-                    )
-                    logger.info(f"✓ ChromaDB collection '{CONVERSATION_COLLECTION_NAME}' created")
+                    logger.info(f"Using local conversation ChromaDB at {conv_db_path}")
+                
+                # Create embedding function
+                embedding_function = OpenAIEmbeddingFunction()
+                
+                # Get or create collection
+                self._collection = self._chroma_client.get_or_create_collection(
+                    name=CONVERSATION_COLLECTION_NAME,
+                    embedding_function=embedding_function,
+                    metadata={"description": "Conversation history for semantic search"}
+                )
+                logger.info(f"✓ Conversation collection '{CONVERSATION_COLLECTION_NAME}' ready")
                     
             except Exception as e:
-                # Handle embedding conflict - delete and recreate
-                if "embedding function" in str(e).lower() or "already exists" in str(e).lower():
-                    try:
-                        logger.warning("Embedding conflict detected, recreating collection...")
-                        self._chroma_client.delete_collection(CONVERSATION_COLLECTION_NAME)
-                        self._collection = self._chroma_client.create_collection(
-                            name=CONVERSATION_COLLECTION_NAME,
-                            embedding_function=embedding_function,
-                            metadata={"description": "Conversation history for semantic search"}
-                        )
-                        logger.info(f"✓ ChromaDB collection recreated")
-                    except Exception as recreate_err:
-                        logger.error(f"Failed to recreate ChromaDB collection: {recreate_err}")
-                        self._collection = None
-                else:
-                    logger.error(f"Failed to load ChromaDB collection: {e}")
-                    self._collection = None
+                logger.error(f"Failed to initialize conversation ChromaDB: {e}")
+                self._collection = None
         
         return self._collection
     
@@ -459,6 +476,131 @@ class ConversationMemory:
         count += len(self._sessions)
         self._sessions.clear()
         logger.info(f"Cleared {count} sessions")
+    
+    def get_summarized_history(
+        self,
+        session_id: str,
+        force_refresh: bool = False
+    ) -> str:
+        """
+        Get conversation history, summarizing if > threshold messages.
+        
+        Token optimization: Instead of sending 6 full messages (~600 tokens),
+        summarize to ~100 tokens when history exceeds threshold.
+        
+        Args:
+            session_id: Session identifier
+            force_refresh: Force regenerate summary even if cached
+        
+        Returns:
+            Formatted history string (raw or summarized)
+        """
+        messages = self.get_recent_history(session_id, limit=self.default_history_limit)
+        
+        if not messages:
+            return ""
+        
+        # If <= threshold, return raw formatted history
+        if len(messages) <= self.summarize_threshold:
+            return self.format_history_for_prompt(messages)
+        
+        # Check for cached summary
+        if not force_refresh:
+            cached_summary = self._get_cached_summary(session_id)
+            if cached_summary:
+                logger.debug(f"Using cached summary for {session_id[:8]}...")
+                return cached_summary
+        
+        # Generate new summary
+        summary = self._generate_summary(messages)
+        
+        # Cache the summary
+        if summary:
+            self._cache_summary(session_id, summary, len(messages))
+        
+        return summary or self.format_history_for_prompt(messages)
+    
+    def _get_cached_summary(self, session_id: str) -> Optional[str]:
+        """Get cached summary from Redis/memory"""
+        if self._redis_available:
+            try:
+                key = f"{self.summary_cache_prefix}{session_id}"
+                data = self._redis.get(key)
+                if data:
+                    cached = json.loads(data)
+                    # Check if message count changed (invalidate if new messages)
+                    current_count = len(self.get_recent_history(session_id, limit=100))
+                    if cached.get("msg_count") == current_count:
+                        return cached.get("summary")
+            except Exception as e:
+                logger.warning(f"Error getting cached summary: {e}")
+        return None
+    
+    def _cache_summary(self, session_id: str, summary: str, msg_count: int):
+        """Cache summary in Redis"""
+        if self._redis_available:
+            try:
+                key = f"{self.summary_cache_prefix}{session_id}"
+                data = json.dumps({
+                    "summary": summary,
+                    "msg_count": msg_count,
+                    "timestamp": time.time()
+                })
+                self._redis.setex(key, self.session_ttl, data)
+            except Exception as e:
+                logger.warning(f"Error caching summary: {e}")
+    
+    def _generate_summary(self, messages: List[Message]) -> Optional[str]:
+        """
+        Generate a summary of conversation history using LLM.
+        
+        Uses a lightweight GPT-4o-mini call to create concise summary.
+        """
+        try:
+            from openai import OpenAI
+            import os
+            
+            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            
+            # Format messages for summarization
+            conversation_text = "\n".join([
+                f"{'User' if m.role == 'user' else 'Assistant'}: {m.content[:200]}"
+                for m in messages
+            ])
+            
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",  # Cheap model for summarization
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "Summarize this conversation in 1-2 sentences (max 100 tokens). Focus on key topics discussed and user's main intent. Output only the summary, no prefixes."
+                    },
+                    {
+                        "role": "user",
+                        "content": conversation_text
+                    }
+                ],
+                max_tokens=100,
+                temperature=0.3
+            )
+            
+            summary = response.choices[0].message.content.strip()
+            logger.debug(f"Generated summary: {summary[:50]}...")
+            
+            return f"Previous conversation summary: {summary}"
+            
+        except Exception as e:
+            logger.warning(f"Failed to generate summary: {e}")
+            return None
+    
+    def invalidate_summary_cache(self, session_id: str):
+        """Invalidate cached summary (call when new messages added)"""
+        if self._redis_available:
+            try:
+                key = f"{self.summary_cache_prefix}{session_id}"
+                self._redis.delete(key)
+            except:
+                pass
     
     def get_stats(self) -> Dict[str, Any]:
         """Get memory statistics"""
