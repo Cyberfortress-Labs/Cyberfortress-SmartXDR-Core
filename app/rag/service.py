@@ -418,7 +418,7 @@ class RAGService:
     def query(
         self,
         query_text: str,
-        top_k: int = 5,
+        top_k: int = None,
         filters: Optional[Dict[str, Any]] = None,
         distance_threshold: float = 1.4
     ) -> Dict[str, Any]:
@@ -427,13 +427,16 @@ class RAGService:
         
         Args:
             query_text: Query text
-            top_k: Number of results to return
+            top_k: Number of results to return (default: from config)
             filters: Metadata filters (e.g., {"is_active": True})
             distance_threshold: Maximum distance for relevance
         
         Returns:
             Dict with query results
         """
+        from app.config import DEFAULT_RESULTS
+        if top_k is None:
+            top_k = DEFAULT_RESULTS
         try:
             start_time = time.time()
             
@@ -506,7 +509,7 @@ class RAGService:
     def build_context_from_query(
         self,
         query_text: str,
-        top_k: int = 5,
+        top_k: int = None,
         filters: Optional[Dict[str, Any]] = None
     ) -> Tuple[str, List[str]]:
         """
@@ -514,12 +517,15 @@ class RAGService:
         
         Args:
             query_text: Query text
-            top_k: Number of documents to retrieve
+            top_k: Number of documents to retrieve (default: from config)
             filters: Metadata filters
         
         Returns:
             Tuple of (context_text, sources)
         """
+        from app.config import DEFAULT_RESULTS
+        if top_k is None:
+            top_k = DEFAULT_RESULTS
         results = self.query(query_text, top_k, filters)
         
         if results["status"] == "error" or not results["documents"]:

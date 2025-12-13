@@ -9,6 +9,10 @@ if sys.platform == 'win32':
     os.environ['PYTHONIOENCODING'] = 'utf-8'
     sys.stdout.reconfigure(encoding='utf-8')
     sys.stderr.reconfigure(encoding='utf-8')
+if sys.platform == 'linux':
+    os.environ['PYTHONIOENCODING'] = 'utf-8'
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
 
 import time
 import signal
@@ -62,8 +66,58 @@ def find_cloudflared():
     return None
 
 
+def get_cloudflare_config():
+    """Check if cloudflare config exists and return config info"""
+    import glob
+    import yaml
+    
+    # Config directory relative to run.py
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    config_dir = os.path.join(base_dir, "cloudflared")
+    config_file = os.path.join(config_dir, "config.yml")
+    
+    # Check if config directory and config file exist
+    if not os.path.exists(config_dir) or not os.path.exists(config_file):
+        return None
+    
+    # Check for credential files (*.json)
+    cred_files = glob.glob(os.path.join(config_dir, "*.json"))
+    if not cred_files:
+        return None
+    
+    # Read config file to get tunnel name/hostname
+    try:
+        with open(config_file, 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+        
+        tunnel_name = config.get('tunnel')
+        hostname = None
+        
+        # Extract hostname from ingress rules
+        ingress = config.get('ingress', [])
+        for rule in ingress:
+            if isinstance(rule, dict) and 'hostname' in rule:
+                hostname = rule.get('hostname')
+                break
+        
+        return {
+            'config_file': config_file,
+            'config_dir': config_dir,
+            'credential_file': cred_files[0],
+            'tunnel_name': tunnel_name,
+            'hostname': hostname
+        }
+    except Exception as e:
+        print(f"  Error reading cloudflare config: {e}")
+        return None
+
+
 def start_tunnel(port):
-    """Start Cloudflare Tunnel in background"""
+    """Start Cloudflare Tunnel in background
+    
+    If cloudflared config exists in ./cloudflared/, runs named tunnel with custom domain.
+    Otherwise, falls back to quick tunnel (free trycloudflare.com domain).
+    """
     global _tunnel_process, _tunnel_url
     
     cloudflared = find_cloudflared()
@@ -72,41 +126,107 @@ def start_tunnel(port):
         print("     Install: winget install --id Cloudflare.cloudflared")
         return None
     
-    print(f"  Starting Cloudflare Tunnel...")
+    # Check for existing cloudflare config
+    cf_config = get_cloudflare_config()
     
-    _tunnel_process = subprocess.Popen(
-        [cloudflared, "tunnel", "--url", f"http://localhost:{port}"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1
-    )
-    
-    # Give tunnel time to initialize
-    time.sleep(2)
-    
-    # Wait for tunnel URL
-    start_time = time.time()
-    while time.time() - start_time < 30:
-        line = _tunnel_process.stdout.readline()
-        if not line:
-            time.sleep(0.1)
-            continue
+    if cf_config and cf_config.get('tunnel_name'):
+        # Run with named tunnel (custom domain)
+        # Create temporary config with localhost service for local development
+        import yaml
+        import tempfile
         
-        # Regex: URL must start with letter, then alphanumeric/hyphen, NOT start with hyphen
-        match = re.search(r'(https://[a-z][a-z0-9-]*\.trycloudflare\.com)', line)
-        if match:
-            _tunnel_url = match.group(1)
-            # Validate URL doesn't have consecutive hyphens or hyphen at weird places
-            if '--' not in _tunnel_url and not _tunnel_url.startswith('https://-'):
-                print(f"  Tunnel URL: {_tunnel_url}")
-                return _tunnel_url
-            else:
-                print(f"  Invalid tunnel URL detected, retrying...")
+        print(f"  Found cloudflare config, starting named tunnel...")
+        print(f"    Tunnel: {cf_config['tunnel_name']}")
+        if cf_config.get('hostname'):
+            print(f"    Hostname: {cf_config['hostname']}")
+        print(f"    Service: http://localhost:{port} (local override)")
+        
+        # Read original config and modify service to localhost
+        try:
+            with open(cf_config['config_file'], 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+            
+            # Override ingress service to localhost
+            if 'ingress' in config:
+                for rule in config['ingress']:
+                    if isinstance(rule, dict) and 'service' in rule:
+                        rule['service'] = f"http://localhost:{port}"
+            
+            # Override credentials-file to use local path
+            config['credentials-file'] = cf_config['credential_file']
+            
+            # Write temporary config
+            temp_config_path = os.path.join(cf_config['config_dir'], "config_local.yml")
+            with open(temp_config_path, 'w', encoding='utf-8') as f:
+                yaml.safe_dump(config, f, default_flow_style=False)
+            
+            # Store temp config path for cleanup
+            cf_config['temp_config'] = temp_config_path
+            
+        except Exception as e:
+            print(f"  Error creating temp config: {e}")
+            temp_config_path = cf_config['config_file']
+        
+        _tunnel_process = subprocess.Popen(
+            [
+                cloudflared, "tunnel",
+                "--config", temp_config_path,
+                "run", cf_config['tunnel_name']
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1
+        )
+        
+        # Give tunnel time to initialize
+        time.sleep(3)
+        
+        # For named tunnels, URL is the configured hostname
+        if cf_config.get('hostname'):
+            _tunnel_url = f"https://{cf_config['hostname']}"
+            print(f"  Tunnel URL: {_tunnel_url}")
+            return _tunnel_url
+        else:
+            print("  Warning: No hostname configured in config.yml")
+            return None
+    else:
+        # Fallback to quick tunnel (free domain)
+        print(f"  No cloudflare config found, using quick tunnel (free domain)...")
+        
+        _tunnel_process = subprocess.Popen(
+            [cloudflared, "tunnel", "--url", f"http://localhost:{port}"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1
+        )
+        
+        # Give tunnel time to initialize
+        time.sleep(2)
+        
+        # Wait for tunnel URL
+        start_time = time.time()
+        while time.time() - start_time < 30:
+            line = _tunnel_process.stdout.readline()
+            if not line:
+                time.sleep(0.1)
                 continue
-    
-    print("  Failed to get tunnel URL")
-    return None
+            
+            # Regex: URL must start with letter, then alphanumeric/hyphen, NOT start with hyphen
+            match = re.search(r'(https://[a-z][a-z0-9-]*\.trycloudflare\.com)', line)
+            if match:
+                _tunnel_url = match.group(1)
+                # Validate URL doesn't have consecutive hyphens or hyphen at weird places
+                if '--' not in _tunnel_url and not _tunnel_url.startswith('https://-'):
+                    print(f"  Tunnel URL: {_tunnel_url}")
+                    return _tunnel_url
+                else:
+                    print(f"  Invalid tunnel URL detected, retrying...")
+                    continue
+        
+        print("  Failed to get tunnel URL")
+        return None
 
 
 def set_telegram_webhook(tunnel_url):

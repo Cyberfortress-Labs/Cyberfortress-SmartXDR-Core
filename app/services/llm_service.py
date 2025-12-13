@@ -210,8 +210,8 @@ class LLMService:
             answer = answer_with_tokens
             
             # Add source citations
-            if sources:
-                answer += f"\n\nSources: {', '.join(sorted(sources))}"
+            # if sources:
+            #     answer += f"\n\nSources: {', '.join(sorted(sources))}"
             
             # Cache the response (only if use_cache=True and no session)
             if use_cache and not session_id:

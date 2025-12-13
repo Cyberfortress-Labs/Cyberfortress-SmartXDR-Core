@@ -79,13 +79,13 @@ class ConversationMemory:
         
         # Configuration
         self.max_messages_per_session = 20  # Max messages to keep
-        self.default_history_limit = 6  # Default: last 3 pairs (user + assistant)
+        self.default_history_limit = 10  # Default: last 5 pairs (user + assistant)
         self.session_ttl = 3600  # 1 hour TTL for sessions
         self.redis_key_prefix = "conv:"  # Redis key prefix
         
         # Summarization config (for token optimization)
-        self.summarize_threshold = 4  # Summarize when > 4 messages
-        self.summarize_max_tokens = 100  # Target summary length
+        self.summarize_threshold = 8  # Summarize when > 8 messages (avoid losing detail early)
+        self.summarize_max_tokens = 200  # Target summary length (enough for IPs, entities)
         self.summary_cache_prefix = "summary:"  # Redis key prefix for summaries
         
         # Initialize Redis connection
@@ -593,10 +593,9 @@ class ConversationMemory:
             
             # Check if summary is valid
             if not summary or len(summary) < 10:
-                logger.warning(f"LLM returned empty/short summary, using first message as context")
-                # Fallback: use first user message as context
-                first_user = next((m.content[:100] for m in messages if m.role == 'user'), '')
-                summary = f"User asked about: {first_user}"
+                logger.warning(f"LLM returned empty/short summary, using smart fallback")
+                # Smart fallback: extract key info from both user and assistant messages
+                summary = self._build_smart_fallback_summary(messages)
             
             logger.info(f"Generated summary ({len(summary)} chars): {summary[:80]}...")
             
@@ -605,6 +604,46 @@ class ConversationMemory:
         except Exception as e:
             logger.warning(f"Failed to generate summary: {e}")
             return None
+    
+    def _build_smart_fallback_summary(self, messages: List[Message]) -> str:
+        """
+        Build a smart fallback summary when LLM summarization fails.
+        Extracts key entities (IPs, device names, etc.) from both user and assistant messages.
+        """
+        import re
+        
+        # Get last user question (most relevant context)
+        last_user = ""
+        for m in reversed(messages):
+            if m.role == "user":
+                last_user = m.content[:100]
+                break
+        
+        # Extract IPs from all messages (especially assistant responses)
+        all_text = " ".join([m.content for m in messages])
+        ip_pattern = r'\b(?:\d{1,3}\.){3}\d{1,3}\b'
+        ips = list(set(re.findall(ip_pattern, all_text)))[:5]  # Max 5 IPs
+        
+        # Extract device/system names
+        systems = ['Suricata', 'pfSense', 'Wazuh', 'SIEM', 'Zeek', 'IRIS', 'Router', 
+                   'Firewall', 'Server', 'NAT', 'Gateway', 'Switch', 'Elasticsearch']
+        found_systems = []
+        for system in systems:
+            if re.search(rf'\b{system}\b', all_text, re.IGNORECASE):
+                found_systems.append(system)
+                if len(found_systems) >= 3:
+                    break
+        
+        # Build summary
+        parts = []
+        if last_user:
+            parts.append(f"User asked: {last_user}")
+        if found_systems:
+            parts.append(f"Systems: {', '.join(found_systems)}")
+        if ips:
+            parts.append(f"IPs mentioned: {', '.join(ips)}")
+        
+        return " | ".join(parts) if parts else "Ongoing conversation"
     
     def _load_summarization_prompt(self) -> tuple:
         """

@@ -9,7 +9,7 @@
     "system_prompt": "Summarize this conversation for context continuity.\n\nIMPORTANT RULES:\n- Keep ALL device names, system names (SIEM, Wazuh, pfSense, Zeek, etc.), IP addresses, and specific entities mentioned\n- Identify what pronouns like \"it/this/that\" or Vietnamese \"nó/này/đó\" refer to in the last message\n- Preserve the current topic focus so follow-up questions are understood\n- Be concise but complete\n\nOUTPUT FORMAT:\n\"User discussing [TOPIC]. Current focus: [SPECIFIC ENTITY/DEVICE]. Key details: [IMPORTANT INFO like IPs, configs, decisions]\"\n\nOutput only the summary, no prefixes or explanations.",
     "user_prompt_template": "Summarize this conversation:\n\n{conversation_text}",
     "settings": {
-        "max_completion_tokens": 150,
+        "max_completion_tokens": 250,
         "temperature": 0.3,
         "model_config_key": "SUMMARY_MODEL"
     },
