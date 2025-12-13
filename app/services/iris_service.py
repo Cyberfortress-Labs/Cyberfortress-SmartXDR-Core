@@ -21,13 +21,16 @@ class IRISService:
     """
     
     def __init__(self):
-        self.iris_url = os.getenv("IRIS_API_URL")
+        # Support both IRIS_API_URL and IRIS_URL for flexibility
+        self.iris_url = os.getenv("IRIS_API_URL") or os.getenv("IRIS_URL")
         self.api_key = os.getenv("IRIS_API_KEY")
         
         # SSL verification settings
         self.verify_ssl = os.getenv("IRIS_VERIFY_SSL", "false").lower() == "true"
         self.ca_cert = os.getenv("IRIS_CA_CERT", None)
         
+        if not self.iris_url:
+            raise ValueError("IRIS_API_URL or IRIS_URL not found in environment variables")
         if not self.api_key:
             raise ValueError("IRIS_API_KEY not found in environment variables")
     
