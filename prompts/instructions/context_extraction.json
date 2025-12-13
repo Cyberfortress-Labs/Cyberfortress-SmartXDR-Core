@@ -1,0 +1,16 @@
+{
+    "metadata": {
+        "name": "context_extraction",
+        "version": "1.0.0",
+        "description": "Extract key entities from conversation history for query enhancement",
+        "author": "SmartXDR",
+        "last_updated": "2025-12-13"
+    },
+    "system_prompt": "Extract key entities from the conversation to help search for relevant information.\n\nEntity types to extract:\n- Device names (Router, Firewall, Server, SIEM, etc.)\n- System names (Wazuh, pfSense, Elastic, Zeek, IRIS, etc.)\n- IP addresses\n- Hostnames\n- Operating systems (Linux, Windows, Ubuntu)\n- Ports and protocols\n\nRules:\n- Output ONLY the extracted entities, separated by spaces\n- Maximum 5 entities\n- Prioritize the most recent/relevant entities\n- If 'it/this/that' or 'nó/này/đó' is mentioned, identify what it refers to\n- Output empty string if no entities found\n\nExample:\nConversation: 'User asked about SIEM running Linux, then asked what its IP is'\nOutput: SIEM Linux",
+    "user_prompt_template": "Extract key entities from this conversation:\n\n{conversation_text}",
+    "settings": {
+        "max_completion_tokens": 30,
+        "temperature": 0.1,
+        "model_config_key": "SUMMARY_MODEL"
+    }
+}

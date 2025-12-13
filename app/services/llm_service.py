@@ -9,20 +9,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 from openai import OpenAI, APIError, APIConnectionError, RateLimitError
 from dotenv import load_dotenv
-from app.config import (
-    CHAT_MODEL, 
-    DEFAULT_RESULTS,
-    INPUT_PRICE_PER_1M, 
-    OUTPUT_PRICE_PER_1M,
-    OPENAI_TIMEOUT, 
-    OPENAI_MAX_RETRIES,
-    MAX_CALLS_PER_MINUTE,
-    MAX_DAILY_COST,
-    CACHE_ENABLED,
-    CACHE_TTL,
-    DEBUG_MODE,
-    DEBUG_LLM
-)
+from app.config import *
 
 # Import analyzer registry
 from app.services.analyzers import get_handler, get_all_handlers, get_registered_analyzer_names
@@ -161,8 +148,9 @@ class LLMService:
                 conversation_history_text = conversation_memory.get_summarized_history(session_id)
                 
                 if conversation_history_text and DEBUG_MODE:
-                    is_summary = "summary" in conversation_history_text.lower()
-                    print(f"[LLM Service] History: {'summarized' if is_summary else 'raw'} ({len(conversation_history_text)} chars)")
+                    is_summary = "Previous conversation summary:" in conversation_history_text
+                    print(f"[LLM Service] History: {'SUMMARIZED' if is_summary else 'RAW'} ({len(conversation_history_text)} chars)")
+                    print(f"[LLM Service] Content preview: {conversation_history_text[:150]}...")
                     
             except Exception as e:
                 if DEBUG_MODE:
@@ -186,8 +174,18 @@ class LLMService:
                 }
         
         # Build context using RAGService
+        # Enhance query with conversation context for better RAG search
+        rag_query = query
+        if conversation_history_text:
+            # Extract key entities from history to enhance RAG query
+            context_entities = self._extract_context_entities(conversation_history_text)
+            if context_entities:
+                rag_query = f"{query} (context: {context_entities})"
+                if DEBUG_MODE:
+                    print(f"[LLM Service] Enhanced RAG query: {rag_query[:100]}...")
+        
         context_text, sources = rag_service.build_context_from_query(
-            query_text=query,
+            query_text=rag_query,
             top_k=top_k,
             filters=filters
         )
@@ -283,6 +281,83 @@ class LLMService:
         """Build user input for RAG query"""
         user_prompt_template = self.prompt_builder.build_user_input_prompt()
         return user_prompt_template.format(context=context, query=query)
+    
+    def _extract_context_entities(self, history_text: str) -> str:
+        """
+        Extract key entities from conversation history using LLM for query enhancement.
+        
+        Uses prompts/instructions/context_extraction.json for scalable entity extraction.
+        Falls back to simple keyword matching if LLM unavailable.
+        """
+        # Try LLM-based extraction first
+        try:
+            entities = self._llm_extract_entities(history_text)
+            if entities:
+                return entities
+        except Exception as e:
+            if DEBUG_MODE:
+                print(f"[LLM Service] LLM entity extraction failed: {e}, using fallback")
+        
+        # Fallback: simple keyword matching
+        return self._simple_entity_extraction(history_text)
+    
+    def _llm_extract_entities(self, history_text: str) -> str:
+        """Use LLM to extract context entities from conversation history."""
+        import json
+        
+        try:
+            from app.services.prompt_builder_service import PromptBuilder
+            
+            # Load prompt from JSON
+            builder = PromptBuilder()
+            prompt_json = builder.build_task_prompt("context_extraction")
+            prompt_data = json.loads(prompt_json)
+            
+            system_prompt = prompt_data.get("system_prompt", "Extract key entities from this conversation.")
+            settings = prompt_data.get("settings", {})
+            max_tokens = settings.get("max_completion_tokens", 30)
+            
+            # Call LLM
+            response = self.openai_client.chat.completions.create(
+                model=SUMMARY_MODEL,  # Use cheap model
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": history_text[:500]}  # Limit input
+                ],
+                max_completion_tokens=max_tokens
+            )
+            
+            entities = response.choices[0].message.content.strip()
+            
+            # Clean up - remove punctuation and limit length
+            entities = ' '.join(entities.split()[:5])
+            
+            if DEBUG_MODE and entities:
+                print(f"[LLM Service] Extracted entities: {entities}")
+            
+            return entities
+            
+        except FileNotFoundError:
+            return ""
+        except Exception as e:
+            raise e
+    
+    def _simple_entity_extraction(self, history_text: str) -> str:
+        """Fallback: Simple keyword extraction without LLM."""
+        import re
+        
+        # Known system names
+        systems = ['SIEM', 'Wazuh', 'pfSense', 'Zeek', 'IRIS', 'Elastic', 'Router', 
+                   'Firewall', 'Server', 'Linux', 'Windows', 'n8n', 'MISP', 'SOAR']
+        
+        entities = []
+        for system in systems:
+            if re.search(rf'\b{system}\b', history_text, re.IGNORECASE):
+                entities.append(system)
+                if len(entities) >= 3:
+                    break
+        
+        return ' '.join(entities)
     
     def _call_responses_api(self, system_instructions: str, user_input: str) -> tuple:
         """

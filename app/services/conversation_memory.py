@@ -569,6 +569,8 @@ class ConversationMemory:
                 for m in messages
             ])
             
+            logger.debug(f"Summarizing {len(messages)} messages ({len(conversation_text)} chars)")
+            
             # Try to load prompt from JSON via PromptBuilder
             system_prompt, max_tokens = self._load_summarization_prompt()
             
@@ -581,8 +583,22 @@ class ConversationMemory:
                 max_completion_tokens=max_tokens
             )
             
-            summary = response.choices[0].message.content.strip()
-            logger.info(f"Generated summary: {summary[:80]}...")
+            summary = response.choices[0].message.content
+            
+            # Debug: log raw response
+            logger.debug(f"Raw LLM summary response: '{summary}'")
+            
+            if summary:
+                summary = summary.strip()
+            
+            # Check if summary is valid
+            if not summary or len(summary) < 10:
+                logger.warning(f"LLM returned empty/short summary, using first message as context")
+                # Fallback: use first user message as context
+                first_user = next((m.content[:100] for m in messages if m.role == 'user'), '')
+                summary = f"User asked about: {first_user}"
+            
+            logger.info(f"Generated summary ({len(summary)} chars): {summary[:80]}...")
             
             return f"Previous conversation summary: {summary}"
             

@@ -38,7 +38,7 @@ import json
 # Add parent to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.config import CHROMA_DB_PATH
+from app.config import *
 import chromadb
 from chromadb.config import Settings
 from app.core.embeddings import OpenAIEmbeddingFunction
@@ -68,8 +68,8 @@ class OptimizedIngester:
     
     def __init__(
         self, 
-        chunk_size=1000, 
-        batch_size=100,
+        chunk_size=MAX_CHUNK_SIZE, 
+        batch_size=BATCH_SIZE,
         use_api=False,
         api_url=None,
         api_key=None,
@@ -494,14 +494,14 @@ Examples:
     parser.add_argument(
         '--chunk-size',
         type=int,
-        default=1000,
-        help="Chunk size in characters (default: 1000)"
+        default=MAX_CHUNK_SIZE,
+        help=f"Chunk size in characters (default: {MAX_CHUNK_SIZE})"
     )
     parser.add_argument(
         '--batch-size',
         type=int,
-        default=100,
-        help="Batch size for uploads (default: 100)"
+        default=BATCH_SIZE,
+        help=f"Batch size for uploads (default: {BATCH_SIZE})"
     )
     parser.add_argument(
         '--limit',

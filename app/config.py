@@ -58,7 +58,13 @@ OPENAI_TIMEOUT = 600.0  # 10 minutes default timeout
 OPENAI_MAX_RETRIES = 2  # Default retry count for failed requests
 
 # Query settings
-DEFAULT_RESULTS = 10  # Increased for better MITRE ATT&CK technique retrieval
+DEFAULT_RESULTS = 15  # topK: Increased for better context coverage
+
+# RAG Chunking settings
+MIN_CHUNK_SIZE = 100  # Minimum chars per chunk (avoid too short chunks)
+MAX_CHUNK_SIZE = 2000  # Maximum chars per chunk
+MIN_BATCH_SIZE = 100  # Minimum batch size for embedding
+BATCH_SIZE = 200  # Maximum batch size for embedding
 
 # Token pricing (per 1M tokens)
 INPUT_PRICE_PER_1M = 0.25

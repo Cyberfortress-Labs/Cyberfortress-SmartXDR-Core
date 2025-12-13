@@ -4,7 +4,7 @@ Text chunking and semantic processing utilities
 import json
 import os
 from typing import Dict, List, Any
-from app.config import NETWORK_DIR, MITRE_DIR
+from app.config import NETWORK_DIR, MITRE_DIR, MIN_CHUNK_SIZE, MAX_CHUNK_SIZE
 
 
 def json_to_natural_text(data: Dict[str, Any], filename: str) -> List[str]:
@@ -86,17 +86,49 @@ This is part of the Security Operations Center infrastructure."""
             network_info += f"- Primary IP: {data['primary_ip']}\n"
         texts.append(network_info.strip())
     
-    # 3. Interfaces
+    # 3. Interfaces - Individual chunks + Summary chunk
     if "interfaces" in data and isinstance(data["interfaces"], list):
-        for idx, iface in enumerate(data["interfaces"]):
-            iface_text = f"""Interface {idx + 1} of {name}:
-Name: {iface.get('name', 'N/A')}
-IP: {iface.get('ip', 'N/A')}
+        interfaces = data["interfaces"]
+        
+        # 3a. Individual interface chunks (with device context)
+        for idx, iface in enumerate(interfaces):
+            iface_text = f"""{name} ({device_id}) - Interface {idx + 1}/{len(interfaces)}:
+Device: {name} (IP: {ip})
+Interface Name: {iface.get('name', 'N/A')}
+Interface IP: {iface.get('ip', 'N/A')}
 Subnet: {iface.get('subnet', 'N/A')}
 VMnet: {iface.get('vmnet', 'N/A')}
 Type: {iface.get('type', 'N/A')}
-Description: {iface.get('description', 'N/A')}"""
+Description: {iface.get('description', 'N/A')}
+Source: {filename}"""
             texts.append(iface_text)
+        
+        # 3b. ALL INTERFACES SUMMARY chunk (ensures all interfaces retrieved together)
+        if len(interfaces) > 1:
+            iface_names = [i.get('name', 'N/A') for i in interfaces]
+            iface_details = []
+            for i in interfaces:
+                detail = f"- {i.get('name', 'N/A')}"
+                if i.get('ip'):
+                    detail += f" (IP: {i.get('ip')})"
+                if i.get('type'):
+                    detail += f" [{i.get('type')}]"
+                if i.get('description'):
+                    detail += f": {i.get('description')}"
+                iface_details.append(detail)
+            
+            summary_chunk = f"""{name} ({device_id}) Network Interfaces Summary:
+Device: {name}
+Primary IP: {ip}
+Total Interfaces: {len(interfaces)}
+Interface Names: {', '.join(iface_names)}
+
+All Network Interfaces:
+{chr(10).join(iface_details)}
+
+Keywords: {name}, interfaces, {', '.join(iface_names)}, network cards, NICs
+Source: {filename}"""
+            texts.append(summary_chunk)
     
     # 4. Services and Components
     if "services" in data:
@@ -246,7 +278,7 @@ def load_topology_context() -> str:
         return ""
 
 
-def markdown_to_chunks(content: str, filename: str, max_chunk_size: int = 2000) -> List[str]:
+def markdown_to_chunks(content: str, filename: str, max_chunk_size: int = None) -> List[str]:
     """
     Convert Markdown content to semantic chunks.
     Splits by headers (##, ###) and limits chunk size.
@@ -260,6 +292,11 @@ def markdown_to_chunks(content: str, filename: str, max_chunk_size: int = 2000) 
         List of text chunks optimized for RAG
     """
     import re
+    
+    # Use config values if not specified
+    if max_chunk_size is None:
+        max_chunk_size = MAX_CHUNK_SIZE
+    min_chunk_size = MIN_CHUNK_SIZE
     
     chunks = []
     
@@ -275,7 +312,7 @@ def markdown_to_chunks(content: str, filename: str, max_chunk_size: int = 2000) 
         
         # If adding this section would exceed limit, save current and start new
         if len(current_chunk) + len(section) > max_chunk_size:
-            if current_chunk.strip() and len(current_chunk) > 50:
+            if current_chunk.strip() and len(current_chunk) > min_chunk_size:
                 chunks.append(current_chunk.strip())
             current_chunk = f"Source: {filename}\n\n{section}\n\n"
         else:
@@ -292,7 +329,7 @@ def markdown_to_chunks(content: str, filename: str, max_chunk_size: int = 2000) 
     return chunks
 
 
-def text_to_chunks(content: str, filename: str, max_chunk_size: int = 2000) -> List[str]:
+def text_to_chunks(content: str, filename: str, max_chunk_size: int = None) -> List[str]:
     """
     Convert plain text content to semantic chunks.
     Splits by paragraphs (double newlines) and limits chunk size.
