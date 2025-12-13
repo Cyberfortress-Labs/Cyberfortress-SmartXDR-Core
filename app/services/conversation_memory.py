@@ -554,7 +554,8 @@ class ConversationMemory:
         """
         Generate a summary of conversation history using LLM.
         
-        Uses a lightweight GPT-4o-mini call to create concise summary.
+        Loads prompt from prompts/instructions/summarization_rule.json via PromptBuilder.
+        Falls back to hardcoded prompt if JSON not available.
         """
         try:
             from openai import OpenAI
@@ -564,34 +565,66 @@ class ConversationMemory:
             
             # Format messages for summarization
             conversation_text = "\n".join([
-                f"{'User' if m.role == 'user' else 'Assistant'}: {m.content[:200]}"
+                f"{'User' if m.role == 'user' else 'Assistant'}: {m.content[:300]}"
                 for m in messages
             ])
             
+            # Try to load prompt from JSON via PromptBuilder
+            system_prompt, max_tokens = self._load_summarization_prompt()
+            
             response = client.chat.completions.create(
-                model=SUMMARIZE_MODEL,  # Cheap model for summarization
+                model=SUMMARY_MODEL,
                 messages=[
-                    {
-                        "role": "system",
-                        "content": "Summarize this conversation in 1-2 sentences (max 100 tokens). Focus on key topics discussed and user's main intent. Output only the summary, no prefixes."
-                    },
-                    {
-                        "role": "user",
-                        "content": conversation_text
-                    }
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": conversation_text}
                 ],
-                max_completion_tokens=100,  # Use max_completion_tokens for newer models
-                temperature=0.3
+                max_completion_tokens=max_tokens
             )
             
             summary = response.choices[0].message.content.strip()
-            logger.debug(f"Generated summary: {summary[:50]}...")
+            logger.info(f"Generated summary: {summary[:80]}...")
             
             return f"Previous conversation summary: {summary}"
             
         except Exception as e:
             logger.warning(f"Failed to generate summary: {e}")
             return None
+    
+    def _load_summarization_prompt(self) -> tuple:
+        """
+        Load summarization prompt from JSON file.
+        
+        Returns:
+            tuple: (system_prompt, max_tokens)
+        """
+        default_prompt = """Summarize this conversation for context continuity.
+IMPORTANT: Keep ALL device names, system names (SIEM, Wazuh, pfSense, etc.), IP addresses.
+Identify what 'it/this/that' or 'nó/này/đó' refers to.
+Format: "User discussing [TOPIC]. Current focus: [ENTITY]. Key details: [INFO]"
+Output only the summary."""
+        default_max_tokens = 150
+        
+        try:
+            from app.services.prompt_builder_service import PromptBuilder
+            import json
+            
+            builder = PromptBuilder()
+            prompt_json = builder.build_task_prompt("summarization_rule")
+            prompt_data = json.loads(prompt_json)
+            
+            system_prompt = prompt_data.get("system_prompt", default_prompt)
+            settings = prompt_data.get("settings", {})
+            max_tokens = settings.get("max_completion_tokens", default_max_tokens)
+            
+            logger.debug(f"Loaded summarization prompt from JSON")
+            return (system_prompt, max_tokens)
+            
+        except FileNotFoundError:
+            logger.warning("summarization_rule.json not found, using fallback prompt")
+            return (default_prompt, default_max_tokens)
+        except Exception as e:
+            logger.warning(f"Error loading summarization prompt: {e}, using fallback")
+            return (default_prompt, default_max_tokens)
     
     def invalidate_summary_cache(self, session_id: str):
         """Invalidate cached summary (call when new messages added)"""

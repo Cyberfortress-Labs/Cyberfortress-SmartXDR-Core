@@ -51,7 +51,7 @@ CHROMA_PORT = int(os.environ.get('CHROMA_PORT', '8000'))
 # OpenAI model settings
 EMBEDDING_MODEL = "text-embedding-3-small"
 CHAT_MODEL = "gpt-5-mini"  # OpenAI's efficient small model
-SUMMARIZE_MODEL = "gpt-5-nano"  # OpenAI's efficient small model
+SUMMARY_MODEL = "gpt-5-nano"  # OpenAI's summary model
 # OpenAI client configuration (following best practices)
 # https://platform.openai.com/docs/api-reference
 OPENAI_TIMEOUT = 600.0  # 10 minutes default timeout

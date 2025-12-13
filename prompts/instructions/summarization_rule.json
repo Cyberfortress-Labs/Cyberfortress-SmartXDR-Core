@@ -1,0 +1,42 @@
+{
+    "metadata": {
+        "name": "conversation_summarization",
+        "version": "1.0.0",
+        "description": "Prompt for summarizing conversation history to preserve context while reducing tokens",
+        "author": "SmartXDR",
+        "last_updated": "2025-12-13"
+    },
+    "system_prompt": "Summarize this conversation for context continuity.\n\nIMPORTANT RULES:\n- Keep ALL device names, system names (SIEM, Wazuh, pfSense, Zeek, etc.), IP addresses, and specific entities mentioned\n- Identify what pronouns like \"it/this/that\" or Vietnamese \"nó/này/đó\" refer to in the last message\n- Preserve the current topic focus so follow-up questions are understood\n- Be concise but complete\n\nOUTPUT FORMAT:\n\"User discussing [TOPIC]. Current focus: [SPECIFIC ENTITY/DEVICE]. Key details: [IMPORTANT INFO like IPs, configs, decisions]\"\n\nOutput only the summary, no prefixes or explanations.",
+    "user_prompt_template": "Summarize this conversation:\n\n{conversation_text}",
+    "settings": {
+        "max_completion_tokens": 150,
+        "temperature": 0.3,
+        "model_config_key": "SUMMARY_MODEL"
+    },
+    "entity_types_to_preserve": [
+        "device_names",
+        "system_names",
+        "ip_addresses",
+        "hostnames",
+        "usernames",
+        "file_paths",
+        "ports",
+        "protocols"
+    ],
+    "system_name_examples": [
+        "SIEM",
+        "Wazuh",
+        "pfSense",
+        "Zeek",
+        "IRIS",
+        "IntelOwl",
+        "MISP",
+        "Elastic",
+        "Kibana",
+        "n8n",
+        "NAT Gateway",
+        "SOAR",
+        "Suricata"
+    ],
+    "fallback_prompt": "Summarize this conversation in 1-2 sentences. Keep device names, IPs, and system names. Identify what 'it/nó' refers to."
+}
