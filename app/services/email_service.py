@@ -34,11 +34,11 @@ class EmailService:
         self.email_password = os.getenv('EMAIL_PASSWORD', '')
         
         if not self.from_email or not self.email_password:
-            logger.warning("⚠️  Email credentials not configured in .env")
+            logger.warning(" Email credentials not configured in .env")
             self.enabled = False
         else:
             self.enabled = True
-            logger.info(f"✓ Email service initialized: {self.from_email} → {self.to_emails}")
+            logger.info(f"Email service initialized: {self.from_email} {self.to_emails}")
     
     def send_alert_summary_email(
         self,
@@ -58,7 +58,7 @@ class EmailService:
             bool: True if sent successfully, False otherwise
         """
         if not self.enabled:
-            logger.error("❌ Email service not configured")
+            logger.error("Email service not configured")
             return False
         
         try:
@@ -114,7 +114,7 @@ class EmailService:
             return True
             
         except Exception as e:
-            logger.error(f"❌ Failed to send email: {str(e)}")
+            logger.error(f"Failed to send email: {str(e)}")
             return False
     
     def _get_risk_level(self, risk_score: float) -> str:

@@ -3,8 +3,12 @@ Text chunking and semantic processing utilities
 """
 import json
 import os
+import logging
 from typing import Dict, List, Any
 from app.config import NETWORK_DIR, MITRE_DIR, MIN_CHUNK_SIZE, MAX_CHUNK_SIZE
+
+# Setup logger
+logger = logging.getLogger('smartxdr.chunking')
 
 
 def json_to_natural_text(data: Dict[str, Any], filename: str) -> List[str]:
@@ -261,20 +265,20 @@ def load_topology_context() -> str:
             pipeline = topology["routing_pipeline"]
             
             if "ingress_flow" in pipeline:
-                flow = " → ".join(pipeline["ingress_flow"])
+                flow = " ".join(pipeline["ingress_flow"])
                 context_parts.append(f"Ingress traffic flow from Internet:\n{flow}")
             
             if "east_west_flow" in pipeline:
-                flow = " → ".join(pipeline["east_west_flow"])
+                flow = " ".join(pipeline["east_west_flow"])
                 context_parts.append(f"East-West internal traffic flow:\n{flow}")
             
             if "endpoint_flow" in pipeline:
-                flow = " → ".join(pipeline["endpoint_flow"])
+                flow = " ".join(pipeline["endpoint_flow"])
                 context_parts.append(f"Endpoint monitoring flow:\n{flow}")
         
         return "\n\n".join(context_parts)
     except Exception as e:
-        print(f"WARNING: Cannot load topology: {e}")
+        logger.warning(f" Cannot load topology: {e}")
         return ""
 
 

@@ -316,8 +316,8 @@ class PromptBuilder:
 
 CRITICAL INSTRUCTIONS:
 1. **Language Matching**: 
-   - Vietnamese question → Vietnamese answer
-   - English question → English answer
+   - Vietnamese question Vietnamese answer
+   - English question English answer
 
 2. **When NO context or LIMITED context**:
    - Still answer using your general cybersecurity knowledge
@@ -329,9 +329,9 @@ CRITICAL INSTRUCTIONS:
    - Cite sources and anonymized tokens
 
 4. **Vietnamese Examples**:
-   - "Suricata là gì?" → Explain Suricata in Vietnamese (general knowledge OK)
-   - "Execution có tactics ID là gì?" → Search context for "Execution" tactic
-   - "TA0006 là gì?" → Search context for TA0006
+   - "Suricata là gì?" Explain Suricata in Vietnamese (general knowledge OK)
+   - "Execution có tactics ID là gì?" Search context for "Execution" tactic
+   - "TA0006 là gì?" Search context for TA0006
 
 CONTEXT (may be limited or general):
 {context}

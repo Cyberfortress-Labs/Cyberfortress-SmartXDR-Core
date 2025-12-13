@@ -4,9 +4,13 @@ IRIS API Service - Integration với DFIR-IRIS Case Management
 import os
 import re
 import json
+import logging
 import requests
 from typing import Optional, Dict, Any
 from dotenv import load_dotenv
+
+# Setup logger
+logger = logging.getLogger('smartxdr.iris')
 
 load_dotenv()
 
@@ -17,7 +21,7 @@ class IRISService:
     """
     
     def __init__(self):
-        self.iris_url = os.getenv("IRIS_API_URL", "https://iris.cyberfortress.local")
+        self.iris_url = os.getenv("IRIS_API_URL")
         self.api_key = os.getenv("IRIS_API_KEY")
         
         # SSL verification settings
@@ -61,7 +65,7 @@ class IRISService:
         custom_attrs = ioc_data.get('custom_attributes', {})
         
         # Debug: print structure
-        print(f"\n[DEBUG] IOC custom_attributes type: {type(custom_attrs)}")
+        logger.debug(f"IOC custom_attributes type: {type(custom_attrs)}")
         
         # IntelOwl data nằm trong tab "IntelOwl Report"
         intelowl_tab = None
@@ -70,41 +74,41 @@ class IRISService:
         if isinstance(custom_attrs, dict):
             # custom_attributes is a dict, check if IntelOwl Report exists
             for key, value in custom_attrs.items():
-                print(f"[DEBUG] Checking key: {key}")
+                logger.debug(f" Checking key: {key}")
                 if 'IntelOwl' in str(key) or 'intelowl' in str(key).lower():
                     intelowl_tab = value
-                    print(f"[DEBUG] Found IntelOwl data in key: {key}")
+                    logger.debug(f" Found IntelOwl data in key: {key}")
                     break
         elif isinstance(custom_attrs, list):
             # custom_attributes is a list of objects
             for attr in custom_attrs:
                 if isinstance(attr, dict) and attr.get('tab_name') == 'IntelOwl Report':
                     intelowl_tab = attr
-                    print(f"[DEBUG] Found IntelOwl tab in list")
+                    logger.debug(f" Found IntelOwl tab in list")
                     break
         
         if not intelowl_tab:
-            print(f"[DEBUG] No IntelOwl Report found in custom_attributes")
+            logger.debug(f" No IntelOwl Report found in custom_attributes")
             return None
         
         # DEBUG: Chi tiết IntelOwl tab
-        print(f"[DEBUG] IntelOwl tab type: {type(intelowl_tab)}")
+        logger.debug(f" IntelOwl tab type: {type(intelowl_tab)}")
         
         # Extract HTML report - handle different structures
         html_report = ""
         if isinstance(intelowl_tab, str):
             # Direct HTML string
             html_report = intelowl_tab
-            print(f"[DEBUG] IntelOwl tab is string, length: {len(html_report)}")
+            logger.debug(f" IntelOwl tab is string, length: {len(html_report)}")
         elif isinstance(intelowl_tab, dict):
-            print(f"[DEBUG] IntelOwl tab keys: {list(intelowl_tab.keys())}")
+            logger.debug(f" IntelOwl tab keys: {list(intelowl_tab.keys())}")
             
             # Check for nested structure: {'HTML report': {'value': '...'}}
             if 'HTML report' in intelowl_tab:
                 html_report_obj = intelowl_tab['HTML report']
                 if isinstance(html_report_obj, dict) and 'value' in html_report_obj:
                     html_report = html_report_obj['value']
-                    print(f"[DEBUG] Extracted from nested 'HTML report'.'value', length: {len(html_report)}")
+                    logger.debug(f" Extracted from nested 'HTML report'.'value', length: {len(html_report)}")
                 else:
                     html_report = str(html_report_obj)
             # Try different possible keys
@@ -118,9 +122,9 @@ class IRISService:
                 # Convert entire dict to string as last resort
                 html_report = str(intelowl_tab)
             
-            print(f"[DEBUG] Final HTML length: {len(html_report)}")
+            logger.debug(f" Final HTML length: {len(html_report)}")
         
-        print(f"[DEBUG] HTML report preview (first 500 chars): {html_report[:500]}")
+        logger.debug(f" HTML report preview (first 500 chars): {html_report[:500]}")
         
         # Extract raw data từ HTML (nếu có embed)
         raw_data = self._extract_raw_json_from_html(html_report)
@@ -145,11 +149,11 @@ class IRISService:
             try:
                 return json.loads(json_str)
             except Exception as e:
-                print(f"[DEBUG] Failed to parse JSON: {e}")
-                print(f"[DEBUG] JSON string preview: {json_str[:200]}")
+                logger.debug(f" Failed to parse JSON: {e}")
+                logger.debug(f" JSON string preview: {json_str[:200]}")
                 pass
         else:
-            print(f"[DEBUG] No 'intelowl_raw_ace' div found in HTML")
+            logger.debug(f" No 'intelowl_raw_ace' div found in HTML")
         
         return None
     def get_case_iocs(self, case_id: int) -> list:
@@ -180,13 +184,13 @@ class IRISService:
         data = response.json()
         
         # Debug: print response structure
-        print(f"[DEBUG get_case_iocs] Response data type: {type(data)}")
-        print(f"[DEBUG get_case_iocs] Response data: {str(data)[:500]}")
+        logger.debug(f"get_case_iocs] Response data type: {type(data)}")
+        logger.debug(f"get_case_iocs] Response data: {str(data)[:500]}")
         
         # Handle IRIS API response
         if isinstance(data, dict) and 'data' in data:
             ioc_data = data['data']
-            print(f"[DEBUG get_case_iocs] ioc_data type: {type(ioc_data)}")
+            logger.debug(f"get_case_iocs] ioc_data type: {type(ioc_data)}")
             if isinstance(ioc_data, dict) and 'ioc' in ioc_data:
                 ioc_list = ioc_data['ioc']
             elif isinstance(ioc_data, list):
@@ -196,17 +200,17 @@ class IRISService:
         else:
             ioc_list = []
         
-        print(f"[DEBUG get_case_iocs] ioc_list type: {type(ioc_list)}, len: {len(ioc_list) if isinstance(ioc_list, list) else 'N/A'}")
+        logger.debug(f"get_case_iocs] ioc_list type: {type(ioc_list)}, len: {len(ioc_list) if isinstance(ioc_list, list) else 'N/A'}")
         if ioc_list and len(ioc_list) > 0:
-            print(f"[DEBUG get_case_iocs] First IOC type: {type(ioc_list[0])}")
-            print(f"[DEBUG get_case_iocs] First IOC: {ioc_list[0]}")
+            logger.debug(f"get_case_iocs] First IOC type: {type(ioc_list[0])}")
+            logger.debug(f"get_case_iocs] First IOC: {ioc_list[0]}")
         
         # Extract relevant fields
         result = []
         for ioc in ioc_list:
             # Skip if ioc is not a dict (could be string key from dict iteration)
             if not isinstance(ioc, dict):
-                print(f"[DEBUG get_case_iocs] Skipping non-dict IOC: {ioc}")
+                logger.debug(f"get_case_iocs] Skipping non-dict IOC: {ioc}")
                 continue
                 
             # Handle ioc_type as string or dict
@@ -364,7 +368,7 @@ class IRISService:
                     result['iocs_with_analysis'] += 1
                     
             except Exception as e:
-                print(f"[WARNING] Failed to get comments for IOC {ioc_id}: {e}")
+                logger.warning(f" Failed to get comments for IOC {ioc_id}: {e}")
             
             result['iocs'].append(ioc_entry)
         

@@ -80,11 +80,11 @@ class AlertSummarizationService:
         
         # Log Elasticsearch status
         if self.es_service.enabled and self.es_service.client:
-            logger.info("✓ Alert Summarization Service initialized with Elasticsearch")
+            logger.info("Alert Summarization Service initialized with Elasticsearch")
         elif not self.es_service.enabled:
-            logger.warning("⚠️  Alert Summarization Service initialized WITHOUT Elasticsearch (ELASTICSEARCH_ENABLED=false)")
+            logger.warning("Alert Summarization Service initialized WITHOUT Elasticsearch (ELASTICSEARCH_ENABLED=false)")
         else:
-            logger.error("❌ Alert Summarization Service initialized but Elasticsearch connection FAILED (check password/connection)")
+            logger.error("Alert Summarization Service initialized but Elasticsearch connection FAILED (check password/connection)")
     
     def summarize_alerts(self, time_window_minutes: Optional[int] = None, 
                         source_ip: Optional[str] = None) -> Dict[str, Any]:
@@ -146,7 +146,7 @@ class AlertSummarizationService:
             return result
         
         except Exception as e:
-            logger.error(f"❌ Alert summarization failed: {str(e)}")
+            logger.error(f"Alert summarization failed: {str(e)}")
             return {
                 "success": False,
                 "status": "error",
@@ -162,7 +162,7 @@ class AlertSummarizationService:
             Base64-encoded PNG image or None if matplotlib not available
         """
         if not MATPLOTLIB_AVAILABLE:
-            logger.warning("⚠ Matplotlib not available, skipping visualization")
+            logger.warning("Matplotlib not available, skipping visualization")
             return None
         
         if not grouped_alerts:
@@ -258,7 +258,7 @@ class AlertSummarizationService:
             return img_base64
             
         except Exception as e:
-            logger.error(f"❌ Error generating visualization: {e}")
+            logger.error(f"Error generating visualization: {e}")
             return None
     
     def _query_alerts(self, time_window_minutes: int, source_ip: Optional[str]) -> List[Dict]:
@@ -266,7 +266,7 @@ class AlertSummarizationService:
         try:
             # Check if Elasticsearch client is available
             if not self.es_service.enabled or self.es_service.client is None:
-                logger.error("❌ Elasticsearch service not available. Check ELASTICSEARCH_PASSWORD in .env")
+                logger.error("Elasticsearch service not available. Check ELASTICSEARCH_PASSWORD in .env")
                 return []
             
             # Build time range
@@ -316,12 +316,12 @@ class AlertSummarizationService:
                 if DEBUG_MODE:
                     logger.debug(f"📊 Found {len(alerts)} alerts in Elasticsearch")
             except Exception as e:
-                logger.error(f"❌ Could not query Elasticsearch: {str(e)}")
+                logger.error(f"Could not query Elasticsearch: {str(e)}")
             
             return alerts
         
         except Exception as e:
-            logger.error(f"❌ ES query failed: {str(e)}")
+            logger.error(f"ES query failed: {str(e)}")
             return []
     
     def _get_index_patterns(self) -> List[str]:
@@ -375,7 +375,7 @@ class AlertSummarizationService:
                     "message": alert.get("message", "")
                 })
             except Exception as e:
-                logger.warning(f"⚠ Error grouping alert: {str(e)}")
+                logger.warning(f"Error grouping alert: {str(e)}")
                 continue
         
         # Convert to list and calculate group stats
@@ -518,7 +518,7 @@ class AlertSummarizationService:
             return summary if summary else self._build_fallback_summary(grouped_alerts)
         
         except Exception as e:
-            logger.error(f"❌ Summary generation failed: {str(e)}")
+            logger.error(f"Summary generation failed: {str(e)}")
             return self._build_fallback_summary(grouped_alerts)
     
     def get_ai_analysis(self, grouped_alerts: List[Dict], risk_score: float) -> str:
@@ -564,7 +564,7 @@ class AlertSummarizationService:
                     system_prompt = prompt_data.get('system_prompt', '')
                     user_template = prompt_data.get('user_prompt_template', '')
             except Exception as e:
-                logger.warning(f"⚠️  Failed to load prompt from {prompt_path}: {e}. Using fallback.")
+                logger.warning(f" Failed to load prompt from {prompt_path}: {e}. Using fallback.")
                 # Fallback prompt
                 system_prompt = "Bạn là chuyên gia SOC Analyst. Phân tích cảnh báo và đưa ra khuyến nghị ngắn gọn."
                 user_template = """Phân tích tóm tắt cảnh báo bảo mật này và đưa ra khuyến nghị ngắn gọn:
@@ -598,11 +598,11 @@ Giữ phản hồi dưới 250 từ, cụ thể và có thể hành động."""
             if response.get('status') == 'success':
                 return response.get('answer', '')
             else:
-                logger.warning(f"⚠️  AI analysis failed: {response.get('error', '')}")
+                logger.warning(f" AI analysis failed: {response.get('error', '')}")
                 return ""
         
         except Exception as e:
-            logger.error(f"❌ AI analysis error: {str(e)}")
+            logger.error(f"AI analysis error: {str(e)}")
             return ""
     
     def _build_detailed_summary(self, alert_context: str, grouped_alerts: List[Dict], risk_score: float) -> str:

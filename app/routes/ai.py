@@ -16,9 +16,9 @@ ai_bp = Blueprint('ai', __name__)
 # Initialize LLM Service (singleton)
 try:
     llm_service = LLMService()
-    logger.info("✓ LLM Service initialized")
+    logger.info("LLM Service initialized")
 except Exception as e:
-    logger.error(f"✗ Failed to initialize LLM Service: {e}", exc_info=True)
+    logger.error(f"Failed to initialize LLM Service: {e}", exc_info=True)
     llm_service = None
 
 

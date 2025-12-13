@@ -5,9 +5,13 @@ import time
 import hashlib
 import re
 import os
+import logging
 import numpy as np
 from typing import Optional, Dict, Any, Tuple
 from dotenv import load_dotenv
+
+# Setup logger
+logger = logging.getLogger('smartxdr.cache')
 
 # Load environment variables
 load_dotenv()
@@ -43,9 +47,9 @@ class ResponseCache:
             try:
                 self.client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
                 self.embedding_model = "text-embedding-3-small"
-                print("✓ Semantic cache enabled (embedding-based similarity matching)")
+                logger.info("Semantic cache enabled (embedding-based similarity matching)")
             except Exception as e:
-                print(f"⚠ Semantic cache initialization failed: {e}")
+                logger.warning(f"Semantic cache initialization failed: {e}")
                 self.use_semantic_cache = False
     
     def _normalize_query(self, query: str) -> str:
@@ -143,7 +147,7 @@ class ResponseCache:
             )
             return response.data[0].embedding
         except Exception as e:
-            print(f"⚠ Failed to get embedding: {e}")
+            logger.warning(f"Failed to get embedding: {e}")
             return None
     
     def _cosine_similarity(self, vec1: list, vec2: list) -> float:
@@ -206,7 +210,7 @@ class ResponseCache:
         if cache_key in self.cache:
             cached_data = self.cache[cache_key]
             if time.time() - cached_data['timestamp'] < self.ttl:
-                print(f"\n✓ Cache hit! (exact match - saved API call)")
+                logger.debug("Cache hit (exact match - saved API call)")
                 return cached_data['response']
             else:
                 # Expired, remove from cache
@@ -221,7 +225,7 @@ class ResponseCache:
                 if similar_key:
                     cached_data = self.cache[similar_key]
                     if time.time() - cached_data['timestamp'] < self.ttl:
-                        print(f"\n✓ Cache hit! (semantic match {similarity:.1%} - saved LLM call)")
+                        logger.debug(f"Cache hit (semantic match {similarity:.1%} - saved LLM call)")
                         return cached_data['response']
                     else:
                         del self.cache[similar_key]

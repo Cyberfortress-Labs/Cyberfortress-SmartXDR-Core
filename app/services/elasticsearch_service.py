@@ -80,7 +80,6 @@ class ElasticsearchService:
         self.client = None
         
         if not self.enabled:
-            logger.warning("⚠️  Elasticsearch is DISABLED. Triage/alert features will not work.")
             ElasticsearchService._initialized = True
             return
         
@@ -89,7 +88,7 @@ class ElasticsearchService:
             from elasticsearch import Elasticsearch
             from elasticsearch.exceptions import ConnectionError, NotFoundError
         except ImportError:
-            logger.error("elasticsearch package not installed. Run: pip install elasticsearch")
+            logger.error("Elasticsearch package not installed. Run: pip install elasticsearch")
             self.enabled = False
             ElasticsearchService._initialized = True
             return
@@ -155,7 +154,7 @@ class ElasticsearchService:
         # Test connection
         try:
             info = self.client.info()
-            logger.info(f"✓ Connected to Elasticsearch cluster: {info['cluster_name']}")
+            logger.info(f"Connected to Elasticsearch cluster: {info['cluster_name']}")
         except Exception as e:
             logger.error(f"Failed to connect to Elasticsearch: {e}")
             self.enabled = False
@@ -1484,7 +1483,7 @@ class ElasticsearchService:
             }
         
         except Exception as e:
-            logger.error(f"❌ Failed to query ML logs: {str(e)}")
+            logger.error(f"Failed to query ML logs: {str(e)}")
             return {
                 "status": "error",
                 "error": str(e),

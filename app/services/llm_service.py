@@ -5,6 +5,7 @@ import os
 import re
 import json
 import hashlib
+import logging
 from pathlib import Path
 from typing import Optional, Dict, Any
 from openai import OpenAI, APIError, APIConnectionError, RateLimitError
@@ -13,6 +14,9 @@ from app.config import *
 
 # Import analyzer registry
 from app.services.analyzers import get_handler, get_all_handlers, get_registered_analyzer_names
+
+# Setup module-level logger
+logger = logging.getLogger('smartxdr.llm')
 
 load_dotenv()
 
@@ -62,7 +66,7 @@ class LLMService:
                 max_calls_per_minute=MAX_CALLS_PER_MINUTE,
                 max_daily_cost=MAX_DAILY_COST
             )
-            logger.info("✓ APIUsageTracker initialized")
+            logger.info("APIUsageTracker initialized")
             
             # Enable semantic cache for better hit rate on similar questions
             from app.config import SEMANTIC_CACHE_ENABLED
@@ -71,16 +75,16 @@ class LLMService:
                 enabled=CACHE_ENABLED,
                 use_semantic_cache=SEMANTIC_CACHE_ENABLED
             )
-            logger.info(f"✓ ResponseCache initialized (semantic_cache={SEMANTIC_CACHE_ENABLED})")
+            logger.info(f"ResponseCache initialized (semantic_cache={SEMANTIC_CACHE_ENABLED})")
             
             self.prompt_builder = PromptBuilder(prompt_file='rag_system.json')
-            logger.info("✓ PromptBuilder initialized")
+            logger.info("PromptBuilder initialized")
             
             self._initialized = True
-            logger.info("✓ LLMService fully initialized")
+            logger.info("LLMService fully initialized")
             
         except Exception as e:
-            logger.error(f"✗ Failed to initialize LLMService: {e}", exc_info=True)
+            logger.error(f"Failed to initialize LLMService: {e}", exc_info=True)
             self._initialized = False
             raise
     
@@ -103,9 +107,9 @@ class LLMService:
             filters: Optional metadata filters (e.g., {"is_active": True, "tags": "security"})
             use_cache: Whether to use cache (default: True). Set False for queries with dynamic context.
             session_id: Optional session ID for conversation memory. If provided, enables:
-                       - Including recent conversation history in context
-                       - Storing messages for future reference
-                       - Semantic search for relevant past conversations
+                - Including recent conversation history in context
+                - Storing messages for future reference
+                - Semantic search for relevant past conversations
         
         Returns:
             {
@@ -118,7 +122,7 @@ class LLMService:
             }
         """
         if DEBUG_MODE:
-            print(f"\n[LLM Service] Question: {query}")
+            logger.debug(f"Question: {query}")
             if session_id:
                 print(f"[LLM Service] Session: {session_id[:8]}...")
         
@@ -144,7 +148,7 @@ class LLMService:
                 conversation_memory = get_conversation_memory()
                 
                 # Get summarized history (auto-summarizes when > 4 messages)
-                # Token optimization: 6 messages (~600 tokens) → summary (~100 tokens)
+                # Token optimization: 6 messages (~600 tokens) summary (~100 tokens)
                 conversation_history_text = conversation_memory.get_summarized_history(session_id)
                 
                 if conversation_history_text and DEBUG_MODE:
@@ -440,6 +444,7 @@ class LLMService:
     def explain_intelowl_results(self, ioc_value: str, raw_results: dict) -> dict:
         """
         Dùng AI giải thích IntelOwl raw JSON results
+        Tích hợp RAG để đưa ra gợi ý phù hợp với ngữ cảnh hệ thống.
         
         Args:
             ioc_value: Giá trị IOC (IP/domain/hash/url)
@@ -495,9 +500,16 @@ class LLMService:
             print(f"[DEBUG LLM] Total: {total_analyzers}, Success: {successful_count}, Critical findings: {len(critical_findings)}")
             print(f"[DEBUG LLM] Pre-computed stats: {stats}")
         
+        # **RAG ENHANCEMENT: Lấy context từ knowledge base để đưa ra gợi ý phù hợp với hệ thống**
+        rag_context = self._get_rag_context_for_ioc(ioc_value, stats, critical_findings)
+        
         # Build prompt from template
         user_prompt_template = prompt_config.get('user_prompt_template', '')
         system_prompt = prompt_config.get('system_prompt', 'You are a cybersecurity expert.')
+        
+        # Enhance system prompt with RAG context if available
+        if rag_context:
+            system_prompt += f"\n\n**SYSTEM CONTEXT (từ knowledge base của tổ chức):**\n{rag_context}\n\nHãy sử dụng thông tin này để đưa ra gợi ý phù hợp với hệ thống cụ thể của tổ chức."
         
         prompt = user_prompt_template.format(
             ioc_value=ioc_value,
@@ -512,6 +524,8 @@ class LLMService:
             print(f"[DEBUG LLM] IOC Enrichment prompt length: {len(prompt)}")
             print(f"[DEBUG LLM] System prompt: {system_prompt[:100]}...")
             print(f"[DEBUG LLM] User prompt preview: {prompt[:500]}...")
+            if rag_context:
+                print(f"[DEBUG LLM] RAG context length: {len(rag_context)} chars")
         
         # Call OpenAI
         try:
@@ -559,6 +573,151 @@ class LLMService:
                 "key_findings": [],
                 "recommendations": []
             }
+    
+    def _get_rag_context_for_ioc(self, ioc_value: str, stats: dict, findings: list) -> str:
+        """
+        Lấy context từ RAG để đưa ra gợi ý phù hợp với ngữ cảnh hệ thống.
+        
+        Args:
+            ioc_value: Giá trị IOC (IP/domain/hash/url)
+            stats: Threat statistics đã tính
+            findings: Critical findings từ analyzers
+        
+        Returns:
+            Context text từ RAG hoặc empty string nếu không có
+        """
+        try:
+            from app.rag.service import RAGService
+            rag_service = RAGService()
+            
+            # Xây dựng query dựa trên IOC và threat info
+            # Tập trung vào các khía cạnh liên quan đến cấu hình hệ thống và response procedures
+            query_parts = []
+            
+            # Determine IOC type and add relevant context
+            if self._is_ip_address(ioc_value):
+                query_parts.append("IP address threat response firewall rules network policy")
+            elif self._is_domain(ioc_value):
+                query_parts.append("domain DNS blocking threat intelligence MISP")
+            elif self._is_hash(ioc_value):
+                query_parts.append("malware hash file detection endpoint security Wazuh")
+            else:
+                query_parts.append("threat detection security response")
+            
+            # Add risk level context
+            max_risk = stats.get('max_risk_score', 0)
+            if max_risk >= 80:
+                query_parts.append("critical incident response isolation containment")
+            elif max_risk >= 60:
+                query_parts.append("high risk alert investigation")
+            elif max_risk >= 30:
+                query_parts.append("medium risk monitoring")
+            
+            # Add analyzer-specific context
+            analyzer_stats = stats.get('analyzer_stats', {})
+            if 'VirusTotal' in str(analyzer_stats):
+                query_parts.append("antivirus detection malware signature")
+            if 'AbuseIPDB' in str(analyzer_stats):
+                query_parts.append("IP reputation abuse reports")
+            
+            # Build query
+            rag_query = " ".join(query_parts)
+            
+            if DEBUG_LLM:
+                print(f"[DEBUG LLM] RAG query for IOC context: {rag_query[:100]}...")
+            
+            # Query RAG với top_k nhỏ để tập trung vào context quan trọng nhất
+            context_text, sources = rag_service.build_context_from_query(
+                query_text=rag_query,
+                top_k=5,  # Lấy 5 documents liên quan nhất
+                filters={"is_active": True}
+            )
+            
+            # Nếu không tìm thấy context phù hợp
+            if context_text == "No relevant context found." or not context_text.strip():
+                if DEBUG_LLM:
+                    print(f"[DEBUG LLM] No RAG context found for IOC")
+                return ""
+            
+            if DEBUG_LLM:
+                print(f"[DEBUG LLM] RAG context sources: {sources}")
+            
+            # Truncate context nếu quá dài (giữ token usage hợp lý)
+            max_context_chars = 1500
+            if len(context_text) > max_context_chars:
+                context_text = context_text[:max_context_chars] + "..."
+            
+            return context_text
+            
+        except Exception as e:
+            if DEBUG_LLM:
+                print(f"[DEBUG LLM] RAG context error: {e}")
+            return ""
+    
+    def _is_ip_address(self, value: str) -> bool:
+        """Check if value is an IP address using ipaddress module (built-in)"""
+        import ipaddress
+        try:
+            ipaddress.ip_address(value)
+            return True
+        except ValueError:
+            return False
+    
+    def _is_domain(self, value: str) -> bool:
+        """Check if value is a domain using urllib.parse (built-in)"""
+        from urllib.parse import urlparse
+        
+        # Skip if it's an IP address
+        if self._is_ip_address(value):
+            return False
+        
+        # Check basic domain structure
+        if '.' not in value:
+            return False
+        
+        # Try to parse as URL (add scheme if missing)
+        try:
+            test_url = f"http://{value}" if not value.startswith(('http://', 'https://')) else value
+            parsed = urlparse(test_url)
+            hostname = parsed.hostname or value
+            
+            # Domain validation: must have valid characters and TLD
+            parts = hostname.split('.')
+            if len(parts) < 2:
+                return False
+            
+            # Each part must be alphanumeric with hyphens (not at start/end)
+            for part in parts:
+                if not part or part.startswith('-') or part.endswith('-'):
+                    return False
+                if not all(c.isalnum() or c == '-' for c in part):
+                    return False
+            
+            # TLD should be at least 2 chars and alphabetic
+            tld = parts[-1]
+            if len(tld) < 2 or not tld.isalpha():
+                return False
+            
+            return True
+        except Exception:
+            return False
+    
+    def _is_hash(self, value: str) -> bool:
+        """Check if value is a hash (MD5, SHA1, SHA256) using hashlib for reference"""
+        import hashlib
+        
+        # Hash lengths: MD5=32, SHA1=40, SHA256=64
+        valid_lengths = {32, 40, 64}  # hashlib.md5().hexdigest() length, etc.
+        
+        if len(value) not in valid_lengths:
+            return False
+        
+        # Must be valid hexadecimal
+        try:
+            int(value, 16)
+            return True
+        except ValueError:
+            return False
     
     def _determine_risk_level(self, analyzer_reports: list) -> str:
         """
@@ -692,8 +851,8 @@ class LLMService:
         
         for line in lines:
             line = line.strip()
-            if line.startswith('-') or line.startswith('•') or (line and line[0].isdigit() and '.' in line):
-                recommendations.append(line.lstrip('-•0123456789. '))
+            if line.startswith('-') or line.startswith('') or (line and line[0].isdigit() and '.' in line):
+                recommendations.append(line.lstrip('-0123456789. '))
         
         return recommendations[:5]  # Top 5
     
@@ -1009,8 +1168,8 @@ class LLMService:
                 continue
             
             if in_findings_section:
-                if line.startswith(('-', '•', '*')) or (line and line[0].isdigit()):
-                    finding = line.lstrip('-•*0123456789. ')
+                if line.startswith(('-', '', '*')) or (line and line[0].isdigit()):
+                    finding = line.lstrip('-*0123456789. ')
                     if len(finding) > 10:  # Skip too short lines
                         findings.append(finding)
                 elif line == '' or any(kw in line.lower() for kw in ['đề xuất', 'action', 'hành động']):

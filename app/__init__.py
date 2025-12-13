@@ -2,6 +2,7 @@
 Flask application factory for Cyberfortress SmartXDR Core
 """
 import os
+import logging
 import secrets
 from pathlib import Path
 from flask import Flask, request, redirect
@@ -11,6 +12,9 @@ from flask_security.datastore import SQLAlchemyUserDatastore
 from flask_security.utils import hash_password
 # Note: Old ChromaDB initialization removed - now using RAGService
 # from app.core.database import initialize_database
+
+# Setup logger
+logger = logging.getLogger('smartxdr.app')
 
 
 # Global ChromaDB collection instance (legacy - kept for backward compatibility)
@@ -90,7 +94,7 @@ def create_app():
     @user_authenticated.connect_via(app)
     def on_user_authenticated(sender, user, **extra):
         """Log when user is authenticated"""
-        print(f"✓ User authenticated: {user.email}")
+        logger.info(f"User authenticated: {user.email}")
 
     
     # Create tables and roles (admin user should be created via scripts/create_superadmin.py)

@@ -99,7 +99,7 @@ class TelegramMiddlewareService:
                 
         logger.info(f"TelegramMiddlewareService initialized")
         logger.info(f"SmartXDR API URL: {self.smartxdr_api_url}")
-        logger.info(f"SmartXDR API Key: {'Configured ✓' if self.smartxdr_api_key else 'NOT SET ⚠️'}")
+        logger.info(f"SmartXDR API Key: {'Configured' if self.smartxdr_api_key else 'NOT SET'}")
         logger.info(f"Allowed chats: {self.allowed_chats if self.allowed_chats else 'ALL (no whitelist)'}")
         logger.info(f"Rate limit: {self.rate_limit_messages} messages per {self.rate_limit_window}s")
     
@@ -974,11 +974,11 @@ class TelegramMiddlewareService:
                     
                     photo_response = self._tg_session.post(photo_url, params=params, files=files, timeout=10)
                     if not photo_response.ok:
-                        logger.warning(f"⚠️ Failed to send visualization: {photo_response.text}")
+                        logger.warning(f"Failed to send visualization: {photo_response.text}")
                 except Exception as e:
-                    logger.error(f"❌ Error sending visualization: {e}")
+                    logger.error(f"Error sending visualization: {e}")
             
-            logger.info(f"✓ Alert summary sent to chat {chat_id} ({alerts_count} alerts, risk: {risk_score})")
+            logger.info(f"Alert summary sent to chat {chat_id} ({alerts_count} alerts, risk: {risk_score})")
             
         except requests.exceptions.Timeout:
             self.send_message(

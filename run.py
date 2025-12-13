@@ -3,6 +3,18 @@ Cyberfortress SmartXDR Core - Flask Application Entry Point
 """
 import os
 import sys
+import warnings
+
+# Suppress deprecation warnings from passlib (uses deprecated pkg_resources)
+# MUST be before any other imports that use passlib
+warnings.filterwarnings('ignore', category=UserWarning, module='passlib')
+warnings.filterwarnings('ignore', category=DeprecationWarning)
+warnings.filterwarnings('ignore', message='.*pkg_resources.*')
+
+import logging
+
+# Setup logger
+logger = logging.getLogger('smartxdr.main')
 
 # Fix UTF-8 encoding for Windows console
 if sys.platform == 'win32':
@@ -25,10 +37,7 @@ import requests
 from dotenv import load_dotenv
 from app import create_app, get_collection
 from app.config import PORT, HOST
-import warnings
 
-warnings.filterwarnings('ignore', category=UserWarning, module='passlib')
-warnings.filterwarnings('ignore', category=DeprecationWarning)
 # Load environment variables
 load_dotenv()
 
@@ -108,7 +117,7 @@ def get_cloudflare_config():
             'hostname': hostname
         }
     except Exception as e:
-        print(f"  Error reading cloudflare config: {e}")
+        logger.error(f"Error reading cloudflare config: {e}")
         return None
 
 
@@ -122,8 +131,8 @@ def start_tunnel(port):
     
     cloudflared = find_cloudflared()
     if not cloudflared:
-        print("cloudflared not found - Telegram webhook disabled")
-        print("     Install: winget install --id Cloudflare.cloudflared")
+        logger.warning("cloudflared not found - Telegram webhook disabled")
+        logger.warning("Install: winget install --id Cloudflare.cloudflared")
         return None
     
     # Check for existing cloudflare config
@@ -135,11 +144,11 @@ def start_tunnel(port):
         import yaml
         import tempfile
         
-        print(f"  Found cloudflare config, starting named tunnel...")
-        print(f"    Tunnel: {cf_config['tunnel_name']}")
+        logger.info("Found cloudflare config, starting named tunnel...")
+        logger.info(f"Tunnel: {cf_config['tunnel_name']}")
         if cf_config.get('hostname'):
-            print(f"    Hostname: {cf_config['hostname']}")
-        print(f"    Service: http://localhost:{port} (local override)")
+            logger.info(f"Hostname: {cf_config['hostname']}")
+        logger.info(f"Service: http://localhost:{port} (local override)")
         
         # Read original config and modify service to localhost
         try:
@@ -164,7 +173,7 @@ def start_tunnel(port):
             cf_config['temp_config'] = temp_config_path
             
         except Exception as e:
-            print(f"  Error creating temp config: {e}")
+            logger.error(f"Error creating temp config: {e}")
             temp_config_path = cf_config['config_file']
         
         _tunnel_process = subprocess.Popen(
@@ -185,14 +194,14 @@ def start_tunnel(port):
         # For named tunnels, URL is the configured hostname
         if cf_config.get('hostname'):
             _tunnel_url = f"https://{cf_config['hostname']}"
-            print(f"  Tunnel URL: {_tunnel_url}")
+            logger.info(f"Tunnel URL: {_tunnel_url}")
             return _tunnel_url
         else:
-            print("  Warning: No hostname configured in config.yml")
+            logger.warning("No hostname configured in config.yml")
             return None
     else:
         # Fallback to quick tunnel (free domain)
-        print(f"  No cloudflare config found, using quick tunnel (free domain)...")
+        logger.info(f"No cloudflare config found, using quick tunnel (free domain)...")
         
         _tunnel_process = subprocess.Popen(
             [cloudflared, "tunnel", "--url", f"http://localhost:{port}"],
@@ -219,13 +228,13 @@ def start_tunnel(port):
                 _tunnel_url = match.group(1)
                 # Validate URL doesn't have consecutive hyphens or hyphen at weird places
                 if '--' not in _tunnel_url and not _tunnel_url.startswith('https://-'):
-                    print(f"  Tunnel URL: {_tunnel_url}")
+                    logger.info(f"Tunnel URL: {_tunnel_url}")
                     return _tunnel_url
                 else:
-                    print(f"  Invalid tunnel URL detected, retrying...")
+                    logger.warning("Invalid tunnel URL detected, retrying...")
                     continue
         
-        print("  Failed to get tunnel URL")
+        logger.warning("Failed to get tunnel URL")
         return None
 
 
@@ -233,11 +242,11 @@ def set_telegram_webhook(tunnel_url):
     """Set Telegram webhook with tunnel URL"""
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
     if not bot_token:
-        print("  TELEGRAM_BOT_TOKEN not set - webhook skipped")
+        logger.warning("TELEGRAM_BOT_TOKEN not set - webhook skipped")
         return False
     
     webhook_url = f"{tunnel_url}/api/telegram/webhook"
-    print(f"  Setting webhook: {webhook_url}")
+    logger.info(f"Setting webhook: {webhook_url}")
     
     # Wait for DNS propagation
     time.sleep(5)
@@ -255,13 +264,13 @@ def set_telegram_webhook(tunnel_url):
         result = response.json()
         
         if result.get("ok"):
-            print("  Telegram webhook active!")
+            logger.info("Telegram webhook active!")
             return True
         else:
-            print(f"  Webhook failed: {result.get('description')}")
+            logger.warning(f"Webhook failed: {result.get('description')}")
             return False
     except Exception as e:
-        print(f"  Webhook error: {e}")
+        logger.warning(f"Webhook error: {e}")
         return False
 
 
@@ -269,7 +278,7 @@ def cleanup_tunnel():
     """Cleanup tunnel on exit"""
     global _tunnel_process
     if _tunnel_process:
-        print("\nStopping Cloudflare Tunnel...")
+        logger.info("\nStopping Cloudflare Tunnel...")
         _tunnel_process.terminate()
         _tunnel_process = None
         
@@ -282,7 +291,7 @@ def cleanup_tunnel():
                     json={"drop_pending_updates": True},
                     timeout=5
                 )
-                print("  Webhook removed")
+                logger.info("Webhook removed")
             except:
                 pass
 
@@ -302,62 +311,62 @@ scheduler = get_daily_report_scheduler()
 if scheduler.enabled:
     scheduler.start()
     atexit.register(scheduler.stop)
-    print(f"Daily report scheduler started (sends at {os.getenv('DAILY_REPORT_TIME', '07:00')})")
+    logger.info(f"Daily report scheduler started (sends at {os.getenv('DAILY_REPORT_TIME', '07:00')})")
 else:
-    print("Daily report scheduler disabled (check email configuration in .env)")
+    logger.warning("Daily report scheduler disabled (check email configuration in .env)")
 
 if __name__ == '__main__':
     # Check API key
     if not os.getenv('OPENAI_API_KEY'):
-        print("ERROR: OPENAI_API_KEY not found in .env file!")
-        print("   Please add your OpenAI API key to .env file")
+        logger.error("ERROR: OPENAI_API_KEY not found in .env file!")
+        logger.error("   Please add your OpenAI API key to .env file")
         exit(1)
     
     # Run data ingestion on startup
     # NOTE: Ingestion now managed through RAG API endpoints
     # Use POST /api/rag/documents to add documents
-    print("RAG system ready. Use /api/rag/documents endpoint to manage knowledge base.\n")
+    logger.info("RAG system ready. Use /api/rag/documents endpoint to manage knowledge base.")
     
     # Run Flask app
-    print("="*80)
-    print("Cyberfortress SmartXDR Core - API Server")
-    print("="*80)
-    print("Endpoints:")
-    print("  AI/RAG:")
-    print("    - POST /api/ai/ask       - Ask LLM a question")
-    print("    - GET  /api/ai/stats     - Get usage statistics")
-    print("    - POST /api/ai/cache/clear - Clear response cache")
-    print("\n  RAG Knowledge Base:")
-    print("    - POST /api/rag/documents - Create document")
-    print("    - POST /api/rag/documents/batch - Batch create documents")
-    print("    - GET  /api/rag/documents - List documents")
-    print("    - GET  /api/rag/documents/<id> - Get document by ID")
-    print("    - PUT  /api/rag/documents/<id> - Update document")
-    print("    - DELETE /api/rag/documents/<id> - Delete document")
-    print("    - POST /api/rag/query    - RAG query (search + LLM answer)")
-    print("    - GET  /api/rag/stats    - RAG statistics")
-    print("\n  IOC Enrichment:")
-    print("    - POST /api/enrich/explain_intelowl - Explain IntelOwl results with AI (single IOC)")
-    print("    - POST /api/enrich/explain_case_iocs - Analyze all IOCs in a case with AI")
-    print("    - GET /api/enrich/case_ioc_comments - Get SmartXDR comments for case IOCs")
-    print("\n  Triage & Alerts:")
-    print("    - POST /api/triage/summarize-alerts - Summarize ML-classified alerts (supports include_ai_analysis=true)")
-    print("    - POST /api/triage/send-report-email - Send alert summary via email")
-    print("    - POST /api/triage/daily-report/trigger - Manually trigger daily report")
-    print("    - GET  /api/triage/health - Check triage service health")
-    print("\n  Telegram:")
-    print("    - POST /api/telegram/webhook - Telegram webhook (auto-configured)")
-    print("\n  Health:")
-    print("    - GET  /health           - Health check")
-    print("="*80)
+    logger.info("="*80)
+    logger.info("Cyberfortress SmartXDR Core - API Server")
+    logger.info("="*80)
+    logger.info("Endpoints:")
+    logger.info("  AI/RAG:")
+    logger.info("    - POST /api/ai/ask       - Ask LLM a question")
+    logger.info("    - GET  /api/ai/stats     - Get usage statistics")
+    logger.info("    - POST /api/ai/cache/clear - Clear response cache")
+    logger.info("  RAG Knowledge Base:")
+    logger.info("    - POST /api/rag/documents - Create document")
+    logger.info("    - POST /api/rag/documents/batch - Batch create documents")
+    logger.info("    - GET  /api/rag/documents - List documents")
+    logger.info("    - GET  /api/rag/documents/<id> - Get document by ID")
+    logger.info("    - PUT  /api/rag/documents/<id> - Update document")
+    logger.info("    - DELETE /api/rag/documents/<id> - Delete document")
+    logger.info("    - POST /api/rag/query    - RAG query (search + LLM answer)")
+    logger.info("    - GET  /api/rag/stats    - RAG statistics")
+    logger.info("  IOC Enrichment:")
+    logger.info("    - POST /api/enrich/explain_intelowl - Explain IntelOwl results with AI (single IOC)")
+    logger.info("    - POST /api/enrich/explain_case_iocs - Analyze all IOCs in a case with AI")
+    logger.info("    - GET /api/enrich/case_ioc_comments - Get SmartXDR comments for case IOCs")
+    logger.info("  Triage & Alerts:")
+    logger.info("    - POST /api/triage/summarize-alerts - Summarize ML-classified alerts (supports include_ai_analysis=true)")
+    logger.info("    - POST /api/triage/send-report-email - Send alert summary via email")
+    logger.info("    - POST /api/triage/daily-report/trigger - Manually trigger daily report")
+    logger.info("    - GET  /api/triage/health - Check triage service health")
+    logger.info("  Telegram:")
+    logger.info("    - POST /api/telegram/webhook - Telegram webhook (auto-configured)")
+    logger.info("  Health:")
+    logger.info("    - GET  /health           - Health check")
+    logger.info("="*80)
     
     # Start Cloudflare Tunnel for Telegram webhook
-    print("\nTelegram Integration:")
+    logger.info("Telegram Integration:")
     bot_enabled = os.getenv("TELEGRAM_BOT_ENABLED", "true").lower() == "true"
     use_tunnel = os.getenv("TELEGRAM_WEBHOOK_ENABLED", "true").lower() == "true"
     
     if not bot_enabled:
-        print("  Telegram bot DISABLED (set TELEGRAM_BOT_ENABLED=true to enable)")
+        logger.info("Telegram bot DISABLED (set TELEGRAM_BOT_ENABLED=true to enable)")
     elif bot_enabled and os.getenv("TELEGRAM_BOT_TOKEN") and use_tunnel:
         def setup_tunnel_async():
             time.sleep(2)  # Wait for Flask to start
@@ -367,14 +376,14 @@ if __name__ == '__main__':
         
         tunnel_thread = threading.Thread(target=setup_tunnel_async, daemon=True)
         tunnel_thread.start()
-        print("  Tunnel starting in background...")
+        logger.info("Tunnel starting in background...")
     else:
         if not os.getenv("TELEGRAM_BOT_TOKEN"):
-            print("  TELEGRAM_BOT_TOKEN not set - Telegram disabled")
+            logger.warning("TELEGRAM_BOT_TOKEN not set - Telegram disabled")
         else:
-            print("  Webhook disabled (set TELEGRAM_WEBHOOK_ENABLED=true to enable)")
+            logger.info("Webhook disabled (set TELEGRAM_WEBHOOK_ENABLED=true to enable)")
     
-    print("="*80 + "\n")
+    logger.info("="*80)
     
     app.run(
         host=HOST,

@@ -40,7 +40,7 @@ class APIKeyManager:
             self.public_endpoints = [ep.strip() for ep in public_str.split(',') if ep.strip()]
         
         if not self.auth_enabled:
-            logger.warning("⚠️  API Authentication is DISABLED! All endpoints are public.")
+            logger.warning(" API Authentication is DISABLED! All endpoints are public.")
         else:
             logger.info("🔐 API Authentication enabled (SQLAlchemy)")
     
