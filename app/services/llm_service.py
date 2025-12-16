@@ -165,21 +165,35 @@ class LLMService:
                     print(f"[LLM Service] Conversation memory error: {e}")
                 # Continue without conversation memory
         
-        # Check cache (skip if use_cache=False or if using session)
-        # When using sessions, we want fresh responses that consider history
-        if use_cache and not session_id:
+        # Check cache (semantic + exact match)
+        # Cache works even with session_id - helps with repeated questions
+        if use_cache:
             cache_key = self.response_cache.get_cache_key(query, "")
             cached_response = self.response_cache.get(cache_key, query)
             
             if cached_response:
+                if DEBUG_MODE:
+                    print(f"[LLM Service] CACHE HIT for: {query[:50]}...")
                 # Get sources from RAG for cached response
                 query_result = rag_service.query(query, top_k, filters)
-                return {
+                
+                # Still store in conversation memory for context continuity
+                if session_id and conversation_memory:
+                    try:
+                        conversation_memory.add_message(session_id, "user", query)
+                        conversation_memory.add_message(session_id, "assistant", cached_response, {"cached": True})
+                    except:
+                        pass
+                
+                result = {
                     "status": "success",
                     "answer": cached_response,
                     "cached": True,
                     "sources": query_result.get("sources", [])
                 }
+                if session_id:
+                    result["session_id"] = session_id
+                return result
         
         # Build context using RAGService
         # Enhance query with conversation context for better RAG search
