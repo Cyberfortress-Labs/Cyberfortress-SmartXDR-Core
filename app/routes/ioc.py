@@ -18,12 +18,14 @@ def explain_intelowl():
     Request:
     {
         "case_id": 1,
-        "ioc_id": 199
+        "ioc_id": 199,
+        "update_description": true  // optional, default: true
     }
     """
     data = request.json
     case_id = data['case_id']
     ioc_id = data['ioc_id']
+    update_description = data.get('update_description', True)
     
     # 1. Lấy IntelOwl report từ IRIS
     iris_svc = IRISService()
@@ -41,7 +43,6 @@ def explain_intelowl():
     # Debug
     print(f"\n[DEBUG ROUTE] IntelOwl data keys: {intelowl_data.keys()}")
     print(f"[DEBUG ROUTE] HTML report length: {len(intelowl_data.get('html_report', ''))}")
-    print(f"[DEBUG ROUTE] HTML report first 500 chars: {intelowl_data.get('html_report', '')[:500]}")
     print(f"[DEBUG ROUTE] Raw results: {raw_results}")
     
     if not raw_results:
@@ -61,17 +62,52 @@ def explain_intelowl():
     )
     
     # 4. Update IRIS với AI analysis (add comment)
+    comment_text = f"[SmartXDR AI Analysis]\n\n{ai_analysis['summary']}"
     iris_svc.add_ioc_comment(
         case_id=case_id,
         ioc_id=ioc_id,
-        comment=f"[SmartXDR AI Analysis]\n\n{ai_analysis['summary']}"
+        comment=comment_text
     )
+    
+    # 5. Update IOC description với summary (nếu enabled)
+    description_updated = False
+    if update_description:
+        try:
+            # Summarize the analysis for description
+            summary = llm_svc.summarize_for_ioc_description(comment_text)
+            
+            if summary:
+                # Get current IOC description (để append, không ghi đè)
+                ioc_data = iris_svc.get_ioc(case_id, ioc_id)
+                current_desc = ioc_data.get('ioc_description', '') or ''
+                
+                # Build new description
+                from datetime import datetime
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+                smartxdr_summary = f"[SmartXDR {timestamp}] {summary}"
+                
+                if current_desc.strip():
+                    new_desc = f"{current_desc}\n\n{smartxdr_summary}"
+                else:
+                    new_desc = smartxdr_summary
+                
+                # Update IOC
+                iris_svc.update_ioc(
+                    case_id=case_id,
+                    ioc_id=ioc_id,
+                    description=new_desc
+                )
+                description_updated = True
+                print(f"[INFO] Updated IOC {ioc_id} description")
+        except Exception as e:
+            print(f"[WARNING] Failed to update IOC description: {e}")
     
     return jsonify({
         "status": "success",
         "summary": ai_analysis['summary'],
         "risk_level": ai_analysis['risk_level'],
-        "recommendations": ai_analysis['recommendations']
+        "recommendations": ai_analysis['recommendations'],
+        "description_updated": description_updated
     })
 
 
@@ -170,9 +206,29 @@ def explain_case_iocs():
                     comment=comment_text
                 )
                 
+                # Update IOC description with summary
+                description_updated = False
+                try:
+                    summary = llm_svc.summarize_for_ioc_description(comment_text)
+                    if summary:
+                        ioc_data = iris_svc.get_ioc(case_id, ioc_id)
+                        current_desc = ioc_data.get('ioc_description', '') or ''
+                        
+                        from datetime import datetime
+                        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+                        smartxdr_summary = f"[SmartXDR {timestamp}] {summary}"
+                        
+                        new_desc = f"{current_desc}\n\n{smartxdr_summary}" if current_desc.strip() else smartxdr_summary
+                        
+                        iris_svc.update_ioc(case_id=case_id, ioc_id=ioc_id, description=new_desc)
+                        description_updated = True
+                except Exception as desc_e:
+                    print(f"[WARNING] Failed to update IOC {ioc_id} description: {desc_e}")
+                
                 result_entry['status'] = 'success'
                 result_entry['risk_level'] = ai_analysis['risk_level']
                 result_entry['summary'] = ai_analysis['summary'][:200] + "..."  # Truncate for response
+                result_entry['description_updated'] = description_updated
                 processed_count += 1
                 results.append(result_entry)
                 

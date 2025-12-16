@@ -86,6 +86,95 @@ class LLMService:
             self._initialized = False
             raise
     
+    # ==================== IOC Enrichment Methods ====================
+    
+    def summarize_for_ioc_description(self, comment_text: str, max_length: int = 2000) -> str:
+        """
+        Tóm tắt SmartXDR comment thành description ngắn gọn cho IOC
+        
+        Uses:
+        - prompts/instructions/ioc_description_summary.json for prompt
+        - SUMMARY_MODEL for faster/cheaper summarization
+        
+        Args:
+            comment_text: Full comment text từ SmartXDR AI Analysis
+            max_length: Maximum length của summary (default: 200 chars)
+        
+        Returns:
+            Concise summary string for IOC description
+        """
+        if not comment_text:
+            return ""
+        
+        # Remove the [SmartXDR AI Analysis] header if present
+        clean_text = comment_text.replace("[SmartXDR AI Analysis]", "").strip()
+        
+        # If already short enough, just clean it
+        if len(clean_text) <= max_length:
+            return clean_text
+        
+        # Load prompt from file
+        system_prompt, user_template = self._load_ioc_summary_prompt()
+        user_prompt = user_template.format(content=clean_text[:2000])
+        
+        # Use LLM to summarize with SUMMARY_MODEL
+        try:
+            from app.config import SUMMARY_MODEL
+            
+            response = self.openai_client.chat.completions.create(
+                model=SUMMARY_MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.3,
+                max_tokens=500  # Allow longer summaries
+            )
+            
+            summary = response.choices[0].message.content.strip()
+            
+            # Ensure max length
+            if len(summary) > max_length:
+                summary = summary[:max_length-3] + "..."
+            
+            return summary
+            
+        except Exception as e:
+            logger.warning(f"Failed to summarize comment: {e}")
+            # Fallback: truncate the original text
+            return clean_text[:max_length-3] + "..." if len(clean_text) > max_length else clean_text
+    
+    def _load_ioc_summary_prompt(self) -> tuple:
+        """
+        Load IOC summary prompt from JSON file
+        
+        Returns:
+            Tuple of (system_prompt, user_prompt_template)
+        """
+        import json
+        
+        prompt_file = self.prompts_dir / "instructions" / "ioc_description_summary.json"
+        
+        # Fallback prompts if file not found
+        fallback_system = """Bạn là AI assistant chuyên tóm tắt báo cáo phân tích IOC.
+Nhiệm vụ: Tóm tắt nội dung phân tích thành 1-2 câu ngắn gọn (tối đa 200 ký tự).
+Tập trung vào: mức độ nguy hiểm, loại threat, và recommendation chính.
+Chỉ trả về text summary, không thêm prefix hay formatting."""
+        fallback_user = "Tóm tắt phân tích IOC sau:\n\n{content}"
+        
+        try:
+            if prompt_file.exists():
+                with open(prompt_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                return (
+                    data.get('system_prompt', fallback_system),
+                    data.get('user_prompt_template', fallback_user)
+                )
+        except Exception as e:
+            logger.warning(f"Failed to load IOC summary prompt: {e}")
+        
+        return (fallback_system, fallback_user)
+    
     # ==================== RAG Query Methods ====================
     
     def ask_rag(

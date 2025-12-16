@@ -376,3 +376,85 @@ class IRISService:
             result['iocs'].append(ioc_entry)
         
         return result
+    
+    def get_ioc(self, case_id: int, ioc_id: int) -> Dict[str, Any]:
+        """
+        Lấy thông tin chi tiết của một IOC
+        
+        Args:
+            case_id: Case ID
+            ioc_id: IOC ID
+        
+        Returns:
+            IOC data dict với ioc_value, ioc_type, ioc_description, etc.
+        """
+        verify = self.ca_cert if self.ca_cert else self.verify_ssl
+        
+        response = requests.get(
+            f"{self.iris_url}/case/ioc/{ioc_id}",
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            },
+            params={"cid": case_id},
+            verify=verify
+        )
+        
+        if response.status_code != 200:
+            raise Exception(f"Failed to get IOC: {response.text}")
+        
+        data = response.json()
+        return data.get('data', {})
+    
+    def update_ioc(
+        self, 
+        case_id: int, 
+        ioc_id: int, 
+        description: str = None,
+        tags: str = None,
+        tlp_id: int = None
+    ) -> Dict[str, Any]:
+        """
+        Update IOC trên IRIS
+        
+        Args:
+            case_id: Case ID
+            ioc_id: IOC ID
+            description: New/updated description (optional)
+            tags: New tags (optional)
+            tlp_id: New TLP ID (optional)
+        
+        Returns:
+            Response từ IRIS API
+        """
+        verify = self.ca_cert if self.ca_cert else self.verify_ssl
+        
+        # Build update payload (only include non-None fields)
+        payload = {}
+        if description is not None:
+            payload["ioc_description"] = description
+        if tags is not None:
+            payload["ioc_tags"] = tags
+        if tlp_id is not None:
+            payload["ioc_tlp_id"] = tlp_id
+        
+        if not payload:
+            logger.warning("update_ioc called with no fields to update")
+            return {"status": "warning", "message": "No fields to update"}
+        
+        response = requests.post(
+            f"{self.iris_url}/case/ioc/update/{ioc_id}",
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            },
+            params={"cid": case_id},
+            json=payload,
+            verify=verify
+        )
+        
+        if response.status_code not in [200, 201]:
+            raise Exception(f"Failed to update IOC: {response.text}")
+        
+        logger.info(f"Updated IOC {ioc_id} in case {case_id}")
+        return response.json()
