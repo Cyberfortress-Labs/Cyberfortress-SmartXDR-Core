@@ -364,7 +364,7 @@ def rag_query():
         data = request.get_json()
         req = schemas.RAGQueryRequest(**data)
         
-        # Query knowledge base
+        # Query knowledge base ONCE
         query_result = rag_service.query(
             query_text=req.query,
             top_k=req.top_k,
@@ -377,15 +377,21 @@ def rag_query():
                 "error": query_result["error"]
             }), 400
         
-        # Call LLM for answer generation using new RAG service
+        # Build context from query result (NO EXTRA RAG QUERY)
+        context_text = query_result.get("context", "")
+        if not context_text and query_result.get("documents"):
+            # Fallback: build context from documents if not provided
+            context_text = "\n\n---\n\n".join(query_result["documents"][:req.top_k])
+        
+        # Call LLM with pre-built context
         from app.services.llm_service import LLMService
         llm_service = LLMService()
         
-        # Generate LLM answer using new RAG service
-        llm_result = llm_service.ask_rag(
+        # Use internal method to generate answer with existing context
+        llm_result = llm_service._generate_answer_from_context(
             query=req.query,
-            top_k=req.top_k,
-            filters=req.filters
+            context=context_text,
+            sources=query_result.get("sources", [])
         )
         
         # Build response

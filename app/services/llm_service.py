@@ -304,6 +304,73 @@ class LLMService:
         user_prompt_template = self.prompt_builder.build_user_input_prompt()
         return user_prompt_template.format(context=context, query=query)
     
+    def _generate_answer_from_context(
+        self, 
+        query: str, 
+        context: str, 
+        sources: list = None,
+        use_cache: bool = True
+    ) -> dict:
+        """
+        Generate LLM answer using pre-fetched context.
+        
+        This avoids duplicate RAG queries when context is already available.
+        Used by /api/rag/query endpoint.
+        
+        Args:
+            query: User's question
+            context: Pre-built context from RAG query
+            sources: List of source documents
+            use_cache: Whether to use response cache
+            
+        Returns:
+            Dict with answer, cached status, etc.
+        """
+        sources = sources or []
+        
+        # Check cache first
+        if use_cache:
+            cache_key = self.response_cache.get_cache_key(query, "")
+            cached_response = self.response_cache.get(cache_key, query)
+            if cached_response:
+                return {
+                    "status": "success",
+                    "answer": cached_response,
+                    "cached": True,
+                    "sources": sources
+                }
+        
+        # Build API request
+        system_instructions = self.prompt_builder.build_rag_prompt()
+        user_input = self._build_rag_user_input(context, query)
+        
+        try:
+            # Call API
+            answer, actual_cost = self._call_responses_api(
+                system_instructions,
+                user_input
+            )
+            
+            # Cache the response
+            if use_cache:
+                cache_key = self.response_cache.get_cache_key(query, "")
+                self.response_cache.set(cache_key, answer, query)
+            
+            return {
+                "status": "success",
+                "answer": answer,
+                "cached": False,
+                "sources": sources,
+                "cost": actual_cost
+            }
+            
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": str(e),
+                "answer": f"Error generating answer: {str(e)}"
+            }
+    
     def _extract_context_entities(self, history_text: str) -> str:
         """
         Extract key entities from conversation history using LLM for query enhancement.

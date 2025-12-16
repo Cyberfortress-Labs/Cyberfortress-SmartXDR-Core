@@ -40,7 +40,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.config import *
 import chromadb
-from chromadb.config import Settings
 from app.core.embeddings import OpenAIEmbeddingFunction
 from app.core.chunking import (
     json_to_natural_text, 
@@ -97,7 +96,7 @@ class OptimizedIngester:
     
     def _init_api_mode(self):
         """Initialize API mode"""
-        print("🌐 API Mode")
+        print("API Mode")
         print(f"URL: {self.api_url}")
         
         # Validate connection
@@ -113,28 +112,22 @@ class OptimizedIngester:
             raise Exception(f"Cannot connect to API: {e}")
     
     def _init_direct_mode(self):
-        """Initialize direct ChromaDB access"""
-        print("⚡ Direct ChromaDB Mode")
+        """Initialize direct ChromaDB access using RAGRepository"""
+        print("⚡ Direct ChromaDB Mode (via RAGRepository)")
         
-        # Init ChromaDB with optimized settings
-        print("Initializing ChromaDB...")
-        self.client = chromadb.PersistentClient(
-            path=str(CHROMA_DB_PATH),
-            settings=Settings(
-                anonymized_telemetry=False,
-                allow_reset=False
-            )
+        # Use RAGRepository for unified ChromaDB initialization
+        # This handles Docker vs local client selection automatically
+        from app.rag.repository import RAGRepository
+        
+        print("Initializing ChromaDB via RAGRepository...")
+        self.repo = RAGRepository(
+            persist_directory=str(CHROMA_DB_PATH),
+            collection_name="knowledge_base"
         )
         
-        # Use custom OpenAI embeddings with timeout/retry from app.config
-        self.embed_fn = OpenAIEmbeddingFunction()
-        
-        # Get or create collection
-        self.collection = self.client.get_or_create_collection(
-            name="knowledge_base",
-            embedding_function=self.embed_fn,  # type: ignore
-            metadata={"hnsw:space": "cosine"}
-        )
+        # Get collection reference for direct operations
+        self.collection = self.repo.collection
+        self.embed_fn = self.repo.embedding_function
         
         current_count = self.collection.count()
         print(f"Collection ready: {current_count} docs")
