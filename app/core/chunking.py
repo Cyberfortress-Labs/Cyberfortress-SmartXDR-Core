@@ -11,7 +11,6 @@ from langchain_text_splitters import (
     MarkdownHeaderTextSplitter,
     MarkdownTextSplitter
 )
-from langchain_openai import OpenAIEmbeddings
 from app.config import NETWORK_DIR, MITRE_DIR, MIN_CHUNK_SIZE, MAX_CHUNK_SIZE
 
 # Setup logger

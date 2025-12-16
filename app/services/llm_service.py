@@ -8,9 +8,10 @@ import hashlib
 import logging
 from pathlib import Path
 from typing import Optional, Dict, Any
-from openai import OpenAI, APIError, APIConnectionError, RateLimitError
+from openai import APIError, APIConnectionError, RateLimitError
 from dotenv import load_dotenv
 from app.config import *
+from app.core.openai_client import get_openai_client
 
 # Import analyzer registry
 from app.services.analyzers import get_handler, get_all_handlers, get_registered_analyzer_names
@@ -47,11 +48,8 @@ class LLMService:
         logger = logging.getLogger('smartxdr.llm')
         
         try:
-            self.openai_client = OpenAI(
-                api_key=os.environ.get("OPENAI_API_KEY"),
-                timeout=OPENAI_TIMEOUT,
-                max_retries=OPENAI_MAX_RETRIES
-            )
+            # Use shared OpenAI client
+            self.openai_client = get_openai_client()
             self.chat_model = CHAT_MODEL
             self.prompts_dir = PROJECT_ROOT / "prompts"
             

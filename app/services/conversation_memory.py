@@ -704,10 +704,9 @@ class ConversationMemory:
         Falls back to hardcoded prompt if JSON not available.
         """
         try:
-            from openai import OpenAI
-            import os
+            from app.core.openai_client import get_openai_client
             
-            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            client = get_openai_client()
             
             # Format messages for summarization
             conversation_text = "\n".join([
