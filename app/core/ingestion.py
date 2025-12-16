@@ -328,13 +328,13 @@ Keywords: {group_id}, {group.get("name", "")}, {', '.join(aliases[:3])}"""
         if existing_items["ids"]:
             stored_hash = existing_items["metadatas"][0].get("file_hash") if existing_items["metadatas"] else None
             if stored_hash == current_hash:
-                print(f"{filename}: Unchanged. Skipped.")
+                logger.debug(f"{filename}: Unchanged. Skipped.")
                 continue
             else:
-                print(f"{filename}: Changed. Updating...")
+                logger.info(f"{filename}: Changed. Updating...")
                 collection.delete(where={"source": filename})
         else:
-            print(f"{filename}: New file. Indexing...")
+            logger.info(f"{filename}: New file. Indexing...")
         
         try:
             with open(filepath, "r", encoding="utf-8") as f:
@@ -393,13 +393,13 @@ Keywords: {group_id}, {group.get("name", "")}, {', '.join(aliases[:3])}"""
         if existing_items["ids"]:
             stored_hash = existing_items["metadatas"][0].get("file_hash") if existing_items["metadatas"] else None
             if stored_hash == current_hash:
-                print(f"{filename}: Unchanged. Skipped.")
+                logger.debug(f"{filename}: Unchanged. Skipped.")
                 continue
             else:
-                print(f"{filename}: Changed. Updating...")
+                logger.info(f"{filename}: Changed. Updating...")
                 collection.delete(where={"source": filename})
         else:
-            print(f"{filename}: New file. Indexing...")
+            logger.info(f"{filename}: New file. Indexing...")
         
         try:
             with open(filepath, "r", encoding="utf-8") as f:
