@@ -55,7 +55,7 @@ shutdown_requested = False
 
 def signal_handler(sig, frame):
     global shutdown_requested
-    print("\n⚠️  Stopping after current batch...")
+    print("\nStopping after current batch...")
     shutdown_requested = True
     signal.signal(signal.SIGINT, signal.SIG_DFL)
 
@@ -156,7 +156,7 @@ class OptimizedIngester:
                 
                 print(f"Found {len(self.existing_sources)} existing unique files")
             except Exception as e:
-                print(f"⚠️  Could not load existing sources: {e}")
+                print(f"Could not load existing sources: {e}")
         
         print()
     
@@ -312,16 +312,16 @@ class OptimizedIngester:
         global shutdown_requested
         
         print("=" * 70)
-        print("📚 RAG Document Ingestion")
+        print("RAG Document Ingestion")
         print("=" * 70)
         print(f"Source: {directory.absolute()}")
-        print(f"Mode: {'🌐 API' if self.use_api else '⚡ Direct ChromaDB'}")
+        print(f"Mode: {'API' if self.use_api else '⚡ Direct ChromaDB'}")
         print(f"Chunk size: {self.chunk_size}")
         print(f"Batch size: {self.batch_size}")
         if limit:
             print(f"Limit: {limit} files")
         if dry_run:
-            print("⚠️  DRY RUN (no upload)")
+            print("DRY RUN (no upload)")
         print("=" * 70)
         print()
         
@@ -336,7 +336,7 @@ class OptimizedIngester:
             
             for fname in files:
                 if shutdown_requested:
-                    print("\n⚠️  Shutdown requested, stopping...")
+                    print("\nShutdown requested, stopping...")
                     break
                 
                 fpath = Path(root) / fname
@@ -360,7 +360,7 @@ class OptimizedIngester:
                 # Check if already indexed
                 if not self.force_reindex and rel_path in self.existing_sources:
                     print(f"[{file_count}] {rel_path[:55]}")
-                    print(f"  ⏭️  Already indexed, skipping...")
+                    print(f"Already indexed, skipping...")
                     self.stats['duplicates'] += 1
                     continue
                 
@@ -374,7 +374,7 @@ class OptimizedIngester:
                 rate = self.stats['files'] / elapsed if elapsed > 0 else 0
                 
                 print(f"[{file_count}] {rel_path[:55]}")
-                print(f"  📁 {category} | 📄 {len(content)/1024:.1f}KB | 🧩 {len(chunks)} chunks | ⏱️  {rate:.1f} files/s")
+                print(f"{category} | 📄 {len(content)/1024:.1f}KB | 🧩 {len(chunks)} chunks | ⏱️  {rate:.1f} files/s")
                 
                 if dry_run:
                     self.stats['chunks'] += len(chunks)
@@ -409,7 +409,7 @@ class OptimizedIngester:
                 
                 # Process batch when full
                 if len(batch) >= self.batch_size:
-                    print(f"  ⬆️  Uploading batch ({len(batch)} chunks)...")
+                    print(f"Uploading batch ({len(batch)} chunks)...")
                     self.process_batch(batch)
                     batch = []
                 
@@ -423,31 +423,31 @@ class OptimizedIngester:
         
         # Process remaining
         if batch and not dry_run:
-            print(f"\n⬆️  Uploading final batch ({len(batch)} chunks)...")
+            print(f"\n⬆Uploading final batch ({len(batch)} chunks)...")
             self.process_batch(batch)
         
         # Summary
         elapsed = time.time() - self.start_time
         print("\n" + "=" * 70)
-        print("📊 Summary")
+        print("Summary")
         print("=" * 70)
         print(f"Files processed: {self.stats['files']}")
         print(f"Chunks created: {self.stats['chunks']}")
-        print(f"⏭️  Files skipped: {self.stats['skipped']}")
-        print(f"🔄 Duplicates skipped: {self.stats['duplicates']}")
-        print(f"✗ Errors: {self.stats['errors']}")
-        print(f"⏱️  Time: {elapsed:.1f}s")
-        print(f"📈 Rate: {self.stats['files']/elapsed:.1f} files/s" if elapsed > 0 else "")
+        print(f"Files skipped: {self.stats['skipped']}")
+        print(f"Duplicates skipped: {self.stats['duplicates']}")
+        print(f"Errors: {self.stats['errors']}")
+        print(f"Time: {elapsed:.1f}s")
+        print(f"Rate: {self.stats['files']/elapsed:.1f} files/s" if elapsed > 0 else "")
         
         if not dry_run and not self.use_api:
             print(f"\n📚 Total in DB: {self.collection.count()} documents")
         
         if dry_run:
-            print("\n⚠️  DRY RUN - run without --dry-run to import")
+            print("\nDRY RUN - run without --dry-run to import")
         elif self.stats['duplicates'] > 0:
-            print(f"\n💡 Tip: Use --force to re-index existing files")
+            print(f"\nTip: Use --force to re-index existing files")
         else:
-            print("\n✅ Done!")
+            print("\nDone!")
         print("=" * 70)
 
 
@@ -554,7 +554,7 @@ Examples:
         ingester.ingest(docs, args.limit, args.dry_run)
         
     except KeyboardInterrupt:
-        print("\n⚠️  Interrupted by user")
+        print("\nInterrupted by user")
         sys.exit(1)
     except Exception as e:
         print(f"\n✗ Error: {e}")

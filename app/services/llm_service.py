@@ -147,13 +147,19 @@ class LLMService:
                 from app.services.conversation_memory import get_conversation_memory
                 conversation_memory = get_conversation_memory()
                 
-                # Get summarized history (auto-summarizes when > 4 messages)
-                # Token optimization: 6 messages (~600 tokens) summary (~100 tokens)
-                conversation_history_text = conversation_memory.get_summarized_history(session_id)
+                # Use LangChain-formatted history for better context (token-aware windowing)
+                # Falls back to summarized history if LangChain not available
+                conversation_history_text = conversation_memory.format_langchain_history(session_id)
+                
+                # If LangChain format returns empty, try summarized history
+                if not conversation_history_text:
+                    conversation_history_text = conversation_memory.get_summarized_history(session_id)
                 
                 if conversation_history_text and DEBUG_MODE:
                     is_summary = "Previous conversation summary:" in conversation_history_text
-                    print(f"[LLM Service] History: {'SUMMARIZED' if is_summary else 'RAW'} ({len(conversation_history_text)} chars)")
+                    is_langchain = "Previous conversation:" in conversation_history_text
+                    format_type = "LANGCHAIN" if is_langchain else ("SUMMARY" if is_summary else "RAW")
+                    print(f"[LLM Service] History: {format_type} ({len(conversation_history_text)} chars)")
                     print(f"[LLM Service] Content preview: {conversation_history_text[:150]}...")
                     
             except Exception as e:
@@ -347,21 +353,43 @@ class LLMService:
             raise e
     
     def _simple_entity_extraction(self, history_text: str) -> str:
-        """Fallback: Simple keyword extraction without LLM."""
+        """
+        Fallback: Simple keyword extraction without LLM.
+        Extracts system names, IPs, and device IDs from conversation history.
+        """
         import re
         
-        # Known system names
-        systems = ['SIEM', 'Wazuh', 'pfSense', 'Zeek', 'IRIS', 'Elastic', 'Router', 
-                   'Firewall', 'Server', 'Linux', 'Windows', 'n8n', 'MISP', 'SOAR']
-        
         entities = []
+        
+        # 1. Known system/device names (expanded list)
+        systems = [
+            'SIEM', 'Wazuh', 'pfSense', 'Zeek', 'IRIS', 'Elastic', 'Elasticsearch', 'Kibana',
+            'Router', 'Firewall', 'Server', 'Linux', 'Windows', 'n8n', 'MISP', 'SOAR',
+            'Suricata', 'NAT', 'Gateway', 'Switch', 'IDPS', 'IDS', 'IPS', 'Elastalert',
+            'WAF', 'DVWA', 'Attacker', 'Victim', 'Windows Server'
+        ]
+        
         for system in systems:
             if re.search(rf'\b{system}\b', history_text, re.IGNORECASE):
                 entities.append(system)
-                if len(entities) >= 3:
+                if len(entities) >= 3:  # Max 3 system names
                     break
         
-        return ' '.join(entities)
+        # 2. Extract IP addresses
+        ip_pattern = r'\b(?:\d{1,3}\.){3}\d{1,3}\b'
+        ips = re.findall(ip_pattern, history_text)
+        if ips:
+            unique_ips = list(dict.fromkeys(ips))[:2]  # Max 2 IPs
+            entities.extend([f"IP {ip}" for ip in unique_ips])
+        
+        # 3. Extract device IDs (e.g., suricata-01, pfsense-01)
+        device_id_pattern = r'\b([a-z]+-\d{2})\b'
+        device_ids = re.findall(device_id_pattern, history_text, re.IGNORECASE)
+        if device_ids:
+            unique_ids = list(dict.fromkeys(device_ids))[:2]
+            entities.extend(unique_ids)
+        
+        return ' '.join(entities[:5])  # Max 5 entities total
     
     def _call_responses_api(self, system_instructions: str, user_input: str) -> tuple:
         """

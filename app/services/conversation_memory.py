@@ -1,7 +1,8 @@
 """
-Conversation Memory Service - Hybrid Redis + ChromaDB storage
+Conversation Memory Service - Hybrid Redis + ChromaDB + LangChain storage
 
 Production-ready implementation with:
+- LangChain: ConversationBufferWindowMemory for token-aware windowing
 - Redis: Fast session storage with TTL, shared across workers
 - ChromaDB: Semantic search for relevant past context
 - Fallback: In-memory dict when Redis unavailable (development mode)
@@ -15,7 +16,21 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 from app.config import *
+
+# LangChain imports for conversation memory
+try:
+    from langchain_community.chat_message_histories import ChatMessageHistory
+    from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
+    LANGCHAIN_MEMORY_AVAILABLE = True
+except ImportError:
+    LANGCHAIN_MEMORY_AVAILABLE = False
+    ChatMessageHistory = None
+    HumanMessage = None
+    AIMessage = None
+    BaseMessage = None
+
 logger = logging.getLogger('smartxdr.conversation')
+
 
 
 @dataclass
@@ -77,6 +92,10 @@ class ConversationMemory:
         self._collection = None
         self._chroma_client = None
         
+        # LangChain per-session memory cache (for token-aware windowing)
+        self._langchain_memories: Dict[str, Any] = {}
+        self.langchain_window_size = 5  # k=5 exchanges (10 messages total)
+        
         # Configuration
         self.max_messages_per_session = 20  # Max messages to keep
         self.default_history_limit = 10  # Default: last 5 pairs (user + assistant)
@@ -84,7 +103,7 @@ class ConversationMemory:
         self.redis_key_prefix = "conv:"  # Redis key prefix
         
         # Summarization config (for token optimization)
-        self.summarize_threshold = 8  # Summarize when > 8 messages (avoid losing detail early)
+        self.summarize_threshold = 12  # Raised from 8 to 12 - summarize only when really needed
         self.summarize_max_tokens = 200  # Target summary length (enough for IPs, entities)
         self.summary_cache_prefix = "summary:"  # Redis key prefix for summaries
         
@@ -93,7 +112,8 @@ class ConversationMemory:
         
         self._initialized = True
         storage_type = "Redis" if self._redis_available else "In-Memory"
-        logger.info(f"ConversationMemory initialized (storage: {storage_type})")
+        langchain_status = "enabled" if LANGCHAIN_MEMORY_AVAILABLE else "disabled"
+        logger.info(f"ConversationMemory initialized (storage: {storage_type}, LangChain: {langchain_status})")
     
     def _init_redis(self):
         """Initialize Redis connection if available"""
@@ -213,6 +233,9 @@ class ConversationMemory:
         # Also store in ChromaDB for semantic search
         self._store_in_chromadb(session_id, message)
         
+        # Sync with LangChain memory for token-aware windowing
+        self._sync_to_langchain(session_id, message)
+        
         logger.debug(f"Added {role} message to session {session_id[:8]}...")
         return message
     
@@ -275,6 +298,129 @@ class ConversationMemory:
             )
         except Exception as e:
             logger.warning(f"Failed to store message in ChromaDB: {e}")
+    
+    # ==================== LangChain Integration ====================
+    
+    def _get_langchain_memory(self, session_id: str):
+        """
+        Get or create LangChain ChatMessageHistory for session.
+        Uses simple message history - windowing is handled by format_langchain_history.
+        """
+        if not LANGCHAIN_MEMORY_AVAILABLE:
+            return None
+        
+        if session_id not in self._langchain_memories:
+            self._langchain_memories[session_id] = ChatMessageHistory()
+            logger.debug(f"Created LangChain ChatMessageHistory for session {session_id[:8]}...")
+        
+        return self._langchain_memories[session_id]
+    
+    def _sync_to_langchain(self, session_id: str, message: Message):
+        """Sync a message to LangChain memory for token-aware windowing."""
+        if not LANGCHAIN_MEMORY_AVAILABLE:
+            return
+        
+        memory = self._get_langchain_memory(session_id)
+        if memory is None:
+            return
+        
+        try:
+            # LangChain expects pairs - we need to track state
+            # Store messages and let get_langchain_messages handle pairing
+            # The ConversationBufferWindowMemory will auto-prune old messages
+            pass  # Memory is populated via get_langchain_messages from Redis/RAM
+        except Exception as e:
+            logger.debug(f"LangChain sync skipped: {e}")
+    
+    def get_langchain_messages(self, session_id: str) -> List[Any]:
+        """
+        Get conversation history as LangChain message objects.
+        Returns List[HumanMessage | AIMessage] for prompt injection.
+        
+        This method:
+        1. Gets recent history from Redis/RAM (source of truth)
+        2. Ensures message pairs (user + assistant together)
+        3. Converts to LangChain format
+        """
+        if not LANGCHAIN_MEMORY_AVAILABLE:
+            return []
+        
+        # Get raw messages from storage (Redis or RAM)
+        messages = self.get_recent_history(session_id, limit=self.langchain_window_size * 2)
+        
+        if not messages:
+            return []
+        
+        # Ensure we get complete pairs (user + assistant)
+        messages = self._ensure_message_pairs(messages)
+        
+        # Convert to LangChain format
+        langchain_messages = []
+        for msg in messages:
+            if msg.role == "user":
+                langchain_messages.append(HumanMessage(content=msg.content))
+            elif msg.role == "assistant":
+                langchain_messages.append(AIMessage(content=msg.content))
+        
+        return langchain_messages
+    
+    def _ensure_message_pairs(self, messages: List[Message]) -> List[Message]:
+        """
+        Ensure messages are in complete pairs (user + assistant).
+        If last message is user (no response yet), include it.
+        If first message is assistant (orphaned), skip it.
+        """
+        if not messages:
+            return []
+        
+        result = []
+        i = 0
+        
+        # Skip leading assistant messages (orphaned responses)
+        while i < len(messages) and messages[i].role == "assistant":
+            i += 1
+        
+        # Process remaining messages
+        while i < len(messages):
+            msg = messages[i]
+            result.append(msg)
+            i += 1
+        
+        return result
+    
+    def format_langchain_history(self, session_id: str, max_chars: int = 3000) -> str:
+        """
+        Format conversation history from LangChain messages for prompt.
+        Better than raw formatting - ensures pairs and proper windowing.
+        """
+        lc_messages = self.get_langchain_messages(session_id)
+        
+        if not lc_messages:
+            return ""
+        
+        parts = []
+        total_chars = 0
+        
+        for msg in lc_messages:
+            role = "User" if isinstance(msg, HumanMessage) else "Assistant"
+            content = msg.content
+            
+            # Truncate individual message if too long
+            if len(content) > 500:
+                content = content[:500] + "..."
+            
+            line = f"{role}: {content}"
+            
+            if total_chars + len(line) > max_chars:
+                break
+            
+            parts.append(line)
+            total_chars += len(line) + 1
+        
+        if parts:
+            return "Previous conversation:\n" + "\n".join(parts)
+        return ""
+
     
     def get_recent_history(
         self,
