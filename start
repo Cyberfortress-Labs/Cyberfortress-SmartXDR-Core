@@ -59,7 +59,7 @@ case "$COMMAND" in
         
         # Check for local chroma_db and set environment variable
         if [ -d "chroma_db" ] && [ -n "$(ls -A chroma_db 2>/dev/null)" ]; then
-            printf "${GREEN}✓ Found local chroma_db - mounting as volume${NC}\n"
+            printf "${GREEN}Found local chroma_db - mounting as volume${NC}\n"
             export CHROMA_DB_SOURCE="./chroma_db"
         else
             printf "${YELLOW}⚠ No local chroma_db found - using Docker volume${NC}\n"
@@ -71,7 +71,7 @@ case "$COMMAND" in
         
         # Check for local SQLite database
         if [ -f "data/smartxdr.sqlite3" ]; then
-            printf "${GREEN}✓ Found local database - mounting data/smartxdr.sqlite3${NC}\n"
+            printf "${GREEN}Found local database - mounting data/smartxdr.sqlite3${NC}\n"
         else
             printf "${YELLOW}⚠ No local database found - will create new database${NC}\n"
         fi

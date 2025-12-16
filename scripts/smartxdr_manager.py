@@ -170,7 +170,7 @@ def create_first_admin():
     
     print(f"""
 ╔══════════════════════════════════════════════════════════╗
-║  ✓ First Admin Created Successfully!                    ║
+║  First Admin Created Successfully!                    ║
 ╠══════════════════════════════════════════════════════════╣
 ║  Email:    {email:<45} ║
 ║  Username: {username:<45} ║
@@ -237,7 +237,7 @@ def login_admin() -> bool:
             continue
         
         # Login successful
-        print(f"\n  ✓ Welcome, {user.username}!")
+        print(f"\n  Welcome, {user.username}!")
         return True
     
     print("\n  ✗ Too many failed attempts. Exiting.")
@@ -321,9 +321,9 @@ def create_user():
     user_datastore.add_role_to_user(new_user, role)
     db.session.commit()
     
-    print(f"\n  ✓ User created: {email}")
-    print(f"  ✓ Password: {password}")
-    print(f"  ✓ Role: {role_name}")
+    print(f"\n  User created: {email}")
+    print(f"  Password: {password}")
+    print(f"  Role: {role_name}")
 
 
 def delete_user():
@@ -341,7 +341,7 @@ def delete_user():
     if confirm(f"  Delete user '{email}'?"):
         db.session.delete(user)
         db.session.commit()
-        print(f"  ✓ User deleted: {email}")
+        print(f"  User deleted: {email}")
     else:
         print("  ✗ Cancelled")
 
@@ -365,8 +365,8 @@ def reset_password():
     user.password = hash_password(password)
     db.session.commit()
     
-    print(f"\n  ✓ Password reset for: {email}")
-    print(f"  ✓ New password: {password}")
+    print(f"\n  Password reset for: {email}")
+    print(f"  New password: {password}")
 
 
 def user_management_menu():
@@ -413,7 +413,7 @@ def list_api_keys():
     print("  " + "-" * 65)
     
     for key in keys:
-        status = '✓ Active' if key.enabled and not key.is_expired else '✗ Disabled'
+        status = 'Active' if key.enabled and not key.is_expired else '✗ Disabled'
         if key.is_expired:
             status = '⏰ Expired'
         print(f"  {key.id:<5} {key.name:<20} {key.key_prefix:<10} {status:<10} {key.rate_limit:<8} {key.usage_count:<8}")
@@ -488,7 +488,7 @@ def create_api_key():
     db.session.commit()
     
     print("\n" + "═" * 60)
-    print("  ✓ API Key Created Successfully!")
+    print("  API Key Created Successfully!")
     print("═" * 60)
     print(f"\n  Name: {name}")
     print(f"  Permissions: {permissions}")
@@ -516,7 +516,7 @@ def delete_api_key():
         APIKeyUsage.query.filter_by(key_hash=key.key_hash).delete()
         db.session.delete(key)
         db.session.commit()
-        print(f"  ✓ Key deleted: {name}")
+        print(f"  Key deleted: {name}")
     else:
         print("  ✗ Cancelled")
 
@@ -537,7 +537,7 @@ def toggle_api_key():
     db.session.commit()
     
     status = 'enabled' if key.enabled else 'disabled'
-    print(f"\n  ✓ Key '{name}' is now {status}")
+    print(f"\n  Key '{name}' is now {status}")
 
 
 def view_key_usage():

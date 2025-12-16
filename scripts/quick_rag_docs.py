@@ -42,7 +42,12 @@ from app.config import *
 import chromadb
 from chromadb.config import Settings
 from app.core.embeddings import OpenAIEmbeddingFunction
-from app.core.chunking import json_to_natural_text, mitre_to_natural_text
+from app.core.chunking import (
+    json_to_natural_text, 
+    mitre_to_natural_text,
+    markdown_to_chunks,
+    text_to_chunks
+)
 
 
 # Global shutdown flag
@@ -103,7 +108,7 @@ class OptimizedIngester:
             )
             if resp.status_code != 200:
                 raise Exception(f"Health check failed: {resp.status_code}")
-            print("✓ Server connection OK\n")
+            print("Server connection OK\n")
         except Exception as e:
             raise Exception(f"Cannot connect to API: {e}")
     
@@ -132,7 +137,7 @@ class OptimizedIngester:
         )
         
         current_count = self.collection.count()
-        print(f"✓ Collection ready: {current_count} docs")
+        print(f"Collection ready: {current_count} docs")
         
         # Load existing sources for duplicate detection
         if current_count > 0 and not self.force_reindex:
@@ -149,7 +154,7 @@ class OptimizedIngester:
                         if meta and 'source' in meta:
                             self.existing_sources.add(meta['source'])
                 
-                print(f"✓ Found {len(self.existing_sources)} existing unique files")
+                print(f"Found {len(self.existing_sources)} existing unique files")
             except Exception as e:
                 print(f"⚠️  Could not load existing sources: {e}")
         
@@ -179,19 +184,33 @@ class OptimizedIngester:
     
     def chunk_text(self, text: str, file_ext: str = '', filename: str = '') -> List[str]:
         """
-        Smart chunking based on file type
+        Smart chunking based on file type using LangChain splitters.
+        Benefits: Chunk overlap for context, smart boundary detection.
+        
         - JSON: Delegate to app.core.chunking for semantic processing
-        - Others: Simple paragraph-based chunking
+        - Markdown: Use markdown_to_chunks with header-aware splitting
+        - Others: Use text_to_chunks with RecursiveCharacterTextSplitter
         """
+        if not text or not text.strip():
+            return []
+        
+        # Short content - no need to chunk
         if len(text) <= self.chunk_size:
             return [text]
         
-        # Special handling for JSON files
-        if file_ext.lower() == '.json':
+        # Route by file extension
+        ext_lower = file_ext.lower()
+        
+        # JSON files - semantic chunking
+        if ext_lower == '.json':
             return self._chunk_json(text, filename)
         
-        # Default paragraph-based chunking
-        return self._simple_chunk(text)
+        # Markdown files - header-aware chunking with overlap
+        if ext_lower in {'.md', '.markdown', '.rst'}:
+            return markdown_to_chunks(text, filename, self.chunk_size)
+        
+        # All other text files - use RecursiveCharacterTextSplitter with overlap
+        return text_to_chunks(text, filename, self.chunk_size)
     
     def _chunk_json(self, text: str, filename: str = "") -> List[str]:
         """
@@ -207,36 +226,20 @@ class OptimizedIngester:
                 # This creates IP-first lookup chunks automatically
                 return json_to_natural_text(data, filename)
             
-            # Fallback for non-device JSON (topology, network map, etc.)
+            # Check for MITRE technique
+            if isinstance(data, dict) and 'mitre_id' in data:
+                return [mitre_to_natural_text(data)]
+            
+            # Fallback for other JSON - use text_to_chunks with overlap
             text_formatted = json.dumps(data, indent=2, ensure_ascii=False)
             if len(text_formatted) <= self.chunk_size:
                 return [text_formatted]
             else:
-                return self._simple_chunk(text_formatted)
+                return text_to_chunks(text_formatted, filename, self.chunk_size)
             
         except json.JSONDecodeError:
-            # Not valid JSON, use simple chunking
-            return self._simple_chunk(text)
-    
-    def _simple_chunk(self, text: str) -> List[str]:
-        """Simple paragraph-based chunking"""
-        chunks = []
-        pos = 0
-        while pos < len(text):
-            end = pos + self.chunk_size
-            
-            if end < len(text):
-                para = text.rfind('\n\n', pos, end)
-                if para > pos:
-                    end = para
-            
-            chunk = text[pos:end].strip()
-            if chunk:
-                chunks.append(chunk)
-            
-            pos = end
-        
-        return chunks
+            # Not valid JSON, use text_to_chunks with overlap
+            return text_to_chunks(text, filename, self.chunk_size)
     
     def get_category(self, path: Path, base: Path) -> str:
         """Simple category extraction"""
@@ -412,7 +415,7 @@ class OptimizedIngester:
                 
                 # Check limit
                 if limit and file_count >= limit:
-                    print(f"\n✓ Reached limit of {limit} files")
+                    print(f"\nReached limit of {limit} files")
                     break
             
             if shutdown_requested or (limit and file_count >= limit):
@@ -428,8 +431,8 @@ class OptimizedIngester:
         print("\n" + "=" * 70)
         print("📊 Summary")
         print("=" * 70)
-        print(f"✓ Files processed: {self.stats['files']}")
-        print(f"✓ Chunks created: {self.stats['chunks']}")
+        print(f"Files processed: {self.stats['files']}")
+        print(f"Chunks created: {self.stats['chunks']}")
         print(f"⏭️  Files skipped: {self.stats['skipped']}")
         print(f"🔄 Duplicates skipped: {self.stats['duplicates']}")
         print(f"✗ Errors: {self.stats['errors']}")

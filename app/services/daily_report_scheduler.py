@@ -41,7 +41,7 @@ class DailyReportScheduler:
         self.enabled = self.email_service.enabled and self.recipient_email
         
         if self.enabled:
-            logger.info(f"✓ Daily report scheduler initialized: {self.send_time} → {self.recipient_email}")
+            logger.info(f"Daily report scheduler initialized: {self.send_time} → {self.recipient_email}")
         else:
             logger.warning("  Daily report scheduler disabled (missing email config)")
     

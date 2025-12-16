@@ -93,7 +93,7 @@ class ConversationMemory:
         
         self._initialized = True
         storage_type = "Redis" if self._redis_available else "In-Memory"
-        logger.info(f"✓ ConversationMemory initialized (storage: {storage_type})")
+        logger.info(f"ConversationMemory initialized (storage: {storage_type})")
     
     def _init_redis(self):
         """Initialize Redis connection if available"""
@@ -114,7 +114,7 @@ class ConversationMemory:
                 # Test connection
                 self._redis.ping()
                 self._redis_available = True
-                logger.info(f"✓ Redis connected at {redis_host}:{redis_port}")
+                logger.info(f"Redis connected at {redis_host}:{redis_port}")
             except Exception as e:
                 logger.warning(f"Redis not available ({e}), using in-memory fallback")
                 self._redis = None
@@ -152,7 +152,7 @@ class ConversationMemory:
                             settings=Settings(anonymized_telemetry=False)
                         )
                         self._chroma_client.heartbeat()
-                        logger.info(f"✓ Connected to conversation ChromaDB at {conv_host}:{conv_port}")
+                        logger.info(f"Connected to conversation ChromaDB at {conv_host}:{conv_port}")
                     except Exception as e:
                         logger.warning(f"ChromaDB conv service not available ({e}), using local fallback")
                         from app.config import CONV_DB_PATH
@@ -179,7 +179,7 @@ class ConversationMemory:
                     embedding_function=embedding_function,
                     metadata={"description": "Conversation history for semantic search"}
                 )
-                logger.info(f"✓ Conversation collection '{CONVERSATION_COLLECTION_NAME}' ready")
+                logger.info(f"Conversation collection '{CONVERSATION_COLLECTION_NAME}' ready")
                     
             except Exception as e:
                 logger.error(f"Failed to initialize conversation ChromaDB: {e}")

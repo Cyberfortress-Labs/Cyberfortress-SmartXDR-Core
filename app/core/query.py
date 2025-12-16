@@ -1,15 +1,18 @@
 """
 RAG query processing with token usage tracking
-Following OpenAI Python SDK best practices - using Responses API
+Using LangChain's ChatOpenAI for better error handling and token tracking
 """
 import os
 import re
 import hashlib
 import time
 import json
+import logging
 from typing import Optional, Dict, Any, List, cast
 from datetime import datetime, timedelta
-from openai import OpenAI, APIError, APIConnectionError, RateLimitError
+from langchain_openai import ChatOpenAI
+from langchain.callbacks import get_openai_callback
+from langchain_core.messages import SystemMessage, HumanMessage
 from dotenv import load_dotenv
 from app.config import (
     CHAT_MODEL, 
@@ -29,16 +32,19 @@ from app.services.prompt_builder_service import PromptBuilder
 from app.utils.rate_limit import APIUsageTracker
 from app.utils.cache import ResponseCache
 
+# Setup logger
+logger = logging.getLogger('smartxdr.query')
+
 # Load environment variables
 load_dotenv()
 
-# Initialize OpenAI Client with proper configuration
-# Following https://github.com/openai/openai-python best practices
-client = OpenAI(
-    # API key loaded from OPENAI_API_KEY environment variable (default behavior)
+# Initialize LangChain ChatOpenAI with proper configuration
+llm = ChatOpenAI(
+    model=CHAT_MODEL,
     api_key=os.environ.get("OPENAI_API_KEY"),
     timeout=OPENAI_TIMEOUT,
     max_retries=OPENAI_MAX_RETRIES,
+    temperature=0,  # Deterministic for RAG
 )
 
 # Initialize PromptBuilder for system prompts (using RAG-optimized prompt)
@@ -78,24 +84,24 @@ def _search_and_build_context(collection, query: str, n_results: int, filter_met
     if results["documents"] and results["documents"][0]:
         num_found = len(results["documents"][0])
         if DEBUG_MODE:
-            print(f"Search returned {num_found} results")
+            logger.debug(f"Search returned {num_found} results")
         
         if results["distances"] and results["distances"][0]:
             min_distance = min(results["distances"][0])
             if DEBUG_MODE:
-                print(f"Closest match distance: {min_distance:.4f}")
+                logger.debug(f"Closest match distance: {min_distance:.4f}")
             # Relaxed threshold from 1.2 to 1.4 to be more inclusive
             has_relevant_results = min_distance < 1.4
         else:
             has_relevant_results = True
     else:
         if DEBUG_MODE:
-            print("WARNING: Search returned NO results (collection might be empty)")
+            logger.warning("Search returned NO results (collection might be empty)")
     
     if not has_relevant_results:
         if DEBUG_MODE:
-            print(f"WARNING: No highly relevant context found (min distance: {min_distance})")
-            print(f"Attempting to answer using general cybersecurity knowledge...")
+            logger.warning(f"No highly relevant context found (min distance: {min_distance})")
+            logger.info("Attempting to answer using general cybersecurity knowledge...")
         return "No specific Cyberfortress documentation found for this query. Use general cybersecurity knowledge to answer.", set(), []
     
     # Build context from results
@@ -117,30 +123,18 @@ def _search_and_build_context(collection, query: str, n_results: int, filter_met
     # Debug info
     if DEBUG_MODE:
         if context_list:
-            print(f"\nFound {len(context_list)} relevant documents")
+            logger.debug(f"Found {len(context_list)} relevant documents")
             if sources:
-                print(f"Sources: {', '.join(sources)}")
+                logger.debug(f"Sources: {', '.join(sources)}")
             
             # Preview context
-            print(f"\nContext Preview (first 300 chars):")
-            print("-" * 60)
+            logger.debug(f"Context Preview (first 300 chars):")
             preview = context_text[:300] + "..." if len(context_text) > 300 else context_text
-            print(preview)
-            print("-" * 60)
+            logger.debug(preview)
         else:
-            print(f"\nUsing general knowledge (no relevant context)")
+            logger.debug("Using general knowledge (no relevant context)")
     
     return context_text, sources, context_list
-
-
-# def _anonymize_context(context_text: str) -> str:
-#     """
-#     Anonymize sensitive information in context
-    
-#     Returns:
-#         Context text
-#     """
-#     return context_text
 
 
 def _build_user_input(context_text: str, query: str) -> str:
@@ -159,12 +153,18 @@ def _build_user_input(context_text: str, query: str) -> str:
 
 def _call_openai_api(system_instructions: str, user_input: str, context_text: str, query: str) -> tuple[str, float]:
     """
-    Call OpenAI API and return response
+    Call OpenAI API using LangChain ChatOpenAI and return response
+    
+    Benefits of LangChain:
+    - Built-in token tracking via get_openai_callback()
+    - Automatic retry logic with exponential backoff
+    - Better error handling with specific exception types
+    - Streaming support (can be enabled if needed)
     
     Returns:
         Tuple of (answer_text, actual_cost)
     """
-    # Estimate cost
+    # Estimate cost for rate limiting check
     estimated_prompt_tokens = len(context_text) // 3 + len(query) // 3
     estimated_completion_tokens = 500
     estimated_cost = (estimated_prompt_tokens / 1_000_000) * INPUT_PRICE_PER_1M + \
@@ -173,47 +173,41 @@ def _call_openai_api(system_instructions: str, user_input: str, context_text: st
     if not usage_tracker.check_daily_cost(estimated_cost):
         raise ValueError("ERROR: Daily cost limit reached. Please try again tomorrow.")
     
-    # API call
-    response = client.responses.create(
-        model=CHAT_MODEL,
-        instructions=system_instructions,
-        input=user_input
-    )
+    # Build messages for LangChain
+    messages = [
+        SystemMessage(content=system_instructions),
+        HumanMessage(content=user_input)
+    ]
     
-    # Extract token usage
-    usage = response.usage
-    actual_cost = 0.0
-    if usage:
-        input_tokens = getattr(usage, 'input_tokens', 0)
-        output_tokens = getattr(usage, 'output_tokens', 0)
-        total_tokens = getattr(usage, 'total_tokens', input_tokens + output_tokens)
-        
-        if DEBUG_MODE:
-            print(f"\nToken Usage:")
-            print(f"   - Input tokens: {input_tokens}")
-            print(f"   - Output tokens: {output_tokens}")
-            print(f"   - Total tokens: {total_tokens}")
-        
-        input_cost = (input_tokens / 1_000_000) * INPUT_PRICE_PER_1M
-        output_cost = (output_tokens / 1_000_000) * OUTPUT_PRICE_PER_1M
-        actual_cost = input_cost + output_cost
-        
-        if DEBUG_MODE:
-            print(f"   - Estimated cost: ${actual_cost:.6f}")
-        
-        usage_tracker.record_call(actual_cost)
-        
-        if DEBUG_MODE:
-            usage_stats = usage_tracker.get_stats()
-            cache_stats = response_cache.get_stats()
-            print(f"\nToday's Usage:")
-            print(f"   - Total cost: ${usage_stats['daily_cost']:.4f} / ${MAX_DAILY_COST}")
-            print(f"   - Calls in last minute: {usage_stats['calls_last_minute']} / {MAX_CALLS_PER_MINUTE}")
-            print(f"   - Cache entries: {cache_stats['cache_size']}")
+    # Call LLM with token tracking callback
+    with get_openai_callback() as cb:
+        response = llm.invoke(messages)
     
-    answer_with_tokens = response.output_text or "No answer generated"
+    # Extract answer
+    answer_text = response.content if response.content else "No answer generated"
     
-    return answer_with_tokens, actual_cost
+    # Calculate actual cost from callback
+    actual_cost = cb.total_cost
+    
+    if DEBUG_MODE:
+        logger.debug(f"\nToken Usage (via LangChain callback):")
+        logger.debug(f"   - Input tokens: {cb.prompt_tokens}")
+        logger.debug(f"   - Output tokens: {cb.completion_tokens}")
+        logger.debug(f"   - Total tokens: {cb.total_tokens}")
+        logger.debug(f"   - Actual cost: ${actual_cost:.6f}")
+    
+    # Record usage in tracker
+    usage_tracker.record_call(actual_cost)
+    
+    if DEBUG_MODE:
+        usage_stats = usage_tracker.get_stats()
+        cache_stats = response_cache.get_stats()
+        logger.debug(f"\nToday's Usage:")
+        logger.debug(f"   - Total cost: ${usage_stats['daily_cost']:.4f} / ${MAX_DAILY_COST}")
+        logger.debug(f"   - Calls in last minute: {usage_stats['calls_last_minute']} / {MAX_CALLS_PER_MINUTE}")
+        logger.debug(f"   - Cache entries: {cache_stats['cache_size']}")
+    
+    return answer_text, actual_cost
 
 
 def ask(collection, query: str, n_results: int = DEFAULT_RESULTS, filter_metadata: Optional[Dict[str, Any]] = None) -> str:
@@ -222,7 +216,7 @@ def ask(collection, query: str, n_results: int = DEFAULT_RESULTS, filter_metadat
     - Increased results for more context
     - Metadata filtering support
     - Source citations
-    - Token usage tracking
+    - Token usage tracking via LangChain callbacks
     - Rate limiting and cost control
     - Response caching
     
@@ -235,7 +229,7 @@ def ask(collection, query: str, n_results: int = DEFAULT_RESULTS, filter_metadat
     Returns:
         Answer string with source citations
     """
-    print(f"\nQuestion: {query}")
+    logger.info(f"Question: {query}")
     
     # Check rate limit
     if not usage_tracker.check_rate_limit():
@@ -252,14 +246,11 @@ def ask(collection, query: str, n_results: int = DEFAULT_RESULTS, filter_metadat
     if cached_response:
         return cached_response
     
-    # Anonymize context
-    # context_text_anonymized = _anonymize_context(context_text)
-    
     # Build API request
     system_instructions = prompt_builder.build_rag_prompt()
     user_input = _build_user_input(context_text, query)
     
-    # Call API with error handling
+    # Call API with error handling (LangChain handles retries automatically)
     try:
         answer_with_tokens, actual_cost = _call_openai_api(
             system_instructions, 
@@ -268,7 +259,7 @@ def ask(collection, query: str, n_results: int = DEFAULT_RESULTS, filter_metadat
             query
         )
         
-        # Use response as-is (no de-anonymization needed)
+        # Use response as-is
         answer = answer_with_tokens
         
         # Add source citations
@@ -280,17 +271,7 @@ def ask(collection, query: str, n_results: int = DEFAULT_RESULTS, filter_metadat
         
         return answer
         
-    except RateLimitError as e:
-        error_msg = f"Rate limit exceeded. Please try again later. (Request ID: {getattr(e, 'request_id', 'N/A')})"
-        print(f"\nERROR: {error_msg}")
-        return error_msg
-        
-    except APIConnectionError as e:
-        error_msg = f"Connection error: {str(e)}. Please check your internet connection."
-        print(f"\nERROR: {error_msg}")
-        return error_msg
-        
-    except APIError as e:
-        error_msg = f"OpenAI API error: {str(e)} (Request ID: {getattr(e, 'request_id', 'N/A')})"
-        print(f"\nERROR: {error_msg}")
+    except Exception as e:
+        error_msg = f"Error processing query: {str(e)}"
+        logger.error(f"ERROR: {error_msg}")
         return error_msg

@@ -1,5 +1,6 @@
 """
 Response Caching System for API Optimization
+Using LangChain's OpenAIEmbeddings for semantic similarity matching
 """
 import time
 import hashlib
@@ -16,16 +17,16 @@ logger = logging.getLogger('smartxdr.cache')
 # Load environment variables
 load_dotenv()
 
-# Try to import OpenAI for embedding similarity matching
+# Try to import LangChain for embedding similarity matching
 try:
-    from openai import OpenAI
-    OPENAI_AVAILABLE = True
+    from langchain_openai import OpenAIEmbeddings
+    LANGCHAIN_AVAILABLE = True
 except ImportError:
-    OPENAI_AVAILABLE = False
+    LANGCHAIN_AVAILABLE = False
 
 
 class ResponseCache:
-    """Cache API responses with semantic similarity matching"""
+    """Cache API responses with semantic similarity matching using LangChain"""
     
     def __init__(self, ttl: int = 3600, enabled: bool = True, use_semantic_cache: bool = False):
         """
@@ -38,114 +39,88 @@ class ResponseCache:
         """
         self.ttl = ttl
         self.enabled = enabled
-        self.use_semantic_cache = use_semantic_cache and OPENAI_AVAILABLE
+        self.use_semantic_cache = use_semantic_cache and LANGCHAIN_AVAILABLE
         self.cache: Dict[str, Dict[str, Any]] = {}
         self.similarity_threshold = 0.85  # 85% similarity = cache hit
         
-        # Initialize OpenAI client if semantic cache is enabled
+        # Initialize LangChain embeddings if semantic cache is enabled
         if self.use_semantic_cache:
             try:
-                self.client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-                self.embedding_model = "text-embedding-3-small"
-                logger.info("Semantic cache enabled (embedding-based similarity matching)")
+                # Use LangChain OpenAIEmbeddings with automatic retry and batching
+                self._embeddings = OpenAIEmbeddings(
+                    model="text-embedding-3-small",
+                    api_key=os.environ.get("OPENAI_API_KEY"),
+                    # LangChain handles retries automatically
+                )
+                logger.info("Semantic cache enabled (LangChain embedding-based similarity matching)")
             except Exception as e:
                 logger.warning(f"Semantic cache initialization failed: {e}")
                 self.use_semantic_cache = False
+                self._embeddings = None
     
     def _normalize_query(self, query: str) -> str:
         """
-        Normalize query for better cache hit rate.
-        Removes variations in phrasing that don't change semantic meaning.
+        Lightweight query normalization for cache key generation.
+        
+        Strategy: Do minimal text cleanup and let embedding similarity 
+        handle semantic matching. This is more robust than rule-based patterns.
         
         Args:
             query: Original query string
             
         Returns:
-            Normalized query string
+            Normalized query string for cache key
         """
-        # Convert to lowercase
+        if not query:
+            return ""
+        
+        # Basic cleanup only - embeddings handle semantic similarity
         normalized = query.lower().strip()
         
-        # Remove punctuation at the end (?, !, .)
-        normalized = re.sub(r'[?!.]+$', '', normalized)
+        # Remove trailing punctuation (?, !, ., ...)
+        normalized = re.sub(r'[?!.…]+$', '', normalized)
         
-        # Normalize whitespace
+        # Normalize whitespace (multiple spaces/tabs/newlines -> single space)
         normalized = re.sub(r'\s+', ' ', normalized)
         
-        # Extract key entities first (IP addresses)
+        # Extract and preserve key entities (IPs, versions, IDs)
+        # These are exact-match important for cache keys
         ip_pattern = r'\b(?:\d{1,3}\.){3}\d{1,3}\b'
-        ips = re.findall(ip_pattern, normalized)
+        mitre_pattern = r'\b[tT]\d{4}(?:\.\d{3})?\b'  # T1234 or T1234.001
+        cve_pattern = r'\bCVE-\d{4}-\d+\b'
         
-        # Normalize question patterns (Vietnamese) - same meaning, different phrasing
-        patterns = [
-            (r'là của máy nào', 'máy_nào'),
-            (r'thuộc máy nào', 'máy_nào'),
-            (r'là của thiết bị nào', 'thiết_bị_nào'),
-            (r'thuộc thiết bị nào', 'thiết_bị_nào'),
-            (r'là máy nào', 'máy_nào'),
-            (r'là thiết bị nào', 'thiết_bị_nào'),
-            (r'là của gì', 'máy_nào'),
-            (r'tên máy', 'máy_nào'),
-            (r'của máy gì', 'máy_nào'),
-            (r'thuộc về máy', 'máy_nào'),
-            (r'belongs to which', 'máy_nào'),
-            (r'is assigned to', 'máy_nào'),
-            (r'what device has', 'máy_nào'),
-            (r'what machine has', 'máy_nào'),
-            (r'which device has', 'máy_nào'),
-            (r'which machine has', 'máy_nào'),
-        ]
+        # Find all entities
+        entities = []
+        entities.extend(re.findall(ip_pattern, normalized))
+        entities.extend(re.findall(mitre_pattern, normalized, re.IGNORECASE))
+        entities.extend(re.findall(cve_pattern, normalized, re.IGNORECASE))
         
-        for pattern, replacement in patterns:
-            normalized = re.sub(pattern, replacement, normalized)
+        # If entities found, prepend them (sorted) for consistent cache keys
+        if entities:
+            entity_prefix = ' '.join(sorted(set(e.upper() for e in entities)))
+            # Remove entities from normalized text to avoid duplication
+            for entity in entities:
+                normalized = re.sub(re.escape(entity), '', normalized, flags=re.IGNORECASE)
+            normalized = re.sub(r'\s+', ' ', normalized).strip()
+            return f"{entity_prefix} {normalized}".strip()
         
-        # Remove common filler words that don't change meaning
-        filler_words = [
-            # Vietnamese
-            'là', 'của', 'thuộc', 'về', 'cho', 'nào', 'gì', 'vậy', 'thế', 'nhỉ', 'nhé', 'ạ',
-            'có', 'cái', 'chiếc', 'tên', 'được', 'sẽ', 'đã', 'đang', 'hãy', 'hành', 'em', 'anh',
-            # English  
-            'the', 'a', 'an', 'is', 'are', 'was', 'were', 'what', 'which', 'whose', 'am', 'be',
-            'please', 'tell', 'me', 'can', 'you', 'ip', 'máy', 'address', 'device', 'machine',
-            'has', 'have', 'does', 'do', 'did', 'will', 'would', 'could', 'should', 'may', 'might',
-        ]
-        
-        words = normalized.split()
-        # Keep words that are: IP addresses, normalized patterns, or not filler words
-        important_words = []
-        for word in words:
-            is_ip = re.match(ip_pattern, word)
-            is_normalized_pattern = '_' in word  # Our normalized patterns have underscore
-            is_important = word not in filler_words and len(word) > 0
-            if is_ip or is_normalized_pattern or is_important:
-                important_words.append(word)
-        
-        # Remove redundant máy_nào and thiết_bị_nào patterns if IP is present
-        # (they're implied by the question context and vary too much)
-        if ips:
-            important_words = [w for w in important_words if w not in ('máy_nào', 'thiết_bị_nào')]
-        
-        # Rebuild with IPs first for consistency
-        result_parts = []
-        for ip in sorted(set(ips)):
-            result_parts.append(ip)
-        for word in important_words:
-            if not re.match(ip_pattern, word):
-                result_parts.append(word)
-        
-        return ' '.join(result_parts).strip()
+        return normalized.strip()
     
     def _get_embedding(self, text: str) -> Optional[list]:
-        """Get embedding for text using OpenAI API"""
-        if not self.use_semantic_cache:
+        """
+        Get embedding for text using LangChain OpenAIEmbeddings
+        
+        Benefits of LangChain:
+        - Automatic retry logic with exponential backoff
+        - Better error handling
+        - Optimized for single query embedding
+        """
+        if not self.use_semantic_cache or not self._embeddings:
             return None
         
         try:
-            response = self.client.embeddings.create(
-                model=self.embedding_model,
-                input=text
-            )
-            return response.data[0].embedding
+            # Use embed_query for single text (optimized for queries)
+            return self._embeddings.embed_query(text)
         except Exception as e:
             logger.warning(f"Failed to get embedding: {e}")
             return None
@@ -190,11 +165,11 @@ class ResponseCache:
     def get(self, cache_key: str, query: Optional[str] = None) -> Optional[str]:
         """
         Get cached response if available and not expired
-        Supports both exact match and semantic similarity matching
+        Supports both exact match and semantic similarity matching via LangChain
         
         Flow:
         1. Try exact cache key match first (FREE - no API call)
-        2. If miss AND semantic cache enabled → call embedding API for similarity search
+        2. If miss AND semantic cache enabled → call LangChain embedding for similarity search
         
         Args:
             cache_key: Cache key to lookup
@@ -217,7 +192,7 @@ class ResponseCache:
                 del self.cache[cache_key]
         
         # Step 2: Only try semantic similarity if exact match failed
-        # This costs 1 embedding API call (~$0.00002)
+        # This costs 1 embedding API call (~$0.00002) via LangChain
         if self.use_semantic_cache and query and len(self.cache) > 0:
             query_embedding = self._get_embedding(query)
             if query_embedding:
@@ -235,6 +210,7 @@ class ResponseCache:
     def set(self, cache_key: str, response: str, query: Optional[str] = None):
         """
         Cache a response with optional query embedding for semantic matching
+        Uses LangChain for embedding generation
         
         Args:
             cache_key: Cache key
@@ -247,7 +223,7 @@ class ResponseCache:
                 'timestamp': time.time()
             }
             
-            # Generate and store embedding if semantic cache is enabled
+            # Generate and store embedding if semantic cache is enabled (via LangChain)
             if self.use_semantic_cache and query:
                 query_embedding = self._get_embedding(query)
                 if query_embedding:
@@ -274,5 +250,6 @@ class ResponseCache:
         return {
             'cache_size': len(self.cache),
             'ttl': self.ttl,
-            'enabled': self.enabled
+            'enabled': self.enabled,
+            'semantic_cache_enabled': self.use_semantic_cache
         }

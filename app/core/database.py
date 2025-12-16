@@ -26,7 +26,7 @@ def initialize_database():
                 host=chroma_host,
                 port=int(chroma_port)
             )
-            logger.info("✓ Connected to ChromaDB service")
+            logger.info("Connected to ChromaDB service")
         except Exception as e:
             logger.error(f"Failed to connect to ChromaDB service: {e}")
             logger.warning("Falling back to local PersistentClient")

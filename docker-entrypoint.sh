@@ -20,7 +20,7 @@ setup_telegram_webhook() {
             echo "[SmartXDR] Waiting for tunnel to be ready..."
             for i in {1..30}; do
                 if curl -s -f "https://${TUNNEL_DOMAIN}/health" > /dev/null 2>&1; then
-                    echo "[SmartXDR] ✓ Tunnel is ready"
+                    echo "[SmartXDR] Tunnel is ready"
                     break
                 fi
                 sleep 2
@@ -33,7 +33,7 @@ setup_telegram_webhook() {
                 -d "{\"url\":\"${WEBHOOK_URL}\",\"allowed_updates\":[\"message\",\"callback_query\"],\"drop_pending_updates\":true}")
             
             if echo "$RESPONSE" | grep -q '"ok":true'; then
-                echo "[SmartXDR] ✓ Webhook set successfully: $WEBHOOK_URL"
+                echo "[SmartXDR] Webhook set successfully: $WEBHOOK_URL"
             else
                 echo "[SmartXDR] ✗ Failed to set webhook: $RESPONSE"
             fi

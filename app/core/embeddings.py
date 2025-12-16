@@ -1,6 +1,6 @@
 """
 OpenAI embedding function for ChromaDB
-Following OpenAI Python SDK best practices
+Direct OpenAI API with proper error handling
 """
 import os
 import chromadb
@@ -11,13 +11,11 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Initialize OpenAI Client with proper configuration
-# Following https://github.com/openai/openai-python best practices
+# Initialize OpenAI client
 client = OpenAI(
-    # API key loaded from OPENAI_API_KEY environment variable (default behavior)
     api_key=os.environ.get("OPENAI_API_KEY"),
     timeout=OPENAI_TIMEOUT,
-    max_retries=OPENAI_MAX_RETRIES,
+    max_retries=OPENAI_MAX_RETRIES
 )
 
 
@@ -39,8 +37,12 @@ class OpenAIEmbeddingFunction(chromadb.EmbeddingFunction):
         Returns:
             List of embedding vectors (list of floats)
         """
+        if not input:
+            return []
+        
         response = client.embeddings.create(
             model=EMBEDDING_MODEL,
             input=input
         )
-        return [data.embedding for data in response.data]
+        # Ensure we return Python lists, not numpy arrays
+        return [list(data.embedding) for data in response.data]

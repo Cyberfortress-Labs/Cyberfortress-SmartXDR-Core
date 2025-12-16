@@ -330,10 +330,10 @@ def run_manual_test():
     print("\n1. Testing summarization with default time window...")
     result = service.summarize_alerts()
     
-    print(f"✓ Status: {result.get('status')}")
-    print(f"✓ Success: {result.get('success')}")
-    print(f"✓ Alert Count: {result.get('count', 0)}")
-    print(f"✓ Risk Score: {result.get('risk_score', 0)}/100")
+    print(f"Status: {result.get('status')}")
+    print(f"Success: {result.get('success')}")
+    print(f"Alert Count: {result.get('count', 0)}")
+    print(f"Risk Score: {result.get('risk_score', 0)}/100")
     
     if result.get('grouped_alerts'):
         print(f"\nTop Alert Groups:")

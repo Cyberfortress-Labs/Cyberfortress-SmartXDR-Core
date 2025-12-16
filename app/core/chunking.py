@@ -1,14 +1,40 @@
 """
 Text chunking and semantic processing utilities
+Using LangChain text splitters for token-aware, overlap-enabled chunking
 """
 import json
 import os
 import logging
 from typing import Dict, List, Any
+from langchain_text_splitters import (
+    RecursiveCharacterTextSplitter,
+    MarkdownHeaderTextSplitter,
+    MarkdownTextSplitter
+)
+from langchain_openai import OpenAIEmbeddings
 from app.config import NETWORK_DIR, MITRE_DIR, MIN_CHUNK_SIZE, MAX_CHUNK_SIZE
 
 # Setup logger
 logger = logging.getLogger('smartxdr.chunking')
+
+# Calculate chunk overlap (10-15% of max chunk size for good context continuity)
+CHUNK_OVERLAP = min(200, int(MAX_CHUNK_SIZE * 0.15))
+
+# Initialize LangChain text splitters with token-awareness
+_markdown_splitter = MarkdownTextSplitter(
+    chunk_size=MAX_CHUNK_SIZE,
+    chunk_overlap=CHUNK_OVERLAP,
+    length_function=len,
+    is_separator_regex=False
+)
+
+_recursive_splitter = RecursiveCharacterTextSplitter(
+    chunk_size=MAX_CHUNK_SIZE,
+    chunk_overlap=CHUNK_OVERLAP,
+    length_function=len,
+    separators=["\n\n", "\n", ". ", " ", ""],  # Smart boundary detection
+    is_separator_regex=False
+)
 
 
 def json_to_natural_text(data: Dict[str, Any], filename: str) -> List[str]:
@@ -284,8 +310,13 @@ def load_topology_context() -> str:
 
 def markdown_to_chunks(content: str, filename: str, max_chunk_size: int = None) -> List[str]:
     """
-    Convert Markdown content to semantic chunks.
-    Splits by headers (##, ###) and limits chunk size.
+    Convert Markdown content to semantic chunks using LangChain.
+    Uses MarkdownTextSplitter with chunk overlap for better context continuity.
+    
+    Features:
+    - Chunk overlap for context continuity
+    - Smart boundary detection (splits on headers, paragraphs)
+    - Respects markdown structure
     
     Args:
         content: Raw markdown content
@@ -295,48 +326,51 @@ def markdown_to_chunks(content: str, filename: str, max_chunk_size: int = None) 
     Returns:
         List of text chunks optimized for RAG
     """
-    import re
-    
-    # Use config values if not specified
     if max_chunk_size is None:
         max_chunk_size = MAX_CHUNK_SIZE
-    min_chunk_size = MIN_CHUNK_SIZE
     
+    if not content.strip():
+        return []
+    
+    # Create splitter with custom size if needed
+    if max_chunk_size != MAX_CHUNK_SIZE:
+        splitter = MarkdownTextSplitter(
+            chunk_size=max_chunk_size,
+            chunk_overlap=min(200, int(max_chunk_size * 0.15)),
+            length_function=len
+        )
+    else:
+        splitter = _markdown_splitter
+    
+    # Split content using LangChain
+    docs = splitter.create_documents([content])
+    
+    # Add source metadata to each chunk
     chunks = []
-    
-    # Split by major headers (## or ###)
-    sections = re.split(r'\n(?=#{1,3}\s)', content)
-    
-    current_chunk = f"Source: {filename}\n\n"
-    
-    for section in sections:
-        section = section.strip()
-        if not section:
-            continue
+    for idx, doc in enumerate(docs):
+        chunk_text = f"Source: {filename}\n\n{doc.page_content}"
         
-        # If adding this section would exceed limit, save current and start new
-        if len(current_chunk) + len(section) > max_chunk_size:
-            if current_chunk.strip() and len(current_chunk) > min_chunk_size:
-                chunks.append(current_chunk.strip())
-            current_chunk = f"Source: {filename}\n\n{section}\n\n"
-        else:
-            current_chunk += section + "\n\n"
+        # Only include chunks that meet minimum size
+        if len(chunk_text) > MIN_CHUNK_SIZE:
+            chunks.append(chunk_text.strip())
     
-    # Don't forget the last chunk
-    if current_chunk.strip() and len(current_chunk) > 50:
-        chunks.append(current_chunk.strip())
-    
-    # If no chunks were created (no headers), split by paragraphs
+    # Fallback: if no chunks created, use recursive splitter
     if not chunks:
         return text_to_chunks(content, filename, max_chunk_size)
     
+    logger.debug(f"Markdown split into {len(chunks)} chunks with overlap={CHUNK_OVERLAP}")
     return chunks
 
 
 def text_to_chunks(content: str, filename: str, max_chunk_size: int = None) -> List[str]:
     """
-    Convert plain text content to semantic chunks.
-    Splits by paragraphs (double newlines) and limits chunk size.
+    Convert plain text content to semantic chunks using LangChain.
+    Uses RecursiveCharacterTextSplitter for smart boundary detection.
+    
+    Features:
+    - Chunk overlap for context continuity
+    - Smart boundary detection (paragraphs > sentences > words)
+    - Token-aware splitting
     
     Args:
         content: Raw text content
@@ -346,35 +380,41 @@ def text_to_chunks(content: str, filename: str, max_chunk_size: int = None) -> L
     Returns:
         List of text chunks optimized for RAG
     """
+    if max_chunk_size is None:
+        max_chunk_size = MAX_CHUNK_SIZE
+    
+    if not content.strip():
+        return []
+    
+    # Create splitter with custom size if needed
+    if max_chunk_size != MAX_CHUNK_SIZE:
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=max_chunk_size,
+            chunk_overlap=min(200, int(max_chunk_size * 0.15)),
+            length_function=len,
+            separators=["\n\n", "\n", ". ", " ", ""]
+        )
+    else:
+        splitter = _recursive_splitter
+    
+    # Split content using LangChain
+    docs = splitter.create_documents([content])
+    
+    # Add source metadata to each chunk
     chunks = []
-    
-    # Split by paragraph (double newline)
-    paragraphs = content.split('\n\n')
-    
-    current_chunk = f"Source: {filename}\n\n"
-    
-    for para in paragraphs:
-        para = para.strip()
-        if not para:
-            continue
+    for idx, doc in enumerate(docs):
+        chunk_text = f"Source: {filename}\n\n{doc.page_content}"
         
-        # If adding this paragraph would exceed limit, save current and start new
-        if len(current_chunk) + len(para) > max_chunk_size:
-            if current_chunk.strip() and len(current_chunk) > 50:
-                chunks.append(current_chunk.strip())
-            current_chunk = f"Source: {filename}\n\n{para}\n\n"
-        else:
-            current_chunk += para + "\n\n"
-    
-    # Don't forget the last chunk
-    if current_chunk.strip() and len(current_chunk) > 50:
-        chunks.append(current_chunk.strip())
+        # Only include chunks that meet minimum size
+        if len(chunk_text) > MIN_CHUNK_SIZE:
+            chunks.append(chunk_text.strip())
     
     # Fallback: if still no chunks, create one from full content (truncated)
     if not chunks and content.strip():
         truncated = content[:max_chunk_size]
         chunks.append(f"Source: {filename}\n\n{truncated}")
     
+    logger.debug(f"Text split into {len(chunks)} chunks with overlap={CHUNK_OVERLAP}")
     return chunks
 
 
@@ -487,4 +527,3 @@ Keywords: {title}, {category}, {', '.join(tags[:5]) if tags else ''}"""
         chunks.append(chunk_text)
     
     return chunks
-
