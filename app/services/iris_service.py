@@ -176,6 +176,138 @@ class IRISService:
             logger.debug(f" No 'intelowl_raw_ace' div found in HTML")
         
         return None
+    
+    def get_ioc_misp_report(self, case_id, ioc_id):
+        """
+        Lấy MISP report từ IOC attributes (dùng làm fallback nếu không có IntelOwl)
+        
+        Returns:
+            {
+                "ioc_value": "...",
+                "ioc_type": "...",
+                "raw_data": [...],             # Raw JSON array from MISP
+                "source": "MISP"
+            }
+        """
+        # 1. Get IOC details
+        verify = self.ca_cert if self.ca_cert else self.verify_ssl
+        
+        response = requests.get(
+            f"{self.iris_url}/case/ioc/{ioc_id}",
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type":  "application/json"
+            },
+            params={"cid": case_id},
+            verify=verify
+        )
+        
+        if response.status_code != 200:
+            raise Exception(f"Failed to get IOC: {response.text}")
+        
+        ioc_data = response.json()['data']
+        
+        # 2. Parse custom_attributes
+        custom_attrs = ioc_data.get('custom_attributes', {})
+        
+        logger.debug(f"[MISP] IOC custom_attributes type: {type(custom_attrs)}")
+        
+        # MISP data nằm trong tab "MISP Report"
+        misp_tab = None
+        
+        # Handle different structures
+        if isinstance(custom_attrs, dict):
+            for key, value in custom_attrs.items():
+                logger.debug(f"[MISP] Checking key: {key}")
+                # Case-insensitive check for MISP related keys
+                if any(x in str(key).lower() for x in ['misp', 'misp_report']):
+                    misp_tab = value
+                    logger.debug(f"[MISP] Found MISP data in key: {key}")
+                    break
+        elif isinstance(custom_attrs, list):
+            for attr in custom_attrs:
+                if not isinstance(attr, dict):
+                    continue
+                
+                tab_name = str(attr.get('tab_name', '')).lower()
+                label = str(attr.get('label', '')).lower()
+                
+                if 'misp' in tab_name or 'misp' in label:
+                    misp_tab = attr
+                    logger.debug(f"[MISP] Found MISP tab in list via name/label")
+                    break
+        
+        # Check if report is directly in ioc_data (sometimes flat)
+        if not misp_tab:
+            for key, value in ioc_data.items():
+                if 'misp' in str(key).lower() and value:
+                    misp_tab = value
+                    logger.debug(f"[MISP] Found MISP data in root key: {key}")
+                    break
+        
+        if not misp_tab:
+            logger.warning(f"[MISP] No MISP Report found for IOC {ioc_id} (Case {case_id})")
+            return None
+        
+        logger.debug(f"[MISP] MISP tab type: {type(misp_tab)}")
+        
+        # Extract raw MISP data
+        raw_data = None
+        
+        if isinstance(misp_tab, str):
+            # Try to parse as JSON
+            try:
+                raw_data = json.loads(misp_tab)
+                logger.debug(f"[MISP] Parsed string as JSON, length: {len(raw_data) if isinstance(raw_data, list) else 'N/A'}")
+            except:
+                logger.debug(f"[MISP] MISP tab is non-JSON string")
+                raw_data = misp_tab
+        elif isinstance(misp_tab, dict):
+            logger.debug(f"[MISP] MISP tab keys: {list(misp_tab.keys())}")
+            
+            # Check for nested structure: {'MISP raw results': {'value': '...'}}
+            if 'MISP raw results' in misp_tab:
+                misp_raw_obj = misp_tab['MISP raw results']
+                if isinstance(misp_raw_obj, dict) and 'value' in misp_raw_obj:
+                    raw_value = misp_raw_obj['value']
+                    if isinstance(raw_value, str):
+                        try:
+                            raw_data = json.loads(raw_value)
+                        except:
+                            raw_data = raw_value
+                    else:
+                        raw_data = raw_value
+                    logger.debug(f"[MISP] Extracted from 'MISP raw results'.'value'")
+                else:
+                    raw_data = misp_raw_obj
+            elif 'value' in misp_tab:
+                raw_value = misp_tab['value']
+                if isinstance(raw_value, str):
+                    try:
+                        raw_data = json.loads(raw_value)
+                    except:
+                        raw_data = raw_value
+                else:
+                    raw_data = raw_value
+            elif 'content' in misp_tab:
+                raw_data = misp_tab['content']
+            else:
+                raw_data = misp_tab
+        elif isinstance(misp_tab, list):
+            raw_data = misp_tab
+            logger.debug(f"[MISP] MISP tab is list, length: {len(raw_data)}")
+        
+        if not raw_data:
+            logger.warning(f"[MISP] Could not extract raw data from MISP tab")
+            return None
+        
+        return {
+            "ioc_value": ioc_data['ioc_value'],
+            "ioc_type": ioc_data['ioc_type']['type_name'],
+            "raw_data": raw_data,
+            "source": "MISP"
+        }
+    
     def get_case_iocs(self, case_id: int) -> list:
         """
         Lấy tất cả IOCs từ một case

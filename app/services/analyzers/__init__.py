@@ -107,26 +107,35 @@ def register_analyzer(name: str):
     return decorator
 
 
-def get_handler(analyzer_name: str) -> Optional[BaseAnalyzerHandler]:
+def get_handler(analyzer_name: str, fallback_to_generic: bool = True) -> Optional[BaseAnalyzerHandler]:
     """
     Lấy handler cho analyzer dựa trên tên.
     
     Args:
         analyzer_name: Tên analyzer (case-insensitive, partial match)
+        fallback_to_generic: Nếu True, return GenericHandler khi không tìm thấy handler riêng
         
     Returns:
-        Handler instance hoặc None nếu không tìm thấy
+        Handler instance, GenericHandler (nếu fallback=True), hoặc None
     """
     name_lower = analyzer_name.lower()
+    
+    # Don't return generic for generic itself
+    if name_lower == 'generic':
+        return _analyzer_registry.get('generic')
     
     # Exact match first
     if name_lower in _analyzer_registry:
         return _analyzer_registry[name_lower]
     
-    # Partial match
+    # Partial match (exclude 'generic' from partial matching)
     for key, handler in _analyzer_registry.items():
-        if key in name_lower:
+        if key != 'generic' and key in name_lower:
             return handler
+    
+    # Fallback to GenericHandler
+    if fallback_to_generic and 'generic' in _analyzer_registry:
+        return _analyzer_registry['generic']
     
     return None
 
@@ -148,6 +157,7 @@ def get_registered_analyzer_names() -> List[str]:
 # Auto-import all handlers trong folder này
 from . import virustotal_handler
 from . import misp_handler
+from . import generic_handler  # Fallback handler cho các analyzer không có handler riêng
 # Thêm import mới ở đây khi có analyzer mới
 # from . import shodan_handler
 # from . import abuseipdb_handler

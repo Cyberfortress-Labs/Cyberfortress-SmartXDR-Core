@@ -13,7 +13,8 @@ ioc_bp = Blueprint('ioc', __name__)
 @require_api_key('enrich:explain')
 def explain_intelowl():
     """
-    Lấy IntelOwl results từ IRIS và dùng AI giải thích
+    Lấy IntelOwl/MISP results từ IRIS và dùng AI giải thích
+    Fallback: Nếu không có IntelOwl, sử dụng MISP report
     
     Request:
     {
@@ -27,42 +28,63 @@ def explain_intelowl():
     ioc_id = data['ioc_id']
     update_description = data.get('update_description', True)
     
-    # 1. Lấy IntelOwl report từ IRIS
     iris_svc = IRISService()
+    llm_svc = LLMService()
+    
+    # Track data source
+    data_source = None
+    raw_results = None
+    ioc_value = None
+    ai_analysis = None
+    
+    # 1. Try IntelOwl first
     intelowl_data = iris_svc.get_ioc_intelowl_report(case_id, ioc_id)
     
-    if not intelowl_data:
-        return jsonify({
-            "status": "error",
-            "message": "No IntelOwl report found. Please run IntelOwl module first."
-        }), 404
+    if intelowl_data and intelowl_data.get('raw_data'):
+        # Use IntelOwl data
+        data_source = "IntelOwl"
+        raw_results = intelowl_data['raw_data']
+        ioc_value = intelowl_data['ioc_value']
+        
+        print(f"\n[DEBUG ROUTE] Using IntelOwl data for IOC {ioc_id}")
+        print(f"[DEBUG ROUTE] IntelOwl data keys: {intelowl_data.keys()}")
+        print(f"[DEBUG ROUTE] HTML report length: {len(intelowl_data.get('html_report', ''))}")
+        
+        # AI analysis with IntelOwl
+        ai_analysis = llm_svc.explain_intelowl_results(
+            ioc_value=ioc_value,
+            raw_results=raw_results
+        )
+    else:
+        # 2. Fallback to MISP
+        print(f"\n[DEBUG ROUTE] No IntelOwl report, trying MISP fallback for IOC {ioc_id}")
+        
+        misp_data = iris_svc.get_ioc_misp_report(case_id, ioc_id)
+        
+        if misp_data and misp_data.get('raw_data'):
+            # Use MISP data
+            data_source = "MISP"
+            raw_results = misp_data['raw_data']
+            ioc_value = misp_data['ioc_value']
+            
+            print(f"[DEBUG ROUTE] Using MISP data for IOC {ioc_id}")
+            print(f"[DEBUG ROUTE] MISP raw_data type: {type(raw_results)}")
+            
+            # AI analysis with MISP
+            ai_analysis = llm_svc.explain_misp_results(
+                ioc_value=ioc_value,
+                raw_results=raw_results
+            )
+        else:
+            # No data available
+            return jsonify({
+                "status": "error",
+                "message": "No enrichment data found. Please run IntelOwl or MISP module first."
+            }), 404
     
-    # 2. Extract raw JSON
-    raw_results = intelowl_data['raw_data']
-    
-    # Debug
-    print(f"\n[DEBUG ROUTE] IntelOwl data keys: {intelowl_data.keys()}")
-    print(f"[DEBUG ROUTE] HTML report length: {len(intelowl_data.get('html_report', ''))}")
-    print(f"[DEBUG ROUTE] Raw results: {raw_results}")
-    
-    if not raw_results:
-        return jsonify({
-            "status": "error", 
-            "message": "Cannot extract raw JSON from HTML report",
-            "debug": {
-                "html_preview": intelowl_data.get('html_report', '')[:200]
-            }
-        }), 400
-    
-    # 3. AI analysis
-    llm_svc = LLMService()
-    ai_analysis = llm_svc.explain_intelowl_results(
-        ioc_value=intelowl_data['ioc_value'],
-        raw_results=raw_results
-    )
-    
-    # 4. Update IRIS với AI analysis (add comment)
-    comment_text = f"[SmartXDR AI Analysis]\n\n{ai_analysis['summary']}"
+    # 3. Add comment to IRIS
+    source_label = f"[SmartXDR AI Analysis - {data_source}]"
+    comment_text = f"{source_label}\n\n{ai_analysis['summary']}"
     iris_svc.add_ioc_comment(
         case_id=case_id,
         ioc_id=ioc_id,
@@ -107,8 +129,8 @@ def explain_intelowl():
                 # 5. Handle Tags
                 tags_list = [t.strip() for t in current_tags.split(',') if t.strip()]
                 
-                # Add standard tags
-                new_tags = ['smartxdr-analyzed', f"risk:{ai_analysis['risk_level'].lower()}"]
+                # Add standard tags including data source
+                new_tags = ['smartxdr-analyzed', f"risk:{ai_analysis['risk_level'].lower()}", f"source:{data_source.lower()}"]
                 for tag in new_tags:
                     if tag not in tags_list:
                         tags_list.append(tag)
@@ -135,7 +157,8 @@ def explain_intelowl():
         "summary": ai_analysis['summary'],
         "risk_level": ai_analysis['risk_level'],
         "recommendations": ai_analysis['recommendations'],
-        "description_updated": description_updated
+        "description_updated": description_updated,
+        "data_source": data_source
     })
 
 

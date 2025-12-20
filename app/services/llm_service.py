@@ -787,6 +787,192 @@ Chỉ trả về text summary, không thêm prefix hay formatting."""
                 "recommendations": []
             }
     
+    def explain_misp_results(self, ioc_value: str, raw_results: list | dict) -> dict:
+        """
+        Dùng AI giải thích MISP raw results (fallback khi không có IntelOwl)
+        Sử dụng MISPHandler từ analyzer registry để tái sử dụng logic có sẵn.
+        
+        Args:
+            ioc_value: Giá trị IOC (IP/domain/hash/url)
+            raw_results: Raw JSON từ MISP (list of analyzer results)
+        
+        Returns:
+            {
+                "summary": "Tóm tắt bằng tiếng Việt...",
+                "risk_level": "CRITICAL/HIGH/MEDIUM/LOW",
+                "key_findings": [...],
+                "recommendations": [...],
+                "source": "MISP"
+            }
+        """
+        # Load prompt configuration for MISP or fallback to IOC enrichment
+        try:
+            prompt_config = self._load_prompt_config("instructions/misp_enrichment.json")
+        except FileNotFoundError:
+            try:
+                prompt_config = self._load_prompt_config("instructions/ioc_enrichment.json")
+            except FileNotFoundError as e:
+                if DEBUG_LLM:
+                    print(f"[ERROR LLM] {str(e)}")
+                return {
+                    "summary": f"Lỗi: Không tìm thấy file prompt config",
+                    "risk_level": "UNKNOWN",
+                    "key_findings": [],
+                    "recommendations": [],
+                    "source": "MISP"
+                }
+        
+        # Use MISPHandler from analyzer registry
+        misp_handler = get_handler('misp')
+        if not misp_handler:
+            # Fallback: import directly
+            from app.services.analyzers.misp_handler import MISPHandler
+            misp_handler = MISPHandler()
+        
+        # Build analyzer_reports format giống như IntelOwl trả về
+        # để có thể tái sử dụng logic
+        analyzer_reports = []
+        all_stats = {}
+        risk_score = 0
+        
+        # Parse raw_results - có thể là list hoặc dict tùy thuộc vào format MISP
+        if isinstance(raw_results, list):
+            for item in raw_results:
+                if isinstance(item, dict):
+                    name = item.get('name', 'MISP')
+                    result = item.get('result', item)
+                    
+                    # Wrap as analyzer report format
+                    analyzer_report = {
+                        'name': name,
+                        'status': 'SUCCESS',
+                        'report': result
+                    }
+                    analyzer_reports.append(analyzer_report)
+                    
+                    # Use MISPHandler to extract stats
+                    stats = misp_handler.extract_stats(result)
+                    all_stats[name] = stats
+                    
+                    # Get risk score
+                    score = misp_handler.get_risk_score(result)
+                    risk_score = max(risk_score, score)
+        elif isinstance(raw_results, dict):
+            # Single report case
+            analyzer_report = {
+                'name': 'MISP',
+                'status': 'SUCCESS',
+                'report': raw_results
+            }
+            analyzer_reports.append(analyzer_report)
+            
+            all_stats['MISP'] = misp_handler.extract_stats(raw_results)
+            risk_score = misp_handler.get_risk_score(raw_results)
+        
+        # Determine risk level from score (reuse logic from _determine_risk_level)
+        if risk_score >= 80:
+            threat_level = "CRITICAL"
+        elif risk_score >= 60:
+            threat_level = "HIGH"
+        elif risk_score >= 30:
+            threat_level = "MEDIUM"
+        else:
+            threat_level = "LOW"
+        
+        # Extract findings using handler summarize
+        misp_findings = []
+        for report in analyzer_reports:
+            summary = misp_handler.summarize(report)
+            if summary and summary.get('found'):
+                misp_findings.append({
+                    "analyzer": summary.get('analyzer', 'MISP'),
+                    "event_count": summary.get('event_count', 0),
+                    "events": summary.get('events', []),
+                    "tags": summary.get('tags', [])
+                })
+        
+        # Build prompt for LLM
+        settings = prompt_config.get('settings', {})
+        max_tokens = settings.get('max_completion_tokens', 1500)
+        system_prompt = prompt_config.get('system_prompt', 'Bạn là chuyên gia bảo mật phân tích dữ liệu threat intelligence.')
+        
+        # Build user prompt with summarized findings
+        user_prompt = f"""
+Phân tích IOC: {ioc_value}
+Nguồn dữ liệu: MISP Threat Intelligence Platform
+
+**MISP Statistics:**
+{json.dumps(all_stats, indent=2, ensure_ascii=False)}
+
+**Risk Score:** {risk_score}/100
+
+**MISP Findings (đã xử lý bởi MISPHandler):**
+{json.dumps(misp_findings[:10], indent=2, ensure_ascii=False)}
+
+**Mức độ đe dọa:** {threat_level}
+
+Hãy phân tích và đưa ra:
+1. Tóm tắt về mối đe dọa (bằng tiếng Việt)
+2. Các điểm quan trọng cần lưu ý
+3. Khuyến nghị hành động
+"""
+        
+        if DEBUG_LLM:
+            print(f"[DEBUG LLM MISP] Using MISPHandler from registry")
+            print(f"[DEBUG LLM MISP] Risk score: {risk_score}, Threat level: {threat_level}")
+            print(f"[DEBUG LLM MISP] Findings count: {len(misp_findings)}")
+        
+        # Call OpenAI
+        try:
+            response = self.openai_client.chat.completions.create(
+                model=self.chat_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                max_completion_tokens=max_tokens
+            )
+            
+            ai_text = response.choices[0].message.content or ""
+            
+            if DEBUG_LLM:
+                print(f"[DEBUG LLM MISP] Response length: {len(ai_text)}")
+            
+            if not ai_text:
+                ai_text = f"Không thể phân tích IOC {ioc_value} từ dữ liệu MISP - API trả về rỗng"
+            
+            # Extract recommendations from AI text
+            recommendations = self._extract_recommendations(ai_text)
+            
+            # Build key findings
+            key_findings = []
+            for finding in misp_findings:
+                event_count = finding.get('event_count', 0)
+                if event_count > 0:
+                    key_findings.append(f"Tìm thấy {event_count} MISP events liên quan")
+                tags = finding.get('tags', [])
+                if tags:
+                    key_findings.append(f"Tags: {', '.join(tags[:5])}")
+            
+            return {
+                "summary": ai_text,
+                "risk_level": threat_level,
+                "key_findings": key_findings,
+                "recommendations": recommendations,
+                "source": "MISP"
+            }
+            
+        except Exception as e:
+            if DEBUG_LLM:
+                print(f"[ERROR LLM MISP] {str(e)}")
+            return {
+                "summary": f"Lỗi khi phân tích MISP: {str(e)}",
+                "risk_level": threat_level,
+                "key_findings": [f"Risk score: {risk_score}"],
+                "recommendations": [],
+                "source": "MISP"
+            }
+    
     def _get_rag_context_for_ioc(self, ioc_value: str, stats: dict, findings: list) -> str:
         """
         Lấy context từ RAG để đưa ra gợi ý phù hợp với ngữ cảnh hệ thống.
