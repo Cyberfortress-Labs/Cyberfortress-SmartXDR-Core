@@ -1,131 +1,205 @@
-# NOT UES THIS !!!!!
-# services:
-#   # Nginx - Reverse Proxy (HTTPS)
-#   nginx:
-#     image: wanthinnn/smartxdr-nginx:latest
-#     pull_policy: always
-#     container_name: smartxdr-nginx
-#     ports:
-#       - "${NGINX_HTTPS_PORT:-8443}:8443"
-#       - "${NGINX_HTTP_PORT:-8080}:8080"
-#     volumes:
-#       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-#       - ./nginx/conf.d:/etc/nginx/conf.d:ro
-#       - ./certs:/etc/nginx/certs:ro
-#       - nginx-logs:/var/log/nginx
-#     depends_on:
-#       api:
-#         condition: service_started
-#     networks:
-#       - smartxdr-net
-#     restart: unless-stopped
-#     healthcheck:
-#       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-#       interval: 10s
-#       timeout: 5s
-#       retries: 3
-#       start_period: 10s
+# Production Deployment Configuration
+# Uses pre-built images from DockerHub instead of building locally
+# Note: This configuration is currently outdated. Use docker-compose.yml instead.
+# TODO: Update this file to match docker-compose.yml services
 
-#   # SmartXDR API Service - Pull from DockerHub
-#   api:
-#     image: wanthinnn/smartxdr-core:latest
-#     pull_policy: always
-#     container_name: smartxdr-core
-#     environment:
-#       - FLASK_ENV=production
-#       - DEBUG=false
-#       - API_AUTH_ENABLED=true
-#       - TELEGRAM_BOT_ENABLED=${TELEGRAM_BOT_ENABLED:-true}
-#       - ELASTICSEARCH_ENABLED=${ELASTICSEARCH_ENABLED:-true}
-#       - CHROMA_HOST=chromadb
-#       - CHROMA_PORT=8000
-#     env_file:
-#       - .env
-#     depends_on:
-#       chromadb:
-#         condition: service_started
-#     volumes:
-#       # Persistent data - bind mount to preserve data on host
-#       - ./data:/app/data
-#       - ./logs:/app/logs
-#       # Read-only configs
-#       - ./certs:/app/certs:ro
-#       - ./prompts:/app/prompts:ro
-#       - ./assets:/app/assets:ro
-#       - ./sources_config:/app/sources_config:ro
-#     networks:
-#       - smartxdr-net
-#     restart: unless-stopped
-#     healthcheck:
-#       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-#       interval: 30s
-#       timeout: 10s
-#       start_period: 40s
-#       retries: 3
-#     deploy:
-#       resources:
-#         limits:
-#           memory: 4G
-#           cpus: '2'
-#         reservations:
-#           memory: 1G
-#           cpus: '0.5'
+services:
+  # Nginx - Reverse Proxy (HTTPS)
+  nginx:
+    image: wanthinnn/smartxdr-nginx:latest
+    pull_policy: always
+    container_name: smartxdr-nginx
+    ports:
+      - "${NGINX_HTTPS_PORT:-8443}:8443"
+      - "${NGINX_HTTP_PORT:-8080}:8080"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./certs:/etc/nginx/certs:ro
+      - nginx-logs:/var/log/nginx
+    depends_on:
+      api:
+        condition: service_started
+    networks:
+      - smartxdr-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
-#   # ChromaDB Vector Database Service
-#   chromadb:
-#     image: chromadb/chroma:latest
-#     container_name: smartxdr-chromadb
-#     ports:
-#       - "${CHROMA_PORT:-8000}:8000"  # ChromaDB API
-#     volumes:
-#       # Mount to /data (ChromaDB's default persist path)
-#       - ${CHROMA_DB_SOURCE:-chroma-db}:/data
-#     environment:
-#       - IS_PERSISTENT=TRUE
-#       - ANONYMIZED_TELEMETRY=FALSE
-#     networks:
-#       - smartxdr-net
-#     restart: unless-stopped
-#     healthcheck:
-#       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/heartbeat')"]
-#       interval: 30s
-#       timeout: 10s
-#       retries: 3
-#     deploy:
-#       resources:
-#         limits:
-#           memory: 2G
-#           cpus: '1'
-#         reservations:
-#           memory: 512M
+  # SmartXDR API Service - Pull from DockerHub
+  api:
+    image: wanthinnn/smartxdr-core:latest
+    pull_policy: always
+    container_name: smartxdr-core
+    environment:
+      - FLASK_ENV=${FLASK_ENV:-production}
+      - DEBUG=${DEBUG:-false}
+      - API_AUTH_ENABLED=${API_AUTH_ENABLED:-true}
+      - TELEGRAM_BOT_ENABLED=${TELEGRAM_BOT_ENABLED:-true}
+      - ELASTICSEARCH_ENABLED=${ELASTICSEARCH_ENABLED:-true}
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      - CHROMA_CONV_HOST=chromadb-conv
+      - CHROMA_CONV_PORT=8000
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    env_file:
+      - .env
+    depends_on:
+      chromadb:
+        condition: service_started
+      chromadb-conv:
+        condition: service_started
+      redis:
+        condition: service_started
+    volumes:
+      # Database directory - bind mount to preserve data on host
+      - ./db/app_data:/app/db/app_data
+      - ./logs:/app/logs
+      # Read-only configs
+      - ./certs:/app/certs:ro
+      - ./prompts:/app/prompts:ro
+      - ./assets:/app/assets:ro
+      - ./sources_config:/app/sources_config:ro
+    networks:
+      - smartxdr-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
 
-#   cloudflared:
-#     image: cloudflare/cloudflared:latest
-#     container_name: smartxdr-cloudflared
-#     restart: unless-stopped
-#     command: tunnel --config /etc/cloudflared/config.yml run
-#     volumes:
-#       - ./cloudflared:/etc/cloudflared:ro
-#     depends_on:
-#       nginx:
-#         condition: service_healthy
-#     networks:
-#       - smartxdr-net
+  # ChromaDB Vector Database Service
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: smartxdr-chromadb
+    ports:
+      - "${CHROMA_PORT:-8000}:8000"  # ChromaDB API
+    volumes:
+      # Mount to /data (ChromaDB's default persist path)
+      - ${CHROMA_DB_SOURCE:-chroma-db}:/data
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+    networks:
+      - smartxdr-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/heartbeat')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1'
+        reservations:
+          memory: 512M
 
-# networks:
-#   smartxdr-net:
-#     driver: bridge
-#     name: smartxdr-network
+  # ChromaDB for Conversation History (separate instance)
+  chromadb-conv:
+    image: chromadb/chroma:latest
+    container_name: smartxdr-chromadb-conv
+    ports:
+      - "${CHROMA_CONV_PORT:-8001}:8000"  # Different external port
+    volumes:
+      - chroma-conv:/data
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+    networks:
+      - smartxdr-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/heartbeat')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 256M
 
-# volumes:
-#   # Vector embeddings database
-#   chroma-db:
-#     driver: local
-#     name: smartxdr-chroma-db
+  # Redis Cache for Conversation Memory
+  redis:
+    image: redis:7-alpine
+    container_name: smartxdr-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    networks:
+      - smartxdr-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
 
-#   # Nginx logs
-#   nginx-logs:
-#     driver: local
-#     name: smartxdr-nginx-logs
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: smartxdr-cloudflared
+    restart: unless-stopped
+    command: tunnel --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./cloudflared:/etc/cloudflared:ro
+    depends_on:
+      nginx:
+        condition: service_healthy
+    networks:
+      - smartxdr-net
+
+networks:
+  smartxdr-net:
+    driver: bridge
+    name: smartxdr-network
+
+volumes:
+  # Vector embeddings database (RAG)
+  chroma-db:
+    driver: local
+    name: smartxdr-chroma-db
+
+  # Conversation history database
+  chroma-conv:
+    driver: local
+    name: smartxdr-chroma-conv
+
+  # Redis cache data
+  redis-data:
+    driver: local
+    name: smartxdr-redis-data
+
+  # Nginx logs
+  nginx-logs:
+    driver: local
+    name: smartxdr-nginx-logs
 
 

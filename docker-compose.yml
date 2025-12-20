@@ -35,9 +35,9 @@ services:
     image: wanthinnn/smartxdr-core:dev
     container_name: smartxdr-core
     environment:
-      - FLASK_ENV=production
-      - DEBUG=false
-      - API_AUTH_ENABLED=true
+      - FLASK_ENV=${FLASK_ENV:-production}
+      - DEBUG=${DEBUG:-false}
+      - API_AUTH_ENABLED=${API_AUTH_ENABLED:-true}
       - TELEGRAM_BOT_ENABLED=${TELEGRAM_BOT_ENABLED:-true}
       - ELASTICSEARCH_ENABLED=${ELASTICSEARCH_ENABLED:-true}
       - CHROMA_HOST=chromadb
