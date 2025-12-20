@@ -49,6 +49,8 @@ services:
     depends_on:
       chromadb-data:
         condition: service_started
+      chromadb-conv:
+        condition: service_started
     volumes:
       # Database directory - bind mount to preserve data on host
       - smartxdr-core-data:/app/db/app_data
@@ -58,6 +60,9 @@ services:
       - ./prompts:/app/prompts:ro
       - ./assets:/app/assets:ro
       - ./sources_config:/app/sources_config:ro
+      # Development: mount scripts and app for live reload
+      - ./scripts:/app/scripts:ro
+      - ./app:/app/app:ro
     networks:
       - smartxdr-net
     restart: unless-stopped
@@ -79,7 +84,7 @@ services:
     image: chromadb/chroma:latest
     container_name: smartxdr-chromadb-data
     ports:
-      - "${CHROMA_PORT:-8000}:8000" # ChromaDB API
+      - "${CHROMA_DATA_EXTERNAL_PORT:-8000}:8000" # ChromaDB API
     volumes:
       # Mount to /data (ChromaDB's default persist path)
       - ${CHROMA_DB_SOURCE:-chroma-db}:/data
@@ -102,7 +107,7 @@ services:
     image: chromadb/chroma:latest
     container_name: smartxdr-chromadb-conv
     ports:
-      - "${CHROMA_CONV_PORT:-8001}:8000" # Different external port
+      - "${CHROMA_CONV_EXTERNAL_PORT:-8001}:8000" # Different external port
     volumes:
       - chroma-conv:/data
     environment:

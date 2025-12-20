@@ -78,20 +78,37 @@ class IRISService:
             # custom_attributes is a dict, check if IntelOwl Report exists
             for key, value in custom_attrs.items():
                 logger.debug(f" Checking key: {key}")
-                if 'IntelOwl' in str(key) or 'intelowl' in str(key).lower():
+                # Case-insensitive check and handle different naming conventions
+                if any(x in str(key).lower() for x in ['intelowl', 'intel_owl', 'owl_report']):
                     intelowl_tab = value
                     logger.debug(f" Found IntelOwl data in key: {key}")
                     break
         elif isinstance(custom_attrs, list):
-            # custom_attributes is a list of objects
+            # custom_attributes is a list of objects (common in IRIS)
             for attr in custom_attrs:
-                if isinstance(attr, dict) and attr.get('tab_name') == 'IntelOwl Report':
+                if not isinstance(attr, dict):
+                    continue
+                
+                # Check tab_name or label
+                tab_name = str(attr.get('tab_name', '')).lower()
+                label = str(attr.get('label', '')).lower()
+                
+                if 'intelowl' in tab_name or 'intelowl' in label:
                     intelowl_tab = attr
-                    logger.debug(f" Found IntelOwl tab in list")
+                    logger.debug(f" Found IntelOwl tab in list via name/label")
+                    break
+                    
+        # If still not found, check if the report is directly in ioc_data (sometimes flat)
+        if not intelowl_tab:
+            for key, value in ioc_data.items():
+                if 'intelowl' in str(key).lower() and value:
+                    intelowl_tab = value
+                    logger.debug(f" Found IntelOwl data in root key: {key}")
                     break
         
         if not intelowl_tab:
-            logger.debug(f" No IntelOwl Report found in custom_attributes")
+            logger.warning(f" No IntelOwl Report found for IOC {ioc_id} (Case {case_id})")
+            logger.debug(f" Available keys: {list(custom_attrs.keys()) if isinstance(custom_attrs, dict) else 'N/A'}")
             return None
         
         # DEBUG: Chi tiết IntelOwl tab
@@ -442,6 +459,10 @@ class IRISService:
             logger.warning("update_ioc called with no fields to update")
             return {"status": "warning", "message": "No fields to update"}
         
+        # Log request details
+        logger.info(f"update_ioc: ioc_id={ioc_id}, case_id={case_id}")
+        logger.info(f"update_ioc payload: {payload}")
+        
         response = requests.post(
             f"{self.iris_url}/case/ioc/update/{ioc_id}",
             headers={
@@ -453,8 +474,14 @@ class IRISService:
             verify=verify
         )
         
+        # Log full response
+        logger.info(f"update_ioc response: HTTP {response.status_code}")
+        logger.info(f"update_ioc response body: {response.text[:1000] if response.text else 'empty'}")
+        
         if response.status_code not in [200, 201]:
+            logger.error(f"Failed to update IOC {ioc_id}: HTTP {response.status_code} - {response.text}")
             raise Exception(f"Failed to update IOC: {response.text}")
         
-        logger.info(f"Updated IOC {ioc_id} in case {case_id}")
+        # Log success details
+        logger.info(f"Updated IOC {ioc_id} in case {case_id}. Payload: {list(payload.keys())}")
         return response.json()

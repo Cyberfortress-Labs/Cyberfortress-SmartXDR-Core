@@ -71,36 +71,64 @@ def explain_intelowl():
     
     # 5. Update IOC description với summary (nếu enabled)
     description_updated = False
+    print(f"[DEBUG DESC] update_description={update_description}")
     if update_description:
         try:
             # Summarize the analysis for description (max 1000 chars)
+            print(f"[DEBUG DESC] Calling summarize_for_ioc_description with text length: {len(comment_text)}")
             summary = llm_svc.summarize_for_ioc_description(comment_text, max_length=1000)
+            print(f"[DEBUG DESC] summary returned: {type(summary)}, length: {len(summary) if summary else 0}")
+            print(f"[DEBUG DESC] summary preview: {summary[:200] if summary else 'EMPTY/NONE'}")
             
             if summary:
-                # Get current IOC description (để append, không ghi đè)
+                # 1. Get current IOC data (để lấy description và tags)
                 ioc_data = iris_svc.get_ioc(case_id, ioc_id)
                 current_desc = ioc_data.get('ioc_description', '') or ''
+                current_tags = ioc_data.get('ioc_tags', '') or ''
                 
-                # Build new description
+                # 2. Build SmartXDR section
                 from datetime import datetime
                 timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-                smartxdr_summary = f"[SmartXDR {timestamp}] {summary}"
+                risk_label = f"[{ai_analysis['risk_level']}]"
+                smartxdr_header = f"--- [SmartXDR AI Analysis {timestamp}] {risk_label} ---"
+                smartxdr_summary = f"{smartxdr_header}\n{summary}"
                 
-                if current_desc.strip():
-                    new_desc = f"{current_desc}\n\n{smartxdr_summary}"
+                # 3. Clean old SmartXDR summaries để tránh trùng lặp
+                # Tìm và loại bỏ các đoạn cũ bắt đầu bằng --- [SmartXDR AI Analysis ... ---
+                import re
+                cleaned_desc = re.sub(r'--- \[SmartXDR AI Analysis .*? ---.*?(\n\n|$)', '', current_desc, flags=re.DOTALL).strip()
+                
+                # 4. Prepend new summary (đưa lên đầu cho dễ thấy)
+                if cleaned_desc:
+                    new_desc = f"{smartxdr_summary}\n\n{cleaned_desc}"
                 else:
                     new_desc = smartxdr_summary
                 
+                # 5. Handle Tags
+                tags_list = [t.strip() for t in current_tags.split(',') if t.strip()]
+                
+                # Add standard tags
+                new_tags = ['smartxdr-analyzed', f"risk:{ai_analysis['risk_level'].lower()}"]
+                for tag in new_tags:
+                    if tag not in tags_list:
+                        tags_list.append(tag)
+                
                 # Update IOC
-                iris_svc.update_ioc(
+                print(f"[DEBUG] Calling update_ioc with description length: {len(new_desc)}")
+                print(f"[DEBUG] Tags to update: {','.join(tags_list)}")
+                result = iris_svc.update_ioc(
                     case_id=case_id,
                     ioc_id=ioc_id,
-                    description=new_desc
+                    description=new_desc,
+                    tags=",".join(tags_list)
                 )
+                print(f"[DEBUG] update_ioc result: {result}")
                 description_updated = True
-                print(f"[INFO] Updated IOC {ioc_id} description")
+                print(f"[INFO] Updated IOC {ioc_id} description and tags")
         except Exception as e:
-            print(f"[WARNING] Failed to update IOC description: {e}")
+            print(f"[ERROR] Failed to update IOC metadata: {e}")
+            import traceback
+            traceback.print_exc()
     
     return jsonify({
         "status": "success",

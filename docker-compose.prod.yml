@@ -42,9 +42,9 @@ services:
       - TELEGRAM_BOT_ENABLED=${TELEGRAM_BOT_ENABLED:-true}
       - ELASTICSEARCH_ENABLED=${ELASTICSEARCH_ENABLED:-true}
       - CHROMA_HOST=${CHROMA_DATA_HOST:-chromadb-data}
-      - CHROMA_PORT=${CHROMA_PORT:-8000}
+      - CHROMA_PORT=8000
       - CHROMA_CONV_HOST=${CHROMA_CONV_HOST:-chromadb-conv}
-      - CHROMA_CONV_PORT=${CHROMA_CONV_PORT:-8000}
+      - CHROMA_CONV_PORT=8000
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     env_file:
@@ -88,7 +88,7 @@ services:
     image: chromadb/chroma:latest
     container_name: smartxdr-chromadb-data
     ports:
-      - "${CHROMA_PORT:-8000}:8000" # ChromaDB API
+      - "${CHROMA_DATA_EXTERNAL_PORT:-8000}:8000" # ChromaDB API
     volumes:
       # Mount to /data (ChromaDB's default persist path)
       - ${CHROMA_DB_SOURCE:-chroma-db}:/data
@@ -118,7 +118,7 @@ services:
     image: chromadb/chroma:latest
     container_name: smartxdr-chromadb-conv
     ports:
-      - "${CHROMA_CONV_PORT:-8001}:8000" # Different external port
+      - "${CHROMA_CONV_EXTERNAL_PORT:-8001}:8000" # Different external port
     volumes:
       - chroma-conv:/data
     environment:

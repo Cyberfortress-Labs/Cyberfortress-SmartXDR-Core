@@ -103,23 +103,31 @@ class LLMService:
         Returns:
             Concise summary string for IOC description
         """
+        logger.info(f"[summarize_for_ioc_description] Input length: {len(comment_text) if comment_text else 0}")
+        
         if not comment_text:
+            logger.warning("[summarize_for_ioc_description] Empty comment_text, returning ''")
             return ""
         
         # Remove the [SmartXDR AI Analysis] header if present
         clean_text = comment_text.replace("[SmartXDR AI Analysis]", "").strip()
+        logger.info(f"[summarize_for_ioc_description] Clean text length: {len(clean_text)}")
         
         # If already short enough, just clean it
         if len(clean_text) <= max_length:
+            logger.info(f"[summarize_for_ioc_description] Text short enough, returning directly ({len(clean_text)} <= {max_length})")
             return clean_text
         
         # Load prompt from file
+        logger.info(f"[summarize_for_ioc_description] Text too long ({len(clean_text)} > {max_length}), calling LLM...")
         system_prompt, user_template = self._load_ioc_summary_prompt()
         user_prompt = user_template.format(content=clean_text[:2000])
+        logger.info(f"[summarize_for_ioc_description] Prompt loaded, user_prompt length: {len(user_prompt)}")
         
         # Use LLM to summarize with SUMMARY_MODEL
         try:
             from app.config import SUMMARY_MODEL
+            logger.info(f"[summarize_for_ioc_description] Using SUMMARY_MODEL: {SUMMARY_MODEL}")
             
             response = self.openai_client.chat.completions.create(
                 model=SUMMARY_MODEL,
@@ -130,7 +138,15 @@ class LLMService:
                 max_completion_tokens=800
             )
             
-            summary = response.choices[0].message.content.strip()
+            logger.info(f"[summarize_for_ioc_description] LLM response received")
+            summary = response.choices[0].message.content.strip() if response.choices[0].message.content else ""
+            logger.info(f"[summarize_for_ioc_description] Summary from LLM: length={len(summary)}, preview={summary[:100] if summary else 'EMPTY'}")
+            
+            # If LLM returned empty, use fallback (truncated text)
+            if not summary:
+                logger.warning(f"[summarize_for_ioc_description] LLM returned EMPTY, using fallback")
+                summary = clean_text[:max_length-3] + "..." if len(clean_text) > max_length else clean_text
+                logger.info(f"[summarize_for_ioc_description] Fallback summary length: {len(summary)}")
             
             # Only truncate if significantly over limit
             if len(summary) > max_length:
@@ -139,9 +155,11 @@ class LLMService:
             return summary
             
         except Exception as e:
-            logger.warning(f"Failed to summarize comment: {e}")
+            logger.error(f"[summarize_for_ioc_description] LLM FAILED: {e}", exc_info=True)
             # Fallback: truncate the original text
-            return clean_text[:max_length-3] + "..." if len(clean_text) > max_length else clean_text
+            fallback = clean_text[:max_length-3] + "..." if len(clean_text) > max_length else clean_text
+            logger.info(f"[summarize_for_ioc_description] Using fallback, length: {len(fallback)}")
+            return fallback
     
     def _load_ioc_summary_prompt(self) -> tuple:
         """
@@ -1027,14 +1045,15 @@ Chỉ trả về text summary, không thêm prefix hay formatting."""
         """
         findings = []
         
-        for report in analyzer_reports[:5]:  # Top 5
+        for report in analyzer_reports:
             if report.get('status') == 'SUCCESS':
                 findings.append({
                     "analyzer": report.get('name'),
-                    "status": report.get('status')
+                    "status": report.get('status'),
+                    "summary": report.get('report', {}).get('summary', 'SUCCESS')
                 })
         
-        return findings
+        return findings[:10]  # Return up to 10 findings
     
     def _extract_recommendations(self, ai_text: str) -> list:
         """
@@ -1046,8 +1065,12 @@ Chỉ trả về text summary, không thêm prefix hay formatting."""
         
         for line in lines:
             line = line.strip()
-            if line.startswith('-') or line.startswith('') or (line and line[0].isdigit() and '.' in line):
-                recommendations.append(line.lstrip('-0123456789. '))
+            # Fix: line.startswith('') was always True. Check for content and list markers.
+            if line and (line.startswith('-') or line.startswith('*') or (line[0].isdigit() and '.' in line)):
+                # Clean up marker
+                clean_line = re.sub(r'^[\-\*\d\.\s]+', '', line).strip()
+                if clean_line:
+                    recommendations.append(clean_line)
         
         return recommendations[:5]  # Top 5
     

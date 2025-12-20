@@ -48,10 +48,10 @@ CHROMA_DB_PATH = DB_PATH  # Alias for RAG module (local mode)
 CHROMA_HOST = os.environ.get('CHROMA_HOST', None)  # Set to 'chromadb' in Docker
 CHROMA_PORT = int(os.environ.get('CHROMA_PORT', '8000'))
 
-# OpenAI model settings
-EMBEDDING_MODEL = "text-embedding-3-small"
-CHAT_MODEL = "gpt-5-mini"  # OpenAI's efficient small model
-SUMMARY_MODEL = "gpt-5-nano"  # OpenAI's summary model
+# OpenAI model settings (from .env with defaults)
+EMBEDDING_MODEL = os.environ.get('EMBEDDING_MODEL', 'text-embedding-3-small')
+CHAT_MODEL = os.environ.get('CHAT_MODEL', 'gpt-5-mini')
+SUMMARY_MODEL = os.environ.get('SUMMARY_MODEL', 'gpt-5-mini')
 # OpenAI client configuration (following best practices)
 # https://platform.openai.com/docs/api-reference
 OPENAI_TIMEOUT = 600.0  # 10 minutes default timeout

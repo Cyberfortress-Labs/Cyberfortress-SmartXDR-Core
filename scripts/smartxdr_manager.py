@@ -196,8 +196,18 @@ def login_admin() -> bool:
 ║                                                          ║
 ╚══════════════════════════════════════════════════════════╝
     """)
-    
     max_attempts = 3
+    
+    # DEBUG: List all users to see what's in the DB
+    try:
+        users = User.query.all()
+        print(f"  [DEBUG DB] Found {len(users)} users in database:")
+        for u in users:
+            roles = [r.name for r in u.roles]
+            print(f"  - {u.username} ({u.email}) | Roles: {roles} | Active: {u.active}")
+    except Exception as e:
+        print(f"  [DEBUG DB] Error listing users: {e}")
+        
     for attempt in range(max_attempts):
         remaining = max_attempts - attempt
         print(f"\n  Attempts remaining: {remaining}")
@@ -218,12 +228,36 @@ def login_admin() -> bool:
         ).first()
         
         if not user:
-            print("  ✗ User not found")
+            print(f"  ✗ User '{username_or_email}' not found")
             continue
         
-        # Verify password using Flask-Security (handles HMAC + Argon2)
-        if not verify_and_update_password(password, user):
-            print("  ✗ Invalid password")
+        # Verify password
+        # Flask-Security uses HMAC + Argon2, but some hashes may be raw Argon2
+        # Try Flask-Security first, then fall back to direct passlib verification
+        is_valid = False
+        
+        try:
+            # Try Flask-Security verification first (HMAC + Argon2)
+            is_valid = verify_and_update_password(password, user)
+        except Exception as e:
+            print(f"  [DEBUG] Flask-Security verification error: {e}")
+        
+        if not is_valid and user.password and user.password.startswith('$argon2'):
+            # Fallback: Direct Argon2 verification for raw hashes
+            try:
+                from passlib.hash import argon2
+                is_valid = argon2.verify(password, user.password)
+                if is_valid:
+                    print(f"  [DEBUG] Password verified via direct Argon2")
+            except Exception as e:
+                print(f"  [DEBUG] Direct Argon2 verification error: {e}")
+            
+        if not is_valid:
+            print(f"  ✗ Invalid password for user '{user.username}'")
+            # Debug: show password hash info
+            if user.password:
+                print(f"  [DEBUG] Password hash length: {len(user.password)}")
+                print(f"  [DEBUG] Hash prefix: {user.password[:30]}...")
             continue
         
         # Check if user has admin role
