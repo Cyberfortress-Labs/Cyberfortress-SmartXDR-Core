@@ -4,7 +4,6 @@ services:
     build:
       context: ./nginx
       dockerfile: Dockerfile
-    image: smartxdr-nginx:dev
     container_name: smartxdr-nginx
     ports:
       - "${NGINX_HTTPS_PORT:-8443}:8443"
@@ -32,7 +31,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: wanthinnn/smartxdr-core:dev
     container_name: smartxdr-core
     environment:
       - FLASK_ENV=${FLASK_ENV:-production}

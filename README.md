@@ -95,35 +95,49 @@ Services:
 
 ## Deployment Modes
 
-SmartXDR supports two deployment modes:
+SmartXDR supports two deployment modes with distinct image sourcing strategies:
 
-### Development Mode (Default)
+### Development Mode (Local Build)
 
+**Image Source**: Built locally from source code
+
+```bash
+./start --dev build    # Build images from local source
+./start --dev start    # Start services
+```
+
+Or simply (development is default):
 ```bash
 ./start build
 ./start start
 ```
 
-- **Builds images from source code** locally
-- Best for development and testing
-- Allows code modifications
-- Uses `docker-compose.yml`
-- Images tagged as `:dev`
+**Characteristics:**
+- Images are **compiled from source code** on your machine
+- Full control over code modifications and debugging
+- Requires build time (~5-10 minutes initial build)
+- Uses `docker-compose.yml` configuration
+- Ideal for: Development, testing, code contributions
+- **No Docker Hub account required**
 
-### Production Mode
+### Production Mode (Registry Pull)
+
+**Image Source**: Pre-built images from Docker Hub
 
 ```bash
-./start --prod pull
-./start --prod start
+./start --prod pull    # Pull pre-built images from registry
+./start --prod start   # Start services
 ```
 
-- **Pulls pre-built images from Docker Hub** (`wanthinnn/smartxdr-core:latest`)
-- Best for production deployments
-- Faster startup (no build time)
-- Uses `docker-compose.prod.yml`
-- Images tagged as `:latest`
+**Characteristics:**
+- Images are **pulled from Docker Hub** (`wanthinnn/smartxdr-core:latest`, `smartxdr-nginx:latest`)
+- Zero build time - instant deployment
+- Optimized images with production settings
+- Uses `docker-compose.prod.yml` configuration
+- Higher resource limits (4GB RAM vs 2GB)
+- Ideal for: Production deployments, quick setups, stable releases
 
-> **Note**: Production mode uses optimized images with better resource limits and security settings.
+> **Key Difference**: Dev mode builds images locally using Dockerfile, while Prod mode downloads pre-built images from container registry.
 
 ## Quick Start
 
@@ -161,10 +175,10 @@ Required environment variables:
 
 ```bash
 # Build Docker images from source
-./start build
+./start --dev build
 
 # Start all services
-./start start
+./start --dev start
 ```
 
 **Production Mode (use pre-built images):**
@@ -489,8 +503,9 @@ The `./start` script provides a convenient interface for all operations:
 # ============================================================
 # DEPLOYMENT MODES
 # ============================================================
-# Development (default) - Build from source code
-./start <command>
+# Development - Build from source code
+./start --dev <command>
+./start <command>              # Same as --dev (default)
 
 # Production - Use pre-built Docker Hub images  
 ./start --prod <command>
@@ -537,10 +552,9 @@ The `./start` script provides a convenient interface for all operations:
 
 | Feature | Development Mode | Production Mode |
 |---------|-----------------|------------------|
-| **Command** | `./start <cmd>` | `./start --prod <cmd>` |
+| **Command** | `./start --dev <cmd>` or `./start <cmd>` | `./start --prod <cmd>` |
 | **Docker Compose** | `docker-compose.yml` | `docker-compose.prod.yml` |
 | **Images** | Built from source | Pulled from Docker Hub |
-| **Image Tags** | `:dev` | `:latest` |
 | **Build Time** | ~5-10 minutes | None (pre-built) |
 | **Startup Time** | Slower | Faster |
 | **Code Changes** | Applied immediately | Requires new image release |
@@ -551,10 +565,10 @@ The `./start` script provides a convenient interface for all operations:
 
 ```bash
 # Development workflow
-./start build              # Build from source
-./start start              # Start services
-./start logs api           # Check logs
-./start shell              # Debug in container
+./start --dev build        # Build from source
+./start --dev start        # Start services
+./start --dev logs api     # Check logs
+./start --dev shell        # Debug in container
 
 # Production workflow  
 ./start --prod pull        # Pull latest images
