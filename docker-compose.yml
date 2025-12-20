@@ -51,7 +51,7 @@ services:
         condition: service_started
     volumes:
       # Database directory - bind mount to preserve data on host
-      - ./db/app_data:/app/db/app_data
+      - smartxdr-core-data:/app/db/app_data
       - ./logs:/app/logs
       # Read-only configs
       - ./certs:/app/certs:ro
@@ -171,3 +171,8 @@ volumes:
   nginx-logs:
     driver: local
     name: smartxdr-nginx-logs
+
+  # SmartXDR Core data
+  smartxdr-core-data:
+    driver: local
+    name: smartxdr-core-data
