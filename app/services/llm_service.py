@@ -88,7 +88,7 @@ class LLMService:
     
     # ==================== IOC Enrichment Methods ====================
     
-    def summarize_for_ioc_description(self, comment_text: str, max_length: int = 200) -> str:
+    def summarize_for_ioc_description(self, comment_text: str, max_length: int = 1000) -> str:
         """
         Tóm tắt SmartXDR comment thành description ngắn gọn cho IOC
         
@@ -98,7 +98,7 @@ class LLMService:
         
         Args:
             comment_text: Full comment text từ SmartXDR AI Analysis
-            max_length: Maximum length của summary (default: 200 chars)
+            max_length: Maximum length của summary (default: 1000 chars)
         
         Returns:
             Concise summary string for IOC description
@@ -127,13 +127,12 @@ class LLMService:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.3,
-                max_tokens=500  # Allow longer summaries
+                max_completion_tokens=800
             )
             
             summary = response.choices[0].message.content.strip()
             
-            # Ensure max length
+            # Only truncate if significantly over limit
             if len(summary) > max_length:
                 summary = summary[:max_length-3] + "..."
             
