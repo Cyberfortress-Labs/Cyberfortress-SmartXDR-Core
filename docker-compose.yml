@@ -47,7 +47,7 @@ services:
     env_file:
       - .env
     depends_on:
-      chromadb:
+      chromadb-data:
         condition: service_started
     volumes:
       # Database directory - bind mount to preserve data on host
@@ -75,7 +75,7 @@ services:
           memory: 512M
 
   # ChromaDB Vector Database Service (RAG Knowledge Base)
-  chromadb:
+  chromadb-data:
     image: chromadb/chroma:latest
     container_name: smartxdr-chromadb-data
     ports:
@@ -89,8 +89,9 @@ services:
     networks:
       - smartxdr-net
     restart: unless-stopped
+    # Health check using bash /dev/tcp (from ChromaDB cookbook)
     healthcheck:
-      test: [ "CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/heartbeat')" ]
+      test: [ "CMD", "/bin/bash", "-c", "cat < /dev/null > /dev/tcp/localhost/8000" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -110,8 +111,9 @@ services:
     networks:
       - smartxdr-net
     restart: unless-stopped
+    # Health check using bash /dev/tcp (from ChromaDB cookbook)
     healthcheck:
-      test: [ "CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/heartbeat')" ]
+      test: [ "CMD", "/bin/bash", "-c", "cat < /dev/null > /dev/tcp/localhost/8000" ]
       interval: 30s
       timeout: 10s
       retries: 3
