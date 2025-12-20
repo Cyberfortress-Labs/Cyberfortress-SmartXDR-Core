@@ -41,10 +41,10 @@ services:
       - API_AUTH_ENABLED=${API_AUTH_ENABLED:-true}
       - TELEGRAM_BOT_ENABLED=${TELEGRAM_BOT_ENABLED:-true}
       - ELASTICSEARCH_ENABLED=${ELASTICSEARCH_ENABLED:-true}
-      - CHROMA_HOST=chromadb
-      - CHROMA_PORT=8000
-      - CHROMA_CONV_HOST=chromadb-conv
-      - CHROMA_CONV_PORT=8000
+      - CHROMA_HOST=${CHROMA_DATA_HOST:-chromadb-data}
+      - CHROMA_PORT=${CHROMA_PORT:-8000}
+      - CHROMA_CONV_HOST=${CHROMA_CONV_HOST:-chromadb-conv}
+      - CHROMA_CONV_PORT=${CHROMA_CONV_PORT:-8000}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     env_file:
