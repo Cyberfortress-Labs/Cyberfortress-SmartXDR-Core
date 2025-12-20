@@ -1,5 +1,8 @@
 """
 Cyberfortress SmartXDR Core - Flask Application Entry Point
+This script only runs for local development and testing.
+In production, use the Gunicorn server defined in the Dockerfile.
+Please refer to the README for more information.
 """
 import os
 import sys

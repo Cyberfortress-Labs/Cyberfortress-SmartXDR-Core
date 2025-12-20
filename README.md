@@ -22,7 +22,7 @@ SmartXDR Core is an intelligent security operations platform that leverages Larg
 
 - RAG-based question answering with knowledge base
 - Semantic caching for improved response times
-- Support for OpenAI and Gemini models
+- Support for OpenAI models
 - Customizable prompts for different use cases
 
 ### IOC Enrichment
@@ -87,7 +87,7 @@ Services:
 ## Requirements
 
 - Docker and Docker Compose
-- OpenAI API Key or Gemini API Key (required)
+- OpenAI API Key (required)
 - Elasticsearch 8.x (optional, for log triage features)
 - IRIS instance (optional, for IOC enrichment)
 - Telegram Bot Token (optional, for Telegram integration)
@@ -151,7 +151,6 @@ Required environment variables:
 | `OPENAI_API_KEY`         | OpenAI API key for LLM        | Yes      |
 | `SECRET_KEY`             | Flask secret key              | Yes      |
 | `SECURITY_PASSWORD_SALT` | Salt for password hashing     | Yes      |
-| `GEMINI_API_KEY`         | Alternative: Google Gemini    | No       |
 | `TELEGRAM_BOT_TOKEN`     | Telegram bot token            | No       |
 | `ELASTICSEARCH_HOSTS`    | Elasticsearch URL             | No       |
 | `IRIS_API_URL`           | IRIS instance URL             | No       |
@@ -210,7 +209,6 @@ curl -X POST https://localhost:8443/api/ai/ask \
 | Variable                 | Description                        | Required | Default |
 | ------------------------ | ---------------------------------- | -------- | ------- |
 | `OPENAI_API_KEY`         | OpenAI API key for LLM             | Yes      | -       |
-| `GEMINI_API_KEY`         | Alternative: Google Gemini API key | No       | -       |
 | `SECRET_KEY`             | Flask secret key for sessions      | Yes      | -       |
 | `SECURITY_PASSWORD_SALT` | Salt for password hashing          | Yes      | -       |
 | `DEBUG`                  | Enable debug mode                  | No       | false   |
