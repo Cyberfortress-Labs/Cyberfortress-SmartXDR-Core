@@ -88,9 +88,9 @@ class LLMService:
     
     # ==================== IOC Enrichment Methods ====================
     
-    def summarize_for_ioc_description(self, comment_text: str, max_length: int = 1000) -> str:
+    def summarize_for_ioc_description(self, comment_text: str, max_length: int = 300) -> str:
         """
-        Tóm tắt SmartXDR comment thành description ngắn gọn cho IOC
+        Tóm tắt SmartXDR comment thành description ngắn gọn kiểu CTI cho IOC
         
         Uses:
         - prompts/instructions/ioc_description_summary.json for prompt
@@ -98,10 +98,10 @@ class LLMService:
         
         Args:
             comment_text: Full comment text từ SmartXDR AI Analysis
-            max_length: Maximum length của summary (default: 1000 chars)
+            max_length: Maximum length của summary (default: 300 chars)
         
         Returns:
-            Concise summary string for IOC description
+            Concise paragraph summary string for IOC description (2-3 sentences)
         """
         logger.info(f"[summarize_for_ioc_description] Input length: {len(comment_text) if comment_text else 0}")
         
@@ -109,22 +109,28 @@ class LLMService:
             logger.warning("[summarize_for_ioc_description] Empty comment_text, returning ''")
             return ""
         
-        # Remove the [SmartXDR AI Analysis] header if present
-        clean_text = comment_text.replace("[SmartXDR AI Analysis]", "").strip()
+        # Remove headers and clean text
+        clean_text = comment_text
+        headers_to_remove = [
+            "[SmartXDR AI Analysis]",
+            "[SmartXDR AI Analysis - IntelOwl]",
+            "[SmartXDR AI Analysis - MISP]"
+        ]
+        for header in headers_to_remove:
+            clean_text = clean_text.replace(header, "")
+        clean_text = clean_text.strip()
+        
         logger.info(f"[summarize_for_ioc_description] Clean text length: {len(clean_text)}")
         
-        # If already short enough, just clean it
-        if len(clean_text) <= max_length:
-            logger.info(f"[summarize_for_ioc_description] Text short enough, returning directly ({len(clean_text)} <= {max_length})")
-            return clean_text
+        # Load prompt and settings from file
+        system_prompt, user_template, settings = self._load_ioc_summary_prompt()
+        max_length = settings.get('max_chars', max_length)
         
-        # Load prompt from file
-        logger.info(f"[summarize_for_ioc_description] Text too long ({len(clean_text)} > {max_length}), calling LLM...")
-        system_prompt, user_template = self._load_ioc_summary_prompt()
+        # Always call LLM to get proper CTI-style summary
+        # (even if text is short, it may be in wrong format)
         user_prompt = user_template.format(content=clean_text[:2000])
-        logger.info(f"[summarize_for_ioc_description] Prompt loaded, user_prompt length: {len(user_prompt)}")
+        logger.info(f"[summarize_for_ioc_description] Calling LLM for CTI-style summary...")
         
-        # Use LLM to summarize with SUMMARY_MODEL
         try:
             from app.config import SUMMARY_MODEL
             logger.info(f"[summarize_for_ioc_description] Using SUMMARY_MODEL: {SUMMARY_MODEL}")
@@ -134,31 +140,43 @@ class LLMService:
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
-                ],
-                max_completion_tokens=800
+                ]
             )
             
-            logger.info(f"[summarize_for_ioc_description] LLM response received")
             summary = response.choices[0].message.content.strip() if response.choices[0].message.content else ""
-            logger.info(f"[summarize_for_ioc_description] Summary from LLM: length={len(summary)}, preview={summary[:100] if summary else 'EMPTY'}")
+            logger.info(f"[summarize_for_ioc_description] Summary from LLM: length={len(summary)}")
             
-            # If LLM returned empty, use fallback (truncated text)
+            # If LLM returned empty, use simple fallback
             if not summary:
                 logger.warning(f"[summarize_for_ioc_description] LLM returned EMPTY, using fallback")
+                # Create simple fallback summary
                 summary = clean_text[:max_length-3] + "..." if len(clean_text) > max_length else clean_text
-                logger.info(f"[summarize_for_ioc_description] Fallback summary length: {len(summary)}")
             
-            # Only truncate if significantly over limit
+            # Truncate if over limit - ensure complete sentence
             if len(summary) > max_length:
-                summary = summary[:max_length-3] + "..."
+                # Try to cut at last complete sentence within limit
+                truncated = summary[:max_length]
+                last_period = truncated.rfind('.')
+                last_exclaim = truncated.rfind('!')
+                last_question = truncated.rfind('?')
+                last_sentence_end = max(last_period, last_exclaim, last_question)
+                
+                if last_sentence_end > max_length // 2:
+                    summary = truncated[:last_sentence_end + 1]
+                else:
+                    # No good sentence break found, just use as is (LLM should have made it short)
+                    summary = truncated.rstrip()
             
             return summary
             
         except Exception as e:
             logger.error(f"[summarize_for_ioc_description] LLM FAILED: {e}", exc_info=True)
-            # Fallback: truncate the original text
-            fallback = clean_text[:max_length-3] + "..." if len(clean_text) > max_length else clean_text
-            logger.info(f"[summarize_for_ioc_description] Using fallback, length: {len(fallback)}")
+            # Fallback: create simple summary from first sentence
+            first_period = clean_text.find('.')
+            if first_period > 0 and first_period < max_length:
+                fallback = clean_text[:first_period + 1]
+            else:
+                fallback = clean_text[:max_length]
             return fallback
     
     def _load_ioc_summary_prompt(self) -> tuple:
@@ -166,18 +184,18 @@ class LLMService:
         Load IOC summary prompt from JSON file
         
         Returns:
-            Tuple of (system_prompt, user_prompt_template)
+            Tuple of (system_prompt, user_prompt_template, settings)
         """
         import json
         
         prompt_file = self.prompts_dir / "instructions" / "ioc_description_summary.json"
         
         # Fallback prompts if file not found
-        fallback_system = """Bạn là AI assistant chuyên tóm tắt báo cáo phân tích IOC.
-Nhiệm vụ: Tóm tắt nội dung phân tích thành 1-2 câu ngắn gọn (tối đa 200 ký tự).
-Tập trung vào: mức độ nguy hiểm, loại threat, và recommendation chính.
-Chỉ trả về text summary, không thêm prefix hay formatting."""
-        fallback_user = "Tóm tắt phân tích IOC sau:\n\n{content}"
+        fallback_system = """Bạn là chuyên gia CTI.
+Viết MỘT ĐOẠN VĂN NGẮN (2-3 câu, tối đa 250 ký tự) mô tả IOC.
+KHÔNG dùng bullet points hay list. Chỉ viết 1 đoạn văn liền mạch."""
+        fallback_user = "Viết MỘT ĐOẠN VĂN NGẮN mô tả IOC:\n\n{content}"
+        fallback_settings = {"max_chars": 300}
         
         try:
             if prompt_file.exists():
@@ -185,12 +203,13 @@ Chỉ trả về text summary, không thêm prefix hay formatting."""
                     data = json.load(f)
                 return (
                     data.get('system_prompt', fallback_system),
-                    data.get('user_prompt_template', fallback_user)
+                    data.get('user_prompt_template', fallback_user),
+                    data.get('settings', fallback_settings)
                 )
         except Exception as e:
             logger.warning(f"Failed to load IOC summary prompt: {e}")
         
-        return (fallback_system, fallback_user)
+        return (fallback_system, fallback_user, fallback_settings)
     
     # ==================== RAG Query Methods ====================
     
