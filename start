@@ -77,7 +77,7 @@ case "$COMMAND" in
         
         # Check for local SQLite database
         if [ -f "db/app_data/smartxdr.sqlite3" ]; then
-            printf "${GREEN}Found local database - mounting db/app_data/smartxdr.sqlite3${NC}\n"
+            printf "${GREEN}Found local database - mounting as volume${NC}\n"
         else
             printf "${YELLOW}⚠ No local database found - will create new database${NC}\n"
         fi
