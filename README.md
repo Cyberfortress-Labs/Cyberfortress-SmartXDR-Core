@@ -22,7 +22,7 @@ SmartXDR Core is an intelligent security operations platform that leverages Larg
 
 - RAG-based question answering with knowledge base
 - Semantic caching for improved response times
-- Support for OpenAI and Gemini models
+- Support for OpenAI models
 - Customizable prompts for different use cases
 
 ### IOC Enrichment
@@ -64,21 +64,66 @@ SmartXDR Core
 │   ├── models/           # SQLAlchemy database models
 │   ├── middleware/       # Authentication and authorization
 │   ├── api_config/       # Endpoint configuration
-│   └── utils/            # Cryptography and utilities
+│   ├── core/             # Core functionality (RAG, embeddings, query)
+│   └── utils/            # Utilities (crypto, cache, logger, rate limit)
 ├── scripts/              # Management CLI tools
 ├── prompts/              # LLM prompt templates
-├── data/                 # SQLite database
-├── chroma_db/            # Vector database storage
-├── nginx/                # Reverse proxy configuration
+├── db/app_data/          # SQLite database storage
+├── db/chroma_db/         # Vector database (RAG knowledge base)
+├── db/chroma_conv/       # Vector database (conversation history)
+├── nginx/                # Reverse proxy with SSL/TLS
+├── cloudflared/          # Cloudflare Tunnel configuration
 └── tests/                # Unit and integration tests
+
+Services:
+├── nginx         - HTTPS reverse proxy (ports 8080, 8443)
+├── api           - SmartXDR Core API (Flask + Gunicorn)
+├── chromadb      - Vector database for RAG
+├── chromadb-conv - Vector database for conversations
+├── redis         - Cache for conversation memory
+└── cloudflared   - Cloudflare Tunnel (optional)
 ```
 
 ## Requirements
 
 - Docker and Docker Compose
-- OpenAI API Key or Gemini API Key
-- Elasticsearch 8.x (optional, for triage features)
+- OpenAI API Key (required)
+- Elasticsearch 8.x (optional, for log triage features)
 - IRIS instance (optional, for IOC enrichment)
+- Telegram Bot Token (optional, for Telegram integration)
+- Cloudflare Tunnel (optional, for external webhook access)
+
+## Deployment Modes
+
+SmartXDR supports two deployment modes:
+
+### Development Mode (Default)
+
+```bash
+./start build
+./start start
+```
+
+- **Builds images from source code** locally
+- Best for development and testing
+- Allows code modifications
+- Uses `docker-compose.yml`
+- Images tagged as `:dev`
+
+### Production Mode
+
+```bash
+./start --prod pull
+./start --prod start
+```
+
+- **Pulls pre-built images from Docker Hub** (`wanthinnn/smartxdr-core:latest`)
+- Best for production deployments
+- Faster startup (no build time)
+- Uses `docker-compose.prod.yml`
+- Images tagged as `:latest`
+
+> **Note**: Production mode uses optimized images with better resource limits and security settings.
 
 ## Quick Start
 
@@ -89,63 +134,101 @@ git clone https://github.com/cyberfortress/smartxdr-core.git
 cd smartxdr-core
 ```
 
-### 2. Configure Environment
+### 2. Initial Setup
 
 ```bash
-cp .env.example .env
-# Edit .env with your API keys and configuration
+# Setup directories and create .env file
+./start setup
+
+# Edit .env with your API keys
+nano .env
 ```
 
 Required environment variables:
 
-| Variable         | Description            |
-| ---------------- | ---------------------- |
-| `OPENAI_API_KEY` | OpenAI API key for LLM |
-| `SECRET_KEY`     | Flask secret key       |
+| Variable                 | Description                   | Required |
+| ------------------------ | ----------------------------- | -------- |
+| `OPENAI_API_KEY`         | OpenAI API key for LLM        | Yes      |
+| `SECRET_KEY`             | Flask secret key              | Yes      |
+| `SECURITY_PASSWORD_SALT` | Salt for password hashing     | Yes      |
+| `TELEGRAM_BOT_TOKEN`     | Telegram bot token            | No       |
+| `ELASTICSEARCH_HOSTS`    | Elasticsearch URL             | No       |
+| `IRIS_API_URL`           | IRIS instance URL             | No       |
 
-### 3. Start Services
+### 3. Build and Start Services
+
+**Development Mode (build from source):**
 
 ```bash
-# Development (builds from source)
-docker compose up -d
+# Build Docker images from source
+./start build
 
-# Production (pulls from DockerHub)
-docker compose -f docker-compose.prod.yml up -d
+# Start all services
+./start start
+```
+
+**Production Mode (use pre-built images):**
+
+```bash
+# Pull latest images from Docker Hub
+./start --prod pull
+
+# Start all services
+./start --prod start
 ```
 
 ### 4. Initialize Admin Account
 
 ```bash
-docker exec -it smartxdr-core python scripts/smartxdr_manager.py
-# Follow prompts to create first admin user and API key
+# Open SmartXDR Manager CLI
+./start manage
+
+# Follow prompts to:
+# 1. Create first admin user
+# 2. Create API key with permissions
 ```
 
 ### 5. Test API
 
 ```bash
-curl -X POST http://localhost:8080/api/ai/ask \
+# Check health
+curl http://localhost:8080/health
+
+# Test AI endpoint
+curl -X POST https://localhost:8443/api/ai/ask \
   -H "Content-Type: application/json" \
   -H "X-API-Key: YOUR_API_KEY" \
-  -d '{"query": "What is XDR?"}'
+  -d '{"query": "What is XDR?", "session_id": "test"}' \
+  -k
 ```
 
 ## Configuration
 
 ### Environment Variables
 
-| Variable                 | Description                        | Required |
-| ------------------------ | ---------------------------------- | -------- |
-| `OPENAI_API_KEY`         | OpenAI API key for LLM             | Yes      |
-| `GEMINI_API_KEY`         | Alternative: Google Gemini API key | No       |
-| `SECRET_KEY`             | Flask secret key for sessions      | Yes      |
-| `SECURITY_PASSWORD_SALT` | Salt for password hashing          | Yes      |
-| `ELASTICSEARCH_HOSTS`    | Elasticsearch URL                  | No       |
-| `ELASTICSEARCH_USERNAME` | Elasticsearch username             | No       |
-| `ELASTICSEARCH_PASSWORD` | Elasticsearch password             | No       |
-| `IRIS_API_URL`           | IRIS instance URL                  | No       |
-| `IRIS_API_KEY`           | IRIS API key                       | No       |
-| `TELEGRAM_BOT_TOKEN`     | Telegram bot token                 | No       |
-| `API_AUTH_ENABLED`       | Enable API authentication          | No       |
+| Variable                 | Description                        | Required | Default |
+| ------------------------ | ---------------------------------- | -------- | ------- |
+| `OPENAI_API_KEY`         | OpenAI API key for LLM             | Yes      | -       |
+| `SECRET_KEY`             | Flask secret key for sessions      | Yes      | -       |
+| `SECURITY_PASSWORD_SALT` | Salt for password hashing          | Yes      | -       |
+| `DEBUG`                  | Enable debug mode                  | No       | false   |
+| `DEBUG_LLM`              | Enable LLM debug logs              | No       | false   |
+| `DEBUG_ANONYMIZATION`    | Show anonymization process         | No       | false   |
+| `ELASTICSEARCH_HOSTS`    | Elasticsearch URL                  | No       | -       |
+| `ELASTICSEARCH_USERNAME` | Elasticsearch username             | No       | -       |
+| `ELASTICSEARCH_PASSWORD` | Elasticsearch password             | No       | -       |
+| `ELASTICSEARCH_CA_CERT`  | Path to CA certificate             | No       | -       |
+| `IRIS_API_URL`           | IRIS instance URL                  | No       | -       |
+| `IRIS_API_KEY`           | IRIS API key                       | No       | -       |
+| `IRIS_VERIFY_SSL`        | Verify IRIS SSL certificate        | No       | false   |
+| `TELEGRAM_BOT_TOKEN`     | Telegram bot token                 | No       | -       |
+| `TELEGRAM_BOT_ENABLED`   | Enable Telegram bot                | No       | true    |
+| `TELEGRAM_WEBHOOK_ENABLED` | Use webhook mode (vs polling)    | No       | true    |
+| `API_AUTH_ENABLED`       | Enable API authentication          | No       | true    |
+| `NGINX_HTTPS_PORT`       | HTTPS port                         | No       | 8443    |
+| `NGINX_HTTP_PORT`        | HTTP port                          | No       | 8080    |
+| `CHROMA_PORT`            | ChromaDB port                      | No       | 8000    |
+| `REDIS_PORT`             | Redis port                         | No       | 6379    |
 
 ### Endpoint Configuration
 
@@ -155,37 +238,53 @@ Edit `app/api_config/endpoints.py` to configure:
 - Protected endpoints with permission requirements
 - Rate limits per endpoint
 
-### Docker Compose Override
+### Development Mode
 
-Create `docker-compose.override.yml` for local customizations:
+For development with live code reloading, create `docker-compose.override.yml`:
 
 ```yaml
 services:
   api:
     environment:
       - DEBUG=true
+      - FLASK_DEBUG=true
     volumes:
-      - ./app:/app/app:ro
+      - ./app:/app/app:ro  # Mount source code read-only
+    command: flask run --host=0.0.0.0 --port=8080 --reload
+```
+
+Then restart services:
+
+```bash
+./start restart
 ```
 
 ## API Reference
 
-### AI Endpoints
+### AI / LLM Endpoints
 
-| Method | Endpoint              | Permission | Description          |
-| ------ | --------------------- | ---------- | -------------------- |
-| POST   | `/api/ai/ask`         | ai:ask     | Query LLM with RAG   |
-| GET    | `/api/ai/stats`       | ai:stats   | Get usage statistics |
-| POST   | `/api/ai/cache/clear` | ai:admin   | Clear response cache |
+| Method | Endpoint                        | Permission | Description                  |
+| ------ | ------------------------------- | ---------- | ---------------------------- |
+| POST   | `/api/ai/ask`                   | ai:ask     | Query LLM with RAG           |
+| GET    | `/api/ai/sessions/<id>/history` | ai:ask     | Get conversation history     |
+| DELETE | `/api/ai/sessions/<id>`         | ai:ask     | Delete conversation session  |
+| GET    | `/api/ai/sessions/stats`        | ai:stats   | Get session statistics       |
+| GET    | `/api/ai/stats`                 | ai:stats   | Get usage statistics         |
+| POST   | `/api/ai/cache/clear`           | ai:admin   | Clear response cache         |
 
 ### RAG Knowledge Base
 
-| Method | Endpoint             | Permission | Description     |
-| ------ | -------------------- | ---------- | --------------- |
-| POST   | `/api/rag/documents` | rag:write  | Create document |
-| GET    | `/api/rag/documents` | rag:read   | List documents  |
-| POST   | `/api/rag/query`     | rag:query  | RAG query       |
-| GET    | `/api/rag/stats`     | rag:read   | Get statistics  |
+| Method | Endpoint                  | Permission | Description           |
+| ------ | ------------------------- | ---------- | --------------------- |
+| POST   | `/api/rag/documents`      | rag:write  | Create document       |
+| POST   | `/api/rag/documents/batch`| rag:write  | Batch create documents|
+| GET    | `/api/rag/documents`      | rag:read   | List documents        |
+| GET    | `/api/rag/documents/<id>` | rag:write  | Get document          |
+| PUT    | `/api/rag/documents/<id>` | rag:write  | Update document       |
+| DELETE | `/api/rag/documents/<id>` | rag:write  | Delete document       |
+| POST   | `/api/rag/query`          | rag:query  | RAG query             |
+| GET    | `/api/rag/stats`          | rag:read   | Get statistics        |
+| GET    | `/api/rag/health`         | public     | Health check          |
 
 ### IOC Enrichment
 
@@ -197,11 +296,31 @@ services:
 
 ### Triage and Alerts
 
-| Method | Endpoint                        | Permission       | Description           |
-| ------ | ------------------------------- | ---------------- | --------------------- |
-| POST   | `/api/triage/summarize-alerts`  | triage:summarize | Summarize ML alerts   |
-| POST   | `/api/triage/send-report-email` | triage:email     | Send report via email |
-| GET    | `/api/triage/health`            | public           | Health check          |
+| Method | Endpoint                        | Permission       | Description                |
+| ------ | ------------------------------- | ---------------- | -------------------------- |
+| POST   | `/api/triage/summarize-alerts`  | triage:summarize | Summarize ML alerts        |
+| GET/POST| `/api/triage/alerts/summary`   | triage:read      | Get alert summary          |
+| GET    | `/api/triage/alerts/raw`        | triage:read      | Get raw alert data         |
+| GET    | `/api/triage/sources`           | triage:read      | List available log sources |
+| GET    | `/api/triage/alerts/statistics` | triage:read      | Get alert statistics       |
+| GET    | `/api/triage/ml/predictions`    | triage:read      | Get ML predictions         |
+| POST   | `/api/triage/send-report-email` | triage:email     | Send report via email      |
+| POST   | `/api/triage/daily-report/trigger`| triage:admin   | Manually trigger report    |
+| GET    | `/api/triage/health`            | public           | Health check               |
+
+### Telegram Bot
+
+| Method | Endpoint                   | Permission      | Description              |
+| ------ | -------------------------- | --------------- | ------------------------ |
+| POST   | `/api/telegram/webhook`    | public          | Telegram webhook         |
+| POST   | `/api/telegram/webhook/set`| telegram:admin  | Set webhook URL          |
+| POST   | `/api/telegram/webhook/delete`| telegram:admin | Delete webhook        |
+| GET    | `/api/telegram/webhook/info`| telegram:read  | Get webhook info         |
+| GET    | `/api/telegram/status`     | telegram:read   | Get bot status           |
+| POST   | `/api/telegram/start`      | telegram:admin  | Start bot (polling)      |
+| POST   | `/api/telegram/stop`       | telegram:admin  | Stop bot                 |
+| GET    | `/api/telegram/config`     | telegram:read   | Get bot config           |
+| GET    | `/api/telegram/test`       | telegram:read   | Test bot connection      |
 
 ### Authentication
 
@@ -219,26 +338,36 @@ Authorization: Bearer sxdr_your_api_key_here
 
 ## Management CLI
 
-SmartXDR includes a CLI tool for user and API key management.
+SmartXDR includes a comprehensive CLI tool for user and API key management.
 
 ```bash
-# Local development
+# Using the start script (recommended)
+./start manage
+
+# Or directly via docker exec
 docker exec -it smartxdr-core python scripts/smartxdr_manager.py
 ```
 
 ### Features
 
 - **User Management**: Create, list, delete users; reset passwords
-- **API Key Management**: Create, list, delete, enable/disable keys
-- **System Status**: View overall system statistics
+- **API Key Management**: Create, list, delete, enable/disable keys; manage permissions
+- **Role Management**: Assign roles and permissions to users
+- **System Status**: View overall system statistics and usage
+- **Permission Presets**: Quick setup with predefined permission sets:
+  - `full_access` - All permissions (*)
+  - `read_only` - View-only access
+  - `analyst` - Full analyst capabilities
+  - `automation` - API access for automation
+  - `admin` - Full administrative access
 
 ### First Run
 
-On first run with empty database, the CLI will prompt you to create an initial admin account.
+On first run with empty database, the CLI will automatically prompt you to create an initial admin account with API key.
 
 ### Authentication
 
-CLI requires admin login before accessing management functions.
+CLI requires admin login before accessing management functions. API keys are prefixed with `sxdr_`.
 
 ## Security
 
@@ -268,29 +397,177 @@ Permissions follow the format `resource:action`:
 
 ## Maintenance
 
-### View Logs
+### Common Commands
 
 ```bash
-docker compose logs -f api
-docker compose logs -f nginx
-```
+# View logs (all services)
+./start logs
 
-### Backup Data
+# View logs for specific service
+./start logs api
+./start logs nginx
 
-```bash
-# Backup volumes
-docker run --rm -v smartxdr-core-data:/data -v $(pwd):/backup alpine tar czf /backup/smartxdr-backup.tar.gz /data
-```
+# Check service status
+./start status
 
-### Update
+# Check API health
+./start health
 
-```bash
-# Pull latest images
-docker compose -f docker-compose.prod.yml pull
+# Open shell in API container
+./start shell
 
 # Restart services
-docker compose -f docker-compose.prod.yml up -d
+./start restart
 ```
+
+### RAG Management
+
+```bash
+# Ingest documents to RAG knowledge base
+./start quick_rag assets/knowledge_base
+
+# View RAG sync options
+./start sync_rag
+```
+
+### Backup and Restore
+
+```bash
+# Create backup (data + chroma_db)
+./start backup
+
+# Backups are saved to: backups/YYYYMMDD_HHMMSS/
+# Contains:
+#   - data.tar.gz (SQLite database)
+#   - chroma.tar.gz (vector embeddings)
+
+# Restore from backup
+tar xzf backups/20241220_120000/data.tar.gz -C db/app_data
+tar xzf backups/20241220_120000/chroma.tar.gz -C db/chroma_db
+./start restart
+```
+
+### Update to Latest Version
+
+**Development Mode:**
+
+```bash
+# Rebuild from latest source code
+./start rebuild
+
+# Or manually:
+./start build
+./start restart
+```
+
+**Production Mode:**
+
+```bash
+# Pull latest images from Docker Hub and restart
+./start --prod update
+
+# Or manually:
+./start --prod pull
+./start --prod restart
+```
+
+### Clean Installation
+
+```bash
+# WARNING: This will delete all data!
+./start clean
+
+# Rebuild from scratch
+./start rebuild
+```
+
+## Start Script Reference
+
+The `./start` script provides a convenient interface for all operations:
+
+```bash
+# ============================================================
+# DEPLOYMENT MODES
+# ============================================================
+# Development (default) - Build from source code
+./start <command>
+
+# Production - Use pre-built Docker Hub images  
+./start --prod <command>
+
+# ============================================================
+# SETUP & BUILD
+# ============================================================
+./start setup                 # Initial setup (create directories, .env)
+./start build                 # Build images from source (dev mode)
+./start --prod pull           # Pull pre-built images (prod mode)
+
+# Service Control
+./start start                 # Start all services
+./start stop                  # Stop all services
+./start restart               # Restart services
+./start status                # Show service status
+
+# Logs & Debugging
+./start logs [service]        # View logs (all or specific service)
+./start health                # Check API health
+./start shell                 # Open shell in API container
+
+# Management
+./start manage                # Open SmartXDR Manager CLI
+
+# RAG & Data
+./start quick_rag [path]      # Ingest documents to RAG
+./start sync_rag              # Show RAG sync instructions
+./start backup                # Backup data and embeddings
+
+# Updates
+./start pull                  # Pull latest Docker images
+./start update                # Pull and restart services
+./start rebuild               # Rebuild from scratch (no cache)
+
+# Cleanup
+./start clean                 # Remove containers and volumes
+
+# Help
+./start help                  # Show all commands
+```
+
+### Deployment Mode Comparison
+
+| Feature | Development Mode | Production Mode |
+|---------|-----------------|------------------|
+| **Command** | `./start <cmd>` | `./start --prod <cmd>` |
+| **Docker Compose** | `docker-compose.yml` | `docker-compose.prod.yml` |
+| **Images** | Built from source | Pulled from Docker Hub |
+| **Image Tags** | `:dev` | `:latest` |
+| **Build Time** | ~5-10 minutes | None (pre-built) |
+| **Startup Time** | Slower | Faster |
+| **Code Changes** | Applied immediately | Requires new image release |
+| **Resource Limits** | Lower (2GB RAM) | Higher (4GB RAM) |
+| **Use Case** | Development, testing | Production deployments |
+
+**Examples:**
+
+```bash
+# Development workflow
+./start build              # Build from source
+./start start              # Start services
+./start logs api           # Check logs
+./start shell              # Debug in container
+
+# Production workflow  
+./start --prod pull        # Pull latest images
+./start --prod start       # Start services
+./start --prod update      # Update to newest version
+```
+
+### Access URLs
+
+- **HTTP**: http://localhost:8080
+- **HTTPS**: https://localhost:8443 (self-signed cert)
+- **ChromaDB**: http://localhost:8000
+- **Redis**: localhost:6379
 
 ## License
 

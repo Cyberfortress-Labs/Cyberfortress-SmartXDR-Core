@@ -1,7 +1,9 @@
 #!/bin/bash
 
+# Please see README.md for usage instructions.
 # SmartXDR Core - Deployment Script
 # Usage: ./start [--prod] <command>
+
 
 set -e
 

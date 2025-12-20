@@ -1,157 +1,197 @@
-# name: Build and Push Docker Images
+name: Build and Push Docker Images
 
-# on:
-#   push:
-#     branches:
-#       - main
-#     tags:
-#       - 'v*'
-#     paths:
-#       - 'Dockerfile'
-#       - 'nginx/Dockerfile'
-#       - 'requirements.txt'
-#       - 'app/**'
-#       - '.github/workflows/docker-build.yml'
-#   pull_request:
-#     branches:
-#       - main
-#     paths:
-#       - 'Dockerfile'
-#       - 'nginx/Dockerfile'
-#       - 'requirements.txt'
-#       - 'app/**'
-#   workflow_dispatch:
+on:
+  push:
+    branches: [ "main" ]
+    tags: [ 'v*' ]
+    # [TỐI ƯU] Chỉ build khi có thay đổi code thực sự
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/**'
+      - '!.github/workflows/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.dockerignore'
+  pull_request:
+    branches: [ "main" ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/**'
+      - '!.github/workflows/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.dockerignore'
+  workflow_dispatch:
 
-# env:
-#   REGISTRY: docker.io
-#   CORE_IMAGE: wanthinnn/smartxdr-core
-#   NGINX_IMAGE: wanthinnn/smartxdr-nginx
+env:
+  REGISTRY: docker.io
+  CORE_IMAGE: wanthinnn/smartxdr-core
+  NGINX_IMAGE: wanthinnn/smartxdr-nginx
 
-# jobs:
-#   build-and-push-core:
-#     runs-on: ubuntu-latest
-#     permissions:
-#       contents: read
-#       packages: write
+jobs:
+  # [TỐI ƯU] Detect file changes để skip build không cần thiết
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      core: ${{ steps.filter.outputs.core }}
+      nginx: ${{ steps.filter.outputs.nginx }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-#     steps:
-#       - name: Checkout repository
-#         uses: actions/checkout@v4
+      - name: Check changed files
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            core:
+              - 'app/**'
+              - 'scripts/**'
+              - 'requirements.txt'
+              - 'Dockerfile'
+              - 'gunicorn.conf.py'
+              - 'run.py'
+              - 'docker-entrypoint.sh'
+            nginx:
+              - 'nginx/**'
 
-#       - name: Set up Docker Buildx
-#         uses: docker/setup-buildx-action@v3
+  build-and-push-core:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.core == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: read
+      packages: write
+      id-token: write # [TỐI ƯU] For provenance
 
-#       - name: Log in to Docker Hub
-#         if: github.event_name != 'pull_request'
-#         uses: docker/login-action@v3
-#         with:
-#           registry: ${{ env.REGISTRY }}
-#           username: ${{ secrets.DOCKERHUB_USERNAME }}
-#           password: ${{ secrets.DOCKERHUB_TOKEN }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-#       - name: Extract metadata for Core (tags, labels)
-#         id: meta-core
-#         uses: docker/metadata-action@v5
-#         with:
-#           images: ${{ env.REGISTRY }}/${{ env.CORE_IMAGE }}
-#           tags: |
-#             type=ref,event=branch
-#             type=ref,event=pr
-#             type=semver,pattern={{version}}
-#             type=semver,pattern={{major}}.{{minor}}
-#             type=semver,pattern={{major}}
-#             type=raw,value=latest,enable={{is_default_branch}}
-#             type=sha,prefix={{branch}}-
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-#       - name: Build and push SmartXDR Core image
-#         uses: docker/build-push-action@v5
-#         with:
-#           context: .
-#           file: ./Dockerfile
-#           push: ${{ github.event_name != 'pull_request' }}
-#           tags: ${{ steps.meta-core.outputs.tags }}
-#           labels: ${{ steps.meta-core.outputs.labels }}
-#           cache-from: type=gha
-#           cache-to: type=gha,mode=max
-#           platforms: linux/amd64
-#           build-args: |
-#             BUILDKIT_INLINE_CACHE=1
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-#       - name: Core image digest
-#         run: echo ${{ steps.build-and-push-core.outputs.digest }}
+      - name: Extract metadata for Core
+        id: meta-core
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.CORE_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
 
-#   build-and-push-nginx:
-#     runs-on: ubuntu-latest
-#     permissions:
-#       contents: read
-#       packages: write
+      - name: Build and push SmartXDR Core
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-core.outputs.tags }}
+          labels: ${{ steps.meta-core.outputs.labels }}
+          # [TỐI ƯU 2] GitHub Actions cache layers
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # [TỐI ƯU 3] Provenance và SBOM cho security
+          provenance: true
+          sbom: true
 
-#     steps:
-#       - name: Checkout repository
-#         uses: actions/checkout@v4
+  build-and-push-nginx:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.nginx == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: read
+      packages: write
+      id-token: write # For provenance
 
-#       - name: Set up Docker Buildx
-#         uses: docker/setup-buildx-action@v3
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-#       - name: Log in to Docker Hub
-#         if: github.event_name != 'pull_request'
-#         uses: docker/login-action@v3
-#         with:
-#           registry: ${{ env.REGISTRY }}
-#           username: ${{ secrets.DOCKERHUB_USERNAME }}
-#           password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-#       - name: Extract metadata for Nginx (tags, labels)
-#         id: meta-nginx
-#         uses: docker/metadata-action@v5
-#         with:
-#           images: ${{ env.REGISTRY }}/${{ env.NGINX_IMAGE }}
-#           tags: |
-#             type=ref,event=branch
-#             type=ref,event=pr
-#             type=semver,pattern={{version}}
-#             type=semver,pattern={{major}}.{{minor}}
-#             type=semver,pattern={{major}}
-#             type=raw,value=latest,enable={{is_default_branch}}
-#             type=sha,prefix={{branch}}-
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-#       - name: Build and push SmartXDR Nginx image
-#         uses: docker/build-push-action@v5
-#         with:
-#           context: ./nginx
-#           file: ./nginx/Dockerfile
-#           push: ${{ github.event_name != 'pull_request' }}
-#           tags: ${{ steps.meta-nginx.outputs.tags }}
-#           labels: ${{ steps.meta-nginx.outputs.labels }}
-#           cache-from: type=gha
-#           cache-to: type=gha,mode=max
-#           platforms: linux/amd64
-#           build-args: |
-#             BUILDKIT_INLINE_CACHE=1
+      - name: Extract metadata for Nginx
+        id: meta-nginx
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.NGINX_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
 
-#       - name: Nginx image digest
-#         run: echo ${{ steps.build-and-push-nginx.outputs.digest }}
+      - name: Build and push SmartXDR Nginx
+        uses: docker/build-push-action@v5
+        with:
+          context: ./nginx
+          file: ./nginx/Dockerfile
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-nginx.outputs.tags }}
+          labels: ${{ steps.meta-nginx.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
 
-#   security-scan:
-#     runs-on: ubuntu-latest
-#     needs: [build-and-push-core, build-and-push-nginx]
-#     if: github.event_name != 'pull_request'
-#     strategy:
-#       matrix:
-#         image: 
-#           - wanthinnn/smartxdr-core
-#           - wanthinnn/smartxdr-nginx
+  # [TỐI ƯU] Security scan - chỉ chạy khi có image mới được build
+  security-scan:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' && !cancelled()
+    needs: [detect-changes, build-and-push-core, build-and-push-nginx]
+    # [TỐI ƯU] Chạy ngay cả khi một trong hai job bị skip
     
-#     steps:
-#       - name: Run Trivy vulnerability scanner
-#         uses: aquasecurity/trivy-action@master
-#         with:
-#           image-ref: ${{ env.REGISTRY }}/${{ matrix.image }}:latest
-#           format: 'sarif'
-#           output: 'trivy-results-${{ matrix.image }}.sarif'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: core
+            image: wanthinnn/smartxdr-core
+            needs_scan: ${{ needs.detect-changes.outputs.core == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') }}
+          - name: nginx
+            image: wanthinnn/smartxdr-nginx
+            needs_scan: ${{ needs.detect-changes.outputs.nginx == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') }}
 
-#       - name: Upload Trivy results to GitHub Security
-#         uses: github/codeql-action/upload-sarif@v3
-#         if: always()
-#         with:
-#           sarif_file: 'trivy-results-${{ matrix.image }}.sarif'
+    steps:
+      - name: Run Trivy vulnerability scanner
+        if: matrix.needs_scan == 'true'
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ matrix.image }}:latest
+          format: 'sarif'
+          output: 'trivy-results-${{ matrix.name }}.sarif'
+          severity: 'CRITICAL,HIGH'
+          # [TỐI ƯU] Cache vulnerability DB
+          cache-dir: .trivy
+
+      - name: Upload Trivy results to GitHub Security
+        if: always() && matrix.needs_scan == 'true'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results-${{ matrix.name }}.sarif'
+          category: '${{ matrix.name }}-image-scan'
