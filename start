@@ -60,9 +60,9 @@ case "$COMMAND" in
         printf "${YELLOW}Starting SmartXDR services...${NC}\n"
         
         # Check for local chroma_db and set environment variable
-        if [ -d "chroma_db" ] && [ -n "$(ls -A chroma_db 2>/dev/null)" ]; then
+        if [ -d "db/chroma_db" ] && [ -n "$(ls -A db/chroma_db 2>/dev/null)" ]; then
             printf "${GREEN}Found local chroma_db - mounting as volume${NC}\n"
-            export CHROMA_DB_SOURCE="./chroma_db"
+            export CHROMA_DB_SOURCE="./db/chroma_db"
         else
             printf "${YELLOW}⚠ No local chroma_db found - using Docker volume${NC}\n"
             if [ "$ENV" = "prod" ]; then
@@ -72,8 +72,8 @@ case "$COMMAND" in
         fi
         
         # Check for local SQLite database
-        if [ -f "data/smartxdr.sqlite3" ]; then
-            printf "${GREEN}Found local database - mounting data/smartxdr.sqlite3${NC}\n"
+        if [ -f "db/app_data/smartxdr.sqlite3" ]; then
+            printf "${GREEN}Found local database - mounting db/app_data/smartxdr.sqlite3${NC}\n"
         else
             printf "${YELLOW}⚠ No local database found - will create new database${NC}\n"
         fi
