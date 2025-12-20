@@ -73,8 +73,8 @@ def explain_intelowl():
     description_updated = False
     if update_description:
         try:
-            # Summarize the analysis for description
-            summary = llm_svc.summarize_for_ioc_description(comment_text)
+            # Summarize the analysis for description (max 250 chars)
+            summary = llm_svc.summarize_for_ioc_description(comment_text, max_length=250)
             
             if summary:
                 # Get current IOC description (để append, không ghi đè)
@@ -209,7 +209,7 @@ def explain_case_iocs():
                 # Update IOC description with summary
                 description_updated = False
                 try:
-                    summary = llm_svc.summarize_for_ioc_description(comment_text)
+                    summary = llm_svc.summarize_for_ioc_description(comment_text, max_length=250)
                     if summary:
                         ioc_data = iris_svc.get_ioc(case_id, ioc_id)
                         current_desc = ioc_data.get('ioc_description', '') or ''

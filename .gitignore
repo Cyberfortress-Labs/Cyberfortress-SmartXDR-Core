@@ -156,6 +156,7 @@ logs/
 secrets/
 *.key
 *.pem
+!_.cyberfortress.local.key
 
 # Flask session files
 flask_session/

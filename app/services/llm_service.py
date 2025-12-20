@@ -88,7 +88,7 @@ class LLMService:
     
     # ==================== IOC Enrichment Methods ====================
     
-    def summarize_for_ioc_description(self, comment_text: str, max_length: int = 2000) -> str:
+    def summarize_for_ioc_description(self, comment_text: str, max_length: int = 200) -> str:
         """
         Tóm tắt SmartXDR comment thành description ngắn gọn cho IOC
         
