@@ -910,10 +910,20 @@ KHÔNG dùng bullet points hay list. Chỉ viết 1 đoạn văn liền mạch."
                     "tags": summary.get('tags', [])
                 })
         
+        # **RAG ENHANCEMENT: Lấy context từ knowledge base (giống IntelOwl)**
+        rag_context = self._get_rag_context_for_ioc(
+            ioc_value, 
+            {"max_risk_score": risk_score, "analyzer_stats": all_stats},
+            misp_findings
+        )
+        
         # Build prompt for LLM
         settings = prompt_config.get('settings', {})
-        max_tokens = settings.get('max_completion_tokens', 1500)
         system_prompt = prompt_config.get('system_prompt', 'Bạn là chuyên gia bảo mật phân tích dữ liệu threat intelligence.')
+        
+        # Enhance system prompt with RAG context if available
+        if rag_context:
+            system_prompt += f"\n\n**SYSTEM CONTEXT (từ knowledge base của tổ chức):**\n{rag_context}\n\nHãy sử dụng thông tin này để đưa ra gợi ý phù hợp với hệ thống cụ thể của tổ chức."
         
         # Build user prompt with summarized findings
         user_prompt = f"""
@@ -948,8 +958,7 @@ Hãy phân tích và đưa ra:
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
-                ],
-                max_completion_tokens=max_tokens
+                ]
             )
             
             ai_text = response.choices[0].message.content or ""
