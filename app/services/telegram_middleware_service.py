@@ -1301,12 +1301,13 @@ class TelegramMiddlewareService:
                 f.write(f"**Question:** {question}\n\n")
                 f.write(f"**Time Range:** {hours}h | **Index:** {index_pattern}\n\n")
                 f.write(f"**Total Logs:** {total} | **Analyzed:** {len(logs)}\n\n")
-                f.write("---\n\n")
-                f.write("## Logs Data\n\n")
-                f.write(logs_context_full)  # Full version with event_original
                 f.write("\n\n---\n\n")
                 f.write("## AI Analysis\n\n")
                 f.write(analysis)
+                f.write("\n\n---\n\n")
+                f.write("## Logs Data\n\n")
+                f.write(logs_context_full)  # Full version with event_original
+
             
             # Send file with short caption
             caption = f"<b>AI Analysis Complete</b>\n\nQuestion: {question}\nTime: {hours}h | Logs: {len(logs)}"
