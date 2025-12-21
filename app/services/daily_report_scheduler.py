@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 from app.services.alert_summarization_service import get_alert_summarization_service
 from app.services.email_service import get_email_service
 from app.services.llm_service import LLMService
+from app.config import TIMEZONE_OFFSET
 
 load_dotenv()
 
@@ -37,7 +38,7 @@ class DailyReportScheduler:
         
         # Get configuration from environment
         self.send_time = os.getenv('DAILY_REPORT_TIME', '07:00')  # Default 7:00 AM
-        self.recipient_email = os.getenv('FROM_EMAIL', '')  # Send to same email by default
+        self.recipient_email = os.getenv('TO_EMAILS', os.getenv('FROM_EMAIL', ''))  # Use TO_EMAILS, fallback to FROM_EMAIL
         self.enabled = self.email_service.enabled and self.recipient_email
         
         if self.enabled:
@@ -74,19 +75,25 @@ class DailyReportScheduler:
         
         while self.running:
             try:
-                now = datetime.now()
-                current_date = now.date()
+                # Use UTC for internal logic
+                now_utc = datetime.utcnow()
                 
-                # Check if already sent today
-                if last_sent_date == current_date:
+                # Calculate local time for logging/date tracking
+                local_now = now_utc + timedelta(hours=TIMEZONE_OFFSET)
+                current_local_date = local_now.date()
+                
+                # Check if already sent today (in local time)
+                if last_sent_date == current_local_date:
                     # Already sent today, sleep until tomorrow
-                    next_send = self._calculate_next_send_time()
-                    sleep_seconds = (next_send - now).total_seconds()
-                    logger.info(f"Report already sent today. Next send: {next_send.strftime('%Y-%m-%d %H:%M')}")
+                    next_send_utc = self._calculate_next_send_time()
+                    next_send_local = next_send_utc + timedelta(hours=TIMEZONE_OFFSET)
                     
-                    # Sleep in 5-minute chunks to allow graceful shutdown
+                    sleep_seconds = (next_send_utc - now_utc).total_seconds()
+                    logger.info(f"Report already sent today. Next send: {next_send_local.strftime('%Y-%m-%d %H:%M')} (Local)")
+                    
+                    # Sleep in 5-minute chunks
                     while sleep_seconds > 0 and self.running:
-                        chunk = min(300, sleep_seconds)  # Sleep max 5 minutes at a time
+                        chunk = min(300, sleep_seconds)
                         time.sleep(chunk)
                         sleep_seconds -= chunk
                     continue
@@ -95,58 +102,67 @@ class DailyReportScheduler:
                 if self._should_send_report():
                     logger.info("Sending scheduled daily report...")
                     self._send_daily_report()
-                    last_sent_date = current_date
+                    last_sent_date = current_local_date
                     
-                    # Calculate next send time (tomorrow at scheduled time)
-                    next_send = self._calculate_next_send_time()
-                    sleep_seconds = (next_send - datetime.now()).total_seconds()
-                    logger.info(f"Report sent. Next send: {next_send.strftime('%Y-%m-%d %H:%M')} (in {sleep_seconds/3600:.1f}h)")
+                    # Calculate next send time
+                    next_send_utc = self._calculate_next_send_time()
+                    next_send_local = next_send_utc + timedelta(hours=TIMEZONE_OFFSET)
+                    
+                    sleep_seconds = (next_send_utc - datetime.utcnow()).total_seconds()
+                    logger.info(f"Report sent. Next send: {next_send_local.strftime('%Y-%m-%d %H:%M')} (in {sleep_seconds/3600:.1f}h)")
                 else:
                     # Calculate seconds until next check
-                    next_send = self._calculate_next_send_time()
-                    sleep_seconds = (next_send - now).total_seconds()
+                    next_send_utc = self._calculate_next_send_time()
+                    sleep_seconds = (next_send_utc - now_utc).total_seconds()
                     
-                    # If next send is today and soon, check more frequently
-                    if next_send.date() == current_date and sleep_seconds < 600:  # Within 10 minutes
-                        time.sleep(30)  # Check every 30 seconds
+                    # If next send is soon (< 10 mins), check frequently
+                    if sleep_seconds < 600:
+                        time.sleep(30)
                     else:
                         # Sleep until 5 minutes before scheduled time
-                        safe_sleep = max(60, sleep_seconds - 300)  # Wake up 5 min early, minimum 1 min
-                        time.sleep(min(safe_sleep, 3600))  # Max 1 hour sleep chunks
+                        safe_sleep = max(60, sleep_seconds - 300)
+                        time.sleep(min(safe_sleep, 3600))
             
             except Exception as e:
                 logger.error(f"Scheduler error: {str(e)}")
                 time.sleep(60)
     
     def _calculate_next_send_time(self) -> datetime:
-        """Calculate next scheduled send time"""
+        """Calculate next scheduled send time in UTC"""
         try:
-            now = datetime.now()
+            now_utc = datetime.utcnow()
+            local_now = now_utc + timedelta(hours=TIMEZONE_OFFSET)
+            
             target_hour, target_minute = map(int, self.send_time.split(':'))
             
-            # Create datetime for today's scheduled time
-            next_send = now.replace(hour=target_hour, minute=target_minute, second=0, microsecond=0)
+            # Create target time in local timezone for today
+            target_local = local_now.replace(hour=target_hour, minute=target_minute, second=0, microsecond=0)
             
-            # If today's time has passed, schedule for tomorrow
-            if next_send <= now:
-                next_send += timedelta(days=1)
+            # Convert back to UTC
+            target_utc = target_local - timedelta(hours=TIMEZONE_OFFSET)
             
-            return next_send
+            # If target time has passed, schedule for tomorrow
+            if target_utc <= now_utc:
+                target_utc += timedelta(days=1)
+            
+            return target_utc
         
         except Exception as e:
             logger.error(f"Error calculating next send time: {str(e)}")
             # Fallback: send in 24 hours
-            return datetime.now() + timedelta(days=1)
+            return datetime.utcnow() + timedelta(days=1)
     
     def _should_send_report(self) -> bool:
         """Check if current time matches scheduled send time"""
         try:
-            now = datetime.now()
+            now_utc = datetime.utcnow()
+            local_now = now_utc + timedelta(hours=TIMEZONE_OFFSET)
+            
             target_hour, target_minute = map(int, self.send_time.split(':'))
             
-            # Check if current time is within 1 minute of target time
-            return (now.hour == target_hour and 
-                    abs(now.minute - target_minute) < 1)
+            # Check matches in local time
+            return (local_now.hour == target_hour and 
+                    abs(local_now.minute - target_minute) < 1)
         
         except Exception as e:
             logger.error(f"Error parsing send time '{self.send_time}': {str(e)}")

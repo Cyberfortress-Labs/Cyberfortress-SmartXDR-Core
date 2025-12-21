@@ -2,10 +2,10 @@
 Alert Summarization Service - Analyze and summarize ML-classified alerts from Elasticsearch
 """
 import json
-import hashlib
+import logging
 import io
 import base64
-from typing import Optional, Dict, Any, List
+from typing import List, Dict, Optional, Any
 from datetime import datetime, timedelta
 from collections import defaultdict, Counter
 import re
@@ -21,6 +21,7 @@ except ImportError:
 
 from app.services.elasticsearch_service import ElasticsearchService
 from app.services.llm_service import LLMService
+from app.config import TIMEZONE_OFFSET
 from app.utils.logger import setup_logger
 from app.config import (
     ALERT_TIME_WINDOW,
@@ -179,8 +180,13 @@ class AlertSummarizationService:
             return None
         
         try:
-            # Create figure with subplots
+            # Create figure with subplots and add global border
             fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(14, 10))
+            
+            # Add thin black border around the entire figure
+            fig.patch.set_linewidth(2)
+            fig.patch.set_edgecolor('black')
+            
             fig.suptitle(f'ML Alert Analysis Dashboard (Risk: {risk_score:.1f}/100)', 
                         fontsize=16, fontweight='bold')
             
@@ -250,14 +256,18 @@ class AlertSummarizationService:
             # Color boxes
             for patch in bp['boxes']:
                 patch.set_facecolor('lightblue')
+                
+            ax4.set_ylabel('Confidence (%)')
+            ax4.set_title('ML Confidence by Pattern', fontweight='bold')
+            plt.setp(ax4.xaxis.get_majorticklabels(), rotation=45, ha='right')
             
-            ax4.set_xticklabels(ax4.get_xticklabels(), rotation=45, ha='right')
-            ax4.set_ylabel('ML Confidence (%)')
-            ax4.set_title('ML Confidence Distribution', fontweight='bold')
-            ax4.grid(axis='y', alpha=0.3)
+            # Add timestamp in local time
+            local_time = datetime.utcnow() + timedelta(hours=TIMEZONE_OFFSET)
+            offset_str = f"GMT+{TIMEZONE_OFFSET}" if TIMEZONE_OFFSET >= 0 else f"GMT{TIMEZONE_OFFSET}"
+            fig.text(0.99, 0.01, f'Generated: {local_time.strftime("%Y-%m-%d %H:%M:%S")} ({offset_str})', 
+                    ha='right', va='bottom', fontsize=10, style='italic', color='gray')
             
-            plt.tight_layout()
-            
+            plt.tight_layout(rect=[0, 0.03, 1, 0.95])         
             # Convert to base64
             buf = io.BytesIO()
             plt.savefig(buf, format='png', dpi=100, bbox_inches='tight')

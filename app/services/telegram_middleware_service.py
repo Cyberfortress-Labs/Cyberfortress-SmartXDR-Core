@@ -3,18 +3,20 @@ Telegram Middleware Service for SmartXDR Integration
 Uses long polling to receive messages and forwards to SmartXDR API
 """
 
-import os
-import time
 import threading
+import time
 import requests
+import json
+import logging
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List, Callable
+from typing import Dict, Any, List, Optional, Callable
 from collections import defaultdict
 import html
 import re
+import os
 
 from app.utils.logger import setup_logger
-from app.config import ALERT_TIME_WINDOW, TELEGRAM_API_TIMEOUT
+from app.config import ALERT_TIME_WINDOW, TELEGRAM_API_TIMEOUT, TIMEZONE_OFFSET
 
 logger = setup_logger("telegram_middleware")
 
@@ -1281,7 +1283,11 @@ class TelegramMiddlewareService:
             
             # Save AI analysis to markdown file
             analysis = ai_response.get('answer', 'No analysis available')
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            
+            # Use local time for filename and content
+            local_time = datetime.utcnow() + timedelta(hours=TIMEZONE_OFFSET)
+            offset_str = f"GMT+{TIMEZONE_OFFSET}" if TIMEZONE_OFFSET >= 0 else f"GMT{TIMEZONE_OFFSET}"
+            timestamp = local_time.strftime("%Y%m%d_%H%M%S")
             filename = f"ml_logs_analysis_{timestamp}.md"
             logs_dir = "/tmp/logs"  # Use /tmp for write access in Docker
             filepath = os.path.join(logs_dir, filename)
@@ -1291,7 +1297,7 @@ class TelegramMiddlewareService:
             
             # Write analysis to markdown (use full logs data)
             with open(filepath, 'w', encoding='utf-8') as f:
-                f.write(f"# ML Logs Analysis - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+                f.write(f"# ML Logs Analysis - {local_time.strftime('%Y-%m-%d %H:%M:%S')} ({offset_str})\n\n")
                 f.write(f"**Question:** {question}\n\n")
                 f.write(f"**Time Range:** {hours}h | **Index:** {index_pattern}\n\n")
                 f.write(f"**Total Logs:** {total} | **Analyzed:** {len(logs)}\n\n")
