@@ -219,9 +219,24 @@ class OptimizedIngester:
                 # This creates IP-first lookup chunks automatically
                 return json_to_natural_text(data, filename)
             
-            # Check for MITRE technique
+            # Check for single MITRE technique
             if isinstance(data, dict) and 'mitre_id' in data:
                 return [mitre_to_natural_text(data)]
+            
+            # Check for MITRE collection (tactics + techniques arrays)
+            if isinstance(data, dict) and 'techniques' in data and isinstance(data['techniques'], list):
+                chunks = []
+                print(f"    📋 MITRE collection detected: {len(data.get('techniques', []))} techniques, {len(data.get('tactics', []))} tactics")
+                
+                # Process tactics as chunks
+                for tactic in data.get('tactics', []):
+                    chunks.append(mitre_to_natural_text(tactic))
+                
+                # Process each technique
+                for technique in data['techniques']:
+                    chunks.append(mitre_to_natural_text(technique))
+                
+                return chunks
             
             # Fallback for other JSON - use text_to_chunks with overlap
             text_formatted = json.dumps(data, indent=2, ensure_ascii=False)
@@ -308,7 +323,7 @@ class OptimizedIngester:
         print("RAG Document Ingestion")
         print("=" * 70)
         print(f"Source: {directory.absolute()}")
-        print(f"Mode: {'API' if self.use_api else '⚡ Direct ChromaDB'}")
+        print(f"Mode: {'API' if self.use_api else 'Direct ChromaDB'}")
         print(f"Chunk size: {self.chunk_size}")
         print(f"Batch size: {self.batch_size}")
         if limit:
@@ -367,7 +382,7 @@ class OptimizedIngester:
                 rate = self.stats['files'] / elapsed if elapsed > 0 else 0
                 
                 print(f"[{file_count}] {rel_path[:55]}")
-                print(f"{category} | 📄 {len(content)/1024:.1f}KB | 🧩 {len(chunks)} chunks | ⏱️  {rate:.1f} files/s")
+                print(f"{category}|{len(content)/1024:.1f}KB |{len(chunks)} chunks | ⏱️  {rate:.1f} files/s")
                 
                 if dry_run:
                     self.stats['chunks'] += len(chunks)
@@ -399,12 +414,14 @@ class OptimizedIngester:
                             'date': datetime.now().isoformat()
                         }
                     })
+                    
+                    # Process batch when full (inside chunk loop for large files)
+                    if len(batch) >= self.batch_size:
+                        print(f"Uploading batch ({len(batch)} chunks)...")
+                        self.process_batch(batch)
+                        batch = []
                 
-                # Process batch when full
-                if len(batch) >= self.batch_size:
-                    print(f"Uploading batch ({len(batch)} chunks)...")
-                    self.process_batch(batch)
-                    batch = []
+                # Note: remaining chunks will be processed in next file's batch or final batch
                 
                 # Check limit
                 if limit and file_count >= limit:

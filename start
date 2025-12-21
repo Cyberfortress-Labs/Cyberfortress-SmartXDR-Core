@@ -68,7 +68,7 @@ case "$COMMAND" in
             printf "${GREEN}Found local chroma_db - mounting as volume${NC}\n"
             export CHROMA_DB_SOURCE="./db/chroma_db"
         else
-            printf "${YELLOW}⚠ No local chroma_db found - using Docker volume${NC}\n"
+            printf "${YELLOW}No local chroma_db found - using Docker volume${NC}\n"
             if [ "$ENV" = "prod" ]; then
                 printf "${YELLOW}  RAG will start empty. Ingest documents after deployment.${NC}\n"
             fi
@@ -79,7 +79,7 @@ case "$COMMAND" in
         if [ -f "db/app_data/smartxdr.sqlite3" ]; then
             printf "${GREEN}Found local database - mounting as volume${NC}\n"
         else
-            printf "${YELLOW}⚠ No local database found - will create new database${NC}\n"
+            printf "${YELLOW}No local database found - will create new database${NC}\n"
         fi
         
         docker compose -f "$COMPOSE_FILE" up -d
@@ -144,9 +144,14 @@ case "$COMMAND" in
     
     quick_rag)
         DOCS_PATH="${2:-assets}"
+        shift 2 2>/dev/null || shift 1  # Remove command and docs path
+        EXTRA_ARGS="$@"
         printf "${BLUE}Running Quick RAG Ingestion...${NC}\n"
         printf "  Documents path: ${DOCS_PATH}\n"
-        docker compose -f "$COMPOSE_FILE" exec api python scripts/quick_rag_docs.py --path "${DOCS_PATH}"
+        if [ -n "$EXTRA_ARGS" ]; then
+            printf "  Extra args: ${EXTRA_ARGS}\n"
+        fi
+        docker compose -f "$COMPOSE_FILE" exec api python scripts/quick_rag_docs.py "${DOCS_PATH}" ${EXTRA_ARGS}
         ;;
     
     sync_rag)

@@ -58,13 +58,13 @@ OPENAI_TIMEOUT = 600.0  # 10 minutes default timeout
 OPENAI_MAX_RETRIES = 2  # Default retry count for failed requests
 
 # Query settings
-DEFAULT_RESULTS = 15  # topK: Increased for better context coverage
+DEFAULT_RESULTS = 25  # topK: Increased for better context coverage (was 15)
 
 # RAG Chunking settings
 MIN_CHUNK_SIZE = 100  # Minimum chars per chunk (avoid too short chunks)
 MAX_CHUNK_SIZE = 2000  # Maximum chars per chunk
-MIN_BATCH_SIZE = 100  # Minimum batch size for embedding
-BATCH_SIZE = 200  # Maximum batch size for embedding
+MIN_BATCH_SIZE = 50  # Minimum batch size for embedding
+BATCH_SIZE = 100  # Maximum batch size for embedding (reduced for OpenAI token limits)
 
 # Token pricing (per 1M tokens)
 INPUT_PRICE_PER_1M = 0.25
