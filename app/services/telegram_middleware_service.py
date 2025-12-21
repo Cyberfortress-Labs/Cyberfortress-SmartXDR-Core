@@ -597,6 +597,8 @@ class TelegramMiddlewareService:
                 "• <code>/sumlogs trong 24h gần đây, logs nào có dấu hiệu tấn công? --index *suricata*</code>\n"
                 "• <code>/sumlogs liệt kê logs nguy hiểm --time 24h --index all</code>\n"
                 "• <code>/sumlogs phân tích logs ERROR --time 7d --severity ERROR,WARNING</code>\n\n"
+                "<b>Email Report:</b>\n"
+                "• <code>/send-email</code> - Trigger daily report email now\n\n"
                 "<b>Tips:</b>\n"
                 "• Be specific in your questions\n"
                 "• Include relevant log data for analysis\n"

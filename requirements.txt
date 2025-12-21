@@ -22,6 +22,7 @@ python-dotenv>=1.0.0
 
 # Data Processing
 numpy>=1.24.0
+matplotlib>=3.7.0
 
 # HTTP Client
 requests>=2.31.0

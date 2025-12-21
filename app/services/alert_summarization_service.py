@@ -51,15 +51,25 @@ class AlertSummarizationService:
     
     # Attack pattern sequences for escalation detection
     ATTACK_PATTERNS = {
-        "reconnaissance": ["nmap", "syn_scan", "port_scan", "network_scan", "nessus", "scan", "probe", "enum"],
-        "brute_force": ["brute", "login_attempt", "password", "auth_failed", "unauthorized", "failed login", "authentication"],
-        "lateral_movement": ["lateral", "move", "privilege", "escalation", "lateral_movement", "rdp", "smb"],
-        "exfiltration": ["exfil", "download", "extract", "data_transfer", "upload", "ftp", "scp"],
-        "network_attack": ["syn flood", "ddos", "dos", "flood", "amplification"],
-        "malware": ["malware", "trojan", "virus", "ransomware", "exploit", "shellcode"],
-        "web_attack": ["sql injection", "xss", "csrf", "lfi", "rfi", "command injection", "path traversal"],
-        "blocked_traffic": ["block", "deny", "drop", "reject", "filtered"],
-        "suspicious_traffic": ["suspicious", "anomaly", "unusual", "alert", "threat"]
+        "reconnaissance": ["nmap", "syn_scan", "port_scan", "network_scan", "nessus", "scan", "probe", "enum", 
+                          "discovery", "fingerprint", "mapping", "snmp", "dns query", "portscan"],
+        "brute_force": ["brute", "login_attempt", "password", "auth_failed", "unauthorized", "failed login", 
+                       "authentication", "credential", "ssh", "rdp_failed", "login failed", "invalid user"],
+        "lateral_movement": ["lateral", "move", "privilege", "escalation", "lateral_movement", "rdp", "smb",
+                            "psexec", "wmi", "winrm", "pass the hash", "mimikatz"],
+        "exfiltration": ["exfil", "download", "extract", "data_transfer", "upload", "ftp", "scp", "dns tunnel",
+                        "large transfer", "outbound"],
+        "network_attack": ["syn flood", "ddos", "dos", "flood", "amplification", "icmp", "fragmentation"],
+        "malware": ["malware", "trojan", "virus", "ransomware", "exploit", "shellcode", "payload", "c2", 
+                   "command and control", "beacon", "backdoor", "dropper"],
+        "web_attack": ["sql injection", "xss", "csrf", "lfi", "rfi", "command injection", "path traversal",
+                      "http", "web", "request", "response", "403", "404", "500", "uri"],
+        "blocked_traffic": ["block", "deny", "drop", "reject", "filtered", "firewall", "pfsense", "iptables",
+                           "rule", "default deny", "connection refused"],
+        "suspicious_traffic": ["suspicious", "anomaly", "unusual", "alert", "threat", "warning", "error",
+                              "detected", "triggered", "signature", "suricata", "zeek", "snort"],
+        "connection": ["connection", "tcp", "udp", "established", "closed", "syn", "fin", "rst", "session",
+                      "flow", "stream", "packet", "traffic"]
     }
     
     def __new__(cls):
