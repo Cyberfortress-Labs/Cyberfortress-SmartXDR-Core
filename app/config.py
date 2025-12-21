@@ -48,6 +48,12 @@ CHROMA_DB_PATH = DB_PATH  # Alias for RAG module (local mode)
 CHROMA_HOST = os.environ.get('CHROMA_HOST', None)  # Set to 'chromadb' in Docker
 CHROMA_PORT = int(os.environ.get('CHROMA_PORT', '8000'))
 
+# Time to send daily report (24-hour format, HH:MM)
+DAILY_REPORT_TIME = os.environ.get('DAILY_REPORT_TIME', '07:00')
+
+# Timezone Offset (default to 0 if not set)
+TIMEZONE_OFFSET = int(os.environ.get('TIMEZONE_OFFSET', '0'))
+
 # OpenAI model settings (from .env with defaults)
 EMBEDDING_MODEL = os.environ.get('EMBEDDING_MODEL', 'text-embedding-3-small')
 CHAT_MODEL = os.environ.get('CHAT_MODEL', 'gpt-5-mini')
