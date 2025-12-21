@@ -109,7 +109,7 @@ SmartXDR supports two deployment modes with distinct image sourcing strategies:
 Or simply (development is default):
 ```bash
 ./start build
-./start start
+./start up
 ```
 
 **Characteristics:**
@@ -188,7 +188,7 @@ Required environment variables:
 ./start --prod pull
 
 # Start all services
-./start --prod start
+./start --prod up
 ```
 
 ### 4. Initialize Admin Account
@@ -518,8 +518,8 @@ The `./start` script provides a convenient interface for all operations:
 ./start --prod pull           # Pull pre-built images (prod mode)
 
 # Service Control
-./start start                 # Start all services
-./start stop                  # Stop all services
+./start up                    # Start all services
+./start down                  # Stop all services
 ./start restart               # Restart services
 ./start status                # Show service status
 

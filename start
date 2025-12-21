@@ -85,7 +85,14 @@ case "$COMMAND" in
         docker compose -f "$COMPOSE_FILE" up -d
         printf "\n"
         printf "${GREEN}Services started successfully!${NC}\n"
-        printf "  HTTPS:  ${BLUE}https://localhost:8443${NC}\n"
+        
+        # Show domain from .env or default to localhost
+        if [ -f .env ]; then
+            source .env
+        fi
+        # Use SMARTXDR_URL for display (TUNNEL_DOMAIN is only for webhook)
+        LOCAL_URL="${SMARTXDR_URL:-https://localhost:8443}"
+        printf "  URL:    ${BLUE}${LOCAL_URL}${NC}\n"
         printf "  Logs:   ${YELLOW}./start logs${NC}\n"
         printf "  Manage: ${YELLOW}./start manage${NC}\n"
         
@@ -177,12 +184,48 @@ case "$COMMAND" in
     
     pull)
         printf "${YELLOW}Pulling latest images...${NC}\n"
+        
+        # Login to Docker Hub if credentials are provided (for private repos)
+        if [ -f .env ]; then
+            source .env
+            if [ -n "$DOCKER_HUB_USERNAME" ] && [ -n "$DOCKER_HUB_TOKEN" ]; then
+                printf "${BLUE}Logging in to Docker Hub...${NC}\n"
+                echo "$DOCKER_HUB_TOKEN" | docker login -u "$DOCKER_HUB_USERNAME" --password-stdin
+                if [ $? -eq 0 ]; then
+                    printf "${GREEN}Docker Hub login successful${NC}\n"
+                else
+                    printf "${RED}Docker Hub login failed!${NC}\n"
+                    exit 1
+                fi
+            elif [ -n "$DOCKER_HUB" ]; then
+                # Fallback: if only DOCKER_HUB token exists without username
+                printf "${YELLOW}DOCKER_HUB token found but missing DOCKER_HUB_USERNAME${NC}\n"
+                printf "${YELLOW}Add DOCKER_HUB_USERNAME to .env for private repo access${NC}\n"
+            fi
+        fi
+        
         docker compose -f "$COMPOSE_FILE" pull
         printf "${GREEN}Pull complete${NC}\n"
         ;;
     
     update)
         printf "${YELLOW}Updating SmartXDR...${NC}\n"
+        
+        # Login to Docker Hub if credentials are provided (for private repos)
+        if [ -f .env ]; then
+            source .env
+            if [ -n "$DOCKER_HUB_USERNAME" ] && [ -n "$DOCKER_HUB_TOKEN" ]; then
+                printf "${BLUE}Logging in to Docker Hub...${NC}\n"
+                echo "$DOCKER_HUB_TOKEN" | docker login -u "$DOCKER_HUB_USERNAME" --password-stdin
+                if [ $? -eq 0 ]; then
+                    printf "${GREEN}Docker Hub login successful${NC}\n"
+                else
+                    printf "${RED}Docker Hub login failed!${NC}\n"
+                    exit 1
+                fi
+            fi
+        fi
+        
         docker compose -f "$COMPOSE_FILE" pull
         docker compose -f "$COMPOSE_FILE" up -d
         printf "${GREEN}Update complete${NC}\n"
