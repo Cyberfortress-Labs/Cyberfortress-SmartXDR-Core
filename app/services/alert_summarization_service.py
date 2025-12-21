@@ -354,6 +354,10 @@ class AlertSummarizationService:
         
         for alert in alerts:
             try:
+                # Skip if alert is not a dict (malformed data)
+                if not isinstance(alert, dict):
+                    continue
+                
                 # Extract source IP - try multiple field paths
                 source_ip = None
                 

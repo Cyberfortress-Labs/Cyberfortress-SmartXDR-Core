@@ -200,17 +200,18 @@ class EmailService:
             background: linear-gradient(135deg, {risk_color}20 0%, {risk_color}10 100%) !important;
             border: 2px solid {risk_color};
             border-radius: 10px;
-            padding: 30px 20px;
-            margin: 20px auto;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 40px;
-            max-width: 600px;
+            padding: 20px 0;
+            margin: 20px 0;
+            display: table;
+            width: 100%;
+            table-layout: fixed;
         }}
         .stat-item {{
+            display: table-cell;
             text-align: center;
-            padding: 0 20px;
+            width: 33.33%;
+            padding: 10px;
+            vertical-align: middle;
         }}
         .stat-item:not(:last-child) {{
             border-right: 2px solid {risk_color}40;

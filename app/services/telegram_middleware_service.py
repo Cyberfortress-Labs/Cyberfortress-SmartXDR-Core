@@ -576,7 +576,7 @@ class TelegramMiddlewareService:
         elif command == "/help":
             self.send_message(
                 chat_id,
-                "<b>SmartXDR Bot Help</b>\n\n"
+                "<b>SmartXDR Assistant Help</b>\n\n"
                 "<b>What I can do:</b>\n"
                 "• Analyze security alerts and logs\n"
                 "• Map threats to MITRE ATT&CK framework\n"
