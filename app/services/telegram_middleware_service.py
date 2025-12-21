@@ -399,6 +399,22 @@ class TelegramMiddlewareService:
             logger.warning(f"Typing action failed: {e}")
             return False
     
+    def start_continuous_typing(self, chat_id: int) -> threading.Event:
+        """
+        Start continuous typing indicator in background thread.
+        Returns stop_event - call stop_event.set() to stop typing.
+        """
+        stop_event = threading.Event()
+        
+        def continuous_typing():
+            while not stop_event.is_set():
+                self.send_typing_action(chat_id)
+                stop_event.wait(4)  # Telegram typing lasts 5s, refresh every 4s
+        
+        typing_thread = threading.Thread(target=continuous_typing, daemon=True)
+        typing_thread.start()
+        return stop_event
+    
     # ========== Polling & Message Handling ==========
     
     def get_updates(self, offset: int = None, timeout: int = None) -> List[Dict]:
@@ -554,10 +570,13 @@ class TelegramMiddlewareService:
         """Handle bot commands"""
         command = text.split()[0].lower()
         
+        # Send typing indicator immediately for better responsiveness
+        self.send_typing_action(chat_id)
+        
         if command == "/start":
             self.send_message(
                 chat_id,
-                "🛡️ <b>Welcome to SmartXDR Bot!</b>\n\n"
+                "<b>Welcome to SmartXDR Assistant!</b>\n\n"
                 "I can help you analyze security threats and get AI-powered insights.\n\n"
                 "<b>How to use:</b>\n"
                 "Simply send me your security-related question and I'll analyze it using SmartXDR AI.\n\n"
@@ -809,7 +828,7 @@ class TelegramMiddlewareService:
                 
                 self.send_message(
                     chat_id,
-                    f"⚠️ <b>Error</b>\n\n{html.escape(error_msg)}",
+                    f"<b>Error</b>\n\n{html.escape(error_msg)}",
                     reply_to_message_id=message_id
                 )
                 self._stats["errors"] += 1
@@ -858,10 +877,10 @@ class TelegramMiddlewareService:
             chat_id: Telegram chat ID
             message_id: Message ID to reply to
         """
+        # Start continuous typing
+        typing_stop = self.start_continuous_typing(chat_id)
+        
         try:
-            # Send typing indicator
-            self.send_typing_action(chat_id)
-            
             # Import and call the daily report scheduler
             from app.services.daily_report_scheduler import DailyReportScheduler
             
@@ -886,6 +905,8 @@ class TelegramMiddlewareService:
                 f"Error: {str(e)[:200]}",
                 reply_to_message_id=message_id
             )
+        finally:
+            typing_stop.set()
     
     def _handle_alert_summary(self, chat_id: int, message_id: int, time_arg: str = None, index_arg: str = None, include_ai: bool = False) -> None:
         """
@@ -899,10 +920,10 @@ class TelegramMiddlewareService:
             index_arg: Comma-separated index patterns (e.g., "suricata,zeek")
             include_ai: Include AI analysis (default: False)
         """
+        # Start continuous typing
+        typing_stop = self.start_continuous_typing(chat_id)
+        
         try:
-            # Send typing indicator
-            self.send_typing_action(chat_id)
-            
             # Parse time argument
             time_window_minutes = ALERT_TIME_WINDOW  # Default from config
             if time_arg:
@@ -920,7 +941,7 @@ class TelegramMiddlewareService:
                 except ValueError:
                     self.send_message(
                         chat_id,
-                        f"⚠️ Invalid time format: {time_arg}\nUse: 7d, 24h, 60m",
+                        f"Invalid time format: {time_arg}\nUse: 7d, 24h, 60m",
                         reply_to_message_id=message_id
                     )
                     return
@@ -1079,6 +1100,8 @@ class TelegramMiddlewareService:
                 reply_to_message_id=message_id
             )
             logger.error(f"Alert summary error: {e}")
+        finally:
+            typing_stop.set()
     
     def _handle_sumlogs_analysis(
         self,
@@ -1100,12 +1123,12 @@ class TelegramMiddlewareService:
             index_arg: Index pattern (e.g., "*suricata*", "all")
             severity_arg: Severity filter (e.g., "ERROR,WARNING")
         """
+        # Start continuous typing
+        typing_stop = self.start_continuous_typing(chat_id)
+        
         try:
             from app.services.elasticsearch_service import ElasticsearchService
             from app.services.llm_service import LLMService
-            
-            # Send typing indicator
-            self.send_typing_action(chat_id)
             
             # Parse time argument (default: 24h)
             hours = 24
@@ -1121,7 +1144,7 @@ class TelegramMiddlewareService:
                 except ValueError:
                     self.send_message(
                         chat_id,
-                        f"⚠️ Invalid time format: {time_arg}\nUsing default: 24h",
+                        f"Invalid time format: {time_arg}\nUsing default: 24h",
                         reply_to_message_id=message_id
                     )
             
@@ -1290,6 +1313,8 @@ class TelegramMiddlewareService:
                 reply_to_message_id=message_id
             )
             logger.error(f"Sumlogs analysis error: {e}")
+        finally:
+            typing_stop.set()
     
     def _format_response(self, text: str) -> str:
         """
