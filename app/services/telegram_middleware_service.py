@@ -759,7 +759,7 @@ class TelegramMiddlewareService:
                 
                 self.send_message(
                     chat_id,
-                    f"🤖 <b>SmartXDR Analysis</b> ({elapsed:.1f}s)\n\n{formatted_response}",
+                    f"🤖<b>SmartXDR Analysis</b>\n\n{formatted_response}",
                     reply_to_message_id=message_id
                 )
                 
