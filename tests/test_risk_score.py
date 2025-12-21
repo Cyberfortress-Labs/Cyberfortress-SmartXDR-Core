@@ -39,48 +39,48 @@ def calculate_risk_score(total_alerts, error_count, warning_count, info_count, a
 
 
 if __name__ == "__main__":
-    print('🧪 Risk Score Calculation Examples (New Formula)')
+    print('Risk Score Calculation Examples (New Formula)')
     print('=' * 80)
     print()
     
     test_cases = [
         {
-            'name': '📊 100 INFO alerts (70% confidence, no escalation)',
+            'name': '100 INFO alerts (70% confidence, no escalation)',
             'total': 100, 'error': 0, 'warning': 0, 'info': 100,
             'confidence': 0.7, 'escalation': 0
         },
         {
-            'name': '⚠️  100 WARNING alerts (90% confidence, no escalation)',
+            'name': '100 WARNING alerts (90% confidence, no escalation)',
             'total': 100, 'error': 0, 'warning': 100, 'info': 0,
             'confidence': 0.9, 'escalation': 0
         },
         {
-            'name': '🚨 50 ERROR alerts (95% confidence, + attack sequence)',
+            'name': '50 ERROR alerts (95% confidence, + attack sequence)',
             'total': 50, 'error': 50, 'warning': 0, 'info': 0,
             'confidence': 0.95, 'escalation': 2
         },
         {
-            'name': '🔀 Mixed: 20 ERROR + 100 WARNING + 200 INFO (80% conf, single pattern)',
+            'name': 'Mixed: 20 ERROR + 100 WARNING + 200 INFO (80% conf, single pattern)',
             'total': 320, 'error': 20, 'warning': 100, 'info': 200,
             'confidence': 0.8, 'escalation': 1
         },
         {
-            'name': '📈 1000 WARNING alerts (85% confidence)',
+            'name': '1000 WARNING alerts (85% confidence)',
             'total': 1000, 'error': 0, 'warning': 1000, 'info': 0,
             'confidence': 0.85, 'escalation': 0
         },
         {
-            'name': '💥 5 ERROR alerts (98% confidence, + attack sequence) - CRITICAL',
+            'name': '5 ERROR alerts (98% confidence, + attack sequence) - CRITICAL',
             'total': 5, 'error': 5, 'warning': 0, 'info': 0,
             'confidence': 0.98, 'escalation': 2
         },
         {
-            'name': '🟢 10 INFO alerts (60% confidence) - Low noise',
+            'name': '10 INFO alerts (60% confidence) - Low noise',
             'total': 10, 'error': 0, 'warning': 0, 'info': 10,
             'confidence': 0.6, 'escalation': 0
         },
         {
-            'name': '🔴 Mixed critical: 5 ERROR + 20 WARNING (95% conf, + escalation)',
+            'name': 'Mixed critical: 5 ERROR + 20 WARNING (95% conf, + escalation)',
             'total': 25, 'error': 5, 'warning': 20, 'info': 0,
             'confidence': 0.95, 'escalation': 2
         }
@@ -103,10 +103,10 @@ if __name__ == "__main__":
         print()
     
     print('=' * 80)
-    print('✅ Test completed!')
+    print('Test completed!')
     print()
-    print('📊 Score Interpretation:')
-    print('  0-30:   🟢 LOW RISK      - Routine monitoring')
-    print('  30-50:  🟡 MEDIUM RISK   - Investigate patterns')
-    print('  50-70:  🔴 HIGH RISK     - Immediate review required')
-    print('  70-100: 🚨 CRITICAL RISK - Emergency response')
+    print('Score Interpretation:')
+    print('  0-30:   LOW RISK      - Routine monitoring')
+    print('  30-50:  MEDIUM RISK   - Investigate patterns')
+    print('  50-70:  HIGH RISK     - Immediate review required')
+    print('  70-100: CRITICAL RISK - Emergency response')

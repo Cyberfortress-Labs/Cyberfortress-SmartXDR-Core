@@ -35,11 +35,11 @@ setup_telegram_webhook() {
             if echo "$RESPONSE" | grep -q '"ok":true'; then
                 echo "[SmartXDR] Webhook set successfully: $WEBHOOK_URL"
             else
-                echo "[SmartXDR] ✗ Failed to set webhook: $RESPONSE"
+                echo "[SmartXDR] Failed to set webhook: $RESPONSE"
             fi
         else
-            echo "[SmartXDR] ✗ TUNNEL_DOMAIN not set, webhook not configured"
-            echo "[SmartXDR]    Please set TUNNEL_DOMAIN in .env file"
+            echo "[SmartXDR] TUNNEL_DOMAIN not set, webhook not configured"
+            echo "[SmartXDR] Please set TUNNEL_DOMAIN in .env file"
         fi
     else
         echo "[SmartXDR] Telegram webhook disabled, using polling mode"

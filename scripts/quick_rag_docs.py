@@ -113,7 +113,7 @@ class OptimizedIngester:
     
     def _init_direct_mode(self):
         """Initialize direct ChromaDB access using RAGRepository"""
-        print("⚡ Direct ChromaDB Mode (via RAGRepository)")
+        print("Direct ChromaDB Mode (via RAGRepository)")
         
         # Use RAGRepository for unified ChromaDB initialization
         # This handles Docker vs local client selection automatically
@@ -226,7 +226,7 @@ class OptimizedIngester:
             # Check for MITRE collection (tactics + techniques arrays)
             if isinstance(data, dict) and 'techniques' in data and isinstance(data['techniques'], list):
                 chunks = []
-                print(f"    📋 MITRE collection detected: {len(data.get('techniques', []))} techniques, {len(data.get('tactics', []))} tactics")
+                print(f"MITRE collection detected: {len(data.get('techniques', []))} techniques, {len(data.get('tactics', []))} tactics")
                 
                 # Process tactics as chunks
                 for tactic in data.get('tactics', []):
@@ -281,7 +281,7 @@ class OptimizedIngester:
             
             self.stats['chunks'] += len(batch)
         except Exception as e:
-            print(f"  ✗ Batch failed: {str(e)[:100]}")
+            print(f"Batch failed: {str(e)[:100]}")
             self.stats['errors'] += 1
     
     def _process_batch_direct(self, batch: List[Dict]):
@@ -382,7 +382,7 @@ class OptimizedIngester:
                 rate = self.stats['files'] / elapsed if elapsed > 0 else 0
                 
                 print(f"[{file_count}] {rel_path[:55]}")
-                print(f"{category}|{len(content)/1024:.1f}KB |{len(chunks)} chunks | ⏱️  {rate:.1f} files/s")
+                print(f"{category}|{len(content)/1024:.1f}KB |{len(chunks)} chunks | {rate:.1f} files/s")
                 
                 if dry_run:
                     self.stats['chunks'] += len(chunks)
@@ -537,16 +537,16 @@ Examples:
     # Validate directory
     docs = Path(args.directory)
     if not docs.exists():
-        print(f"✗ Directory not found: {docs}")
+        print(f"Directory not found: {docs}")
         sys.exit(1)
     
     if not docs.is_dir():
-        print(f"✗ Not a directory: {docs}")
+        print(f"Not a directory: {docs}")
         sys.exit(1)
     
     # Validate API mode
     if args.api and not args.api_key:
-        print("✗ --api-key required when using --api mode")
+        print("--api-key required when using --api mode")
         sys.exit(1)
     
     try:

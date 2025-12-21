@@ -171,7 +171,7 @@ class AlertSummarizationService:
         try:
             # Create figure with subplots
             fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(14, 10))
-            fig.suptitle(f'🚨 ML Alert Analysis Dashboard (Risk: {risk_score:.1f}/100)', 
+            fig.suptitle(f'ML Alert Analysis Dashboard (Risk: {risk_score:.1f}/100)', 
                         fontsize=16, fontweight='bold')
             
             # 1. Pattern Distribution (Pie Chart)
@@ -314,7 +314,7 @@ class AlertSummarizationService:
                 alerts = [hit["_source"] for hit in response.get("hits", {}).get("hits", [])]
                 
                 if DEBUG_MODE:
-                    logger.debug(f"📊 Found {len(alerts)} alerts in Elasticsearch")
+                    logger.debug(f"Found {len(alerts)} alerts in Elasticsearch")
             except Exception as e:
                 logger.error(f"Could not query Elasticsearch: {str(e)}")
             
@@ -344,10 +344,27 @@ class AlertSummarizationService:
         
         for alert in alerts:
             try:
-                # Support both nested (source.ip) and flat (source_ip) field structures
-                source_ip = alert.get("source", {}).get("ip") if isinstance(alert.get("source"), dict) else alert.get("source.ip", "unknown")
-                if not source_ip or source_ip == "unknown":
-                    source_ip = alert.get("source_ip", "unknown")
+                # Extract source IP - try multiple field paths
+                source_ip = None
+                
+                # 1. Try nested structure: alert["source"]["ip"]
+                source_obj = alert.get("source")
+                if isinstance(source_obj, dict):
+                    source_ip = source_obj.get("ip")
+                
+                # 2. Fallback: Try flat field "source_ip"
+                if not source_ip:
+                    source_ip = alert.get("source_ip")
+                
+                # 3. Fallback: Try agent.name as identifier
+                if not source_ip:
+                    agent_obj = alert.get("agent")
+                    if isinstance(agent_obj, dict):
+                        source_ip = agent_obj.get("name")
+                
+                # 4. Final fallback
+                if not source_ip:
+                    source_ip = "unknown"
                 
                 # Get ML prediction values (nested structure)
                 ml_pred = alert.get("ml", {}).get("prediction", {})
@@ -607,20 +624,20 @@ Giữ phản hồi dưới 250 từ, cụ thể và có thể hành động."""
     
     def _build_detailed_summary(self, alert_context: str, grouped_alerts: List[Dict], risk_score: float) -> str:
         """Build detailed summary from grouped alerts"""
-        summary = f"🚨 ML Alert Analysis\n\n"
+        summary = f"ML Alert Analysis\n\n"
         summary += f"Risk Assessment:\n"
         
         if risk_score >= 70:
-            summary += f"⚠️ CRITICAL RISK ({risk_score:.1f}/100)\n"
+            summary += f"CRITICAL RISK ({risk_score:.1f}/100)\n"
             summary += "Immediate action required. Multiple attack patterns detected with high confidence.\n\n"
         elif risk_score >= 50:
-            summary += f"🔴 HIGH RISK ({risk_score:.1f}/100)\n"
+            summary += f"HIGH RISK ({risk_score:.1f}/100)\n"
             summary += "Significant security concern. Review alerts and implement recommended actions.\n\n"
         elif risk_score >= 30:
-            summary += f"🟡 MEDIUM RISK ({risk_score:.1f}/100)\n"
+            summary += f"MEDIUM RISK ({risk_score:.1f}/100)\n"
             summary += "Monitor closely. Take precautionary measures and investigate patterns.\n\n"
         else:
-            summary += f"🟢 LOW RISK ({risk_score:.1f}/100)\n"
+            summary += f"LOW RISK ({risk_score:.1f}/100)\n"
             summary += "Routine security monitoring. Continue standard procedures.\n\n"
         
         # Detected Patterns
@@ -672,28 +689,28 @@ Giữ phản hồi dưới 250 từ, cụ thể và có thể hành động."""
                 summary += f"     - Probability: {group['avg_probability']:.1%}\n"
         
         # Recommended Actions
-        summary += "\n\n<b>Recommended Actions:</b>\n"
+        summary += "<b>Recommended Actions:</b>\n"
         
         if risk_score >= 70:
-            summary += "  1. 🚨 IMMEDIATE: Block or isolate affected source IPs\n"
-            summary += "  2. 📋 Investigate active sessions from affected IPs\n"
-            summary += "  3. 🔑 Review and reset credentials for compromised accounts\n"
-            summary += "  4. 📊 Escalate to Security Operations Center (SOC)\n"
-            summary += "  5. 📝 Document incident for forensic analysis\n"
+            summary += "  1. IMMEDIATE: Block or isolate affected source IPs\n"
+            summary += "  2. Investigate active sessions from affected IPs\n"
+            summary += "  3. Review and reset credentials for compromised accounts\n"
+            summary += "  4. Escalate to Security Operations Center (SOC)\n"
+            summary += "  5. Document incident for forensic analysis\n"
         elif risk_score >= 50:
-            summary += "  1. 🔍 Conduct in-depth analysis of alert patterns\n"
-            summary += "  2. 🛡️ Enable enhanced monitoring for affected assets\n"
-            summary += "  3. ⚠️ Prepare incident response procedures\n"
-            summary += "  4. 📞 Alert security team for investigation\n"
+            summary += "  1. Conduct in-depth analysis of alert patterns\n"
+            summary += "  2. Enable enhanced monitoring for affected assets\n"
+            summary += "  3. Prepare incident response procedures\n"
+            summary += "  4. Alert security team for investigation\n"
         elif risk_score >= 30:
-            summary += "  1. 📊 Monitor trends and pattern changes\n"
-            summary += "  2. 🔍 Investigate high-confidence alerts\n"
-            summary += "  3. 🛡️ Review firewall and access control rules\n"
-            summary += "  4. 📈 Update threat intelligence\n"
+            summary += "  1. Monitor trends and pattern changes\n"
+            summary += "  2. Investigate high-confidence alerts\n"
+            summary += "  3. Review firewall and access control rules\n"
+            summary += "  4. Update threat intelligence\n"
         else:
-            summary += "  1. ✅ Continue routine monitoring\n"
-            summary += "  2. 📋 Archive alerts for audit trail\n"
-            summary += "  3. 🔄 Review and update detection rules\n"
+            summary += "  1. Continue routine monitoring\n"
+            summary += "  2. Archive alerts for audit trail\n"
+            summary += "  3. Review and update detection rules\n"
         
         return summary
     

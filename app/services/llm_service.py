@@ -322,9 +322,10 @@ KHÔNG dùng bullet points hay list. Chỉ viết 1 đoạn văn liền mạch."
         
         # Build context using RAGService
         # Enhance query with conversation context for better RAG search
+        # But skip for short/simple queries (greetings, etc.) to save time
         rag_query = query
-        if conversation_history_text:
-            # Extract key entities from history to enhance RAG query
+        if conversation_history_text and len(query) > 20:
+            # Only extract entities for substantive queries
             context_entities = self._extract_context_entities(conversation_history_text)
             if context_entities:
                 rag_query = f"{query} (context: {context_entities})"

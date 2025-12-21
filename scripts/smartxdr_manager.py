@@ -115,7 +115,7 @@ def create_first_admin():
     print("""
 ╔══════════════════════════════════════════════════════════╗
 ║                                                          ║
-║       🚀 SmartXDR First-Time Setup                       ║
+║          SmartXDR First-Time Setup                       ║
 ║                                                          ║
 ║   No admin users found. Please create the first admin    ║
 ║   account to secure this management console.             ║
@@ -139,7 +139,7 @@ def create_first_admin():
     
     # Get password
     gen_password = generate_password()
-    print(f"\n  💡 Generated strong password: {gen_password}")
+    print(f"\n  Generated strong password: {gen_password}")
     print("  (Press Enter to use this password, or type your own)")
     
     while True:
@@ -177,7 +177,7 @@ def create_first_admin():
 ║  Password: {password:<45} ║
 ╚══════════════════════════════════════════════════════════╝
     """)
-    print("  ⚠️  Save these credentials securely!")
+    print("    Save these credentials securely!")
     input("\n  Press Enter to continue to login...")
     return email
 
@@ -190,7 +190,7 @@ def login_admin() -> bool:
     print("""
 ╔══════════════════════════════════════════════════════════╗
 ║                                                          ║
-║       🔐 SmartXDR Management Console                     ║
+║        SmartXDR Management Console                       ║
 ║                                                          ║
 ║   Please login with admin credentials to continue.       ║
 ║                                                          ║
@@ -328,7 +328,7 @@ def create_user():
     
     # Generate or enter password
     gen_password = generate_password()
-    print(f"\n  💡 Generated password: {gen_password}")
+    print(f"\n     Generated password: {gen_password}")
     password = safe_input("  Press Enter to use, or type custom: ").strip() or gen_password
     
     # Select role
@@ -393,7 +393,7 @@ def reset_password():
         return
     
     gen_password = generate_password()
-    print(f"\n  💡 Generated password: {gen_password}")
+    print(f"\n     Generated password: {gen_password}")
     password = safe_input("  Press Enter to use, or type custom: ").strip() or gen_password
     
     user.password = hash_password(password)
@@ -449,7 +449,7 @@ def list_api_keys():
     for key in keys:
         status = 'Active' if key.enabled and not key.is_expired else '✗ Disabled'
         if key.is_expired:
-            status = '⏰ Expired'
+            status = 'Expired'
         print(f"  {key.id:<5} {key.name:<20} {key.key_prefix:<10} {status:<10} {key.rate_limit:<8} {key.usage_count:<8}")
     
     print()
@@ -528,7 +528,7 @@ def create_api_key():
     print(f"  Permissions: {permissions}")
     print(f"  Rate Limit: {rate_limit}/min")
     print(f"  Expires: {expires_at or 'Never'}")
-    print("\n  ⚠️  SAVE THIS KEY (shown only once!):")
+    print("\n     SAVE THIS KEY (shown only once!):")
     print(f"\n  {api_key}")
     print("\n" + "═" * 60)
 
@@ -698,7 +698,7 @@ def main_menu(app):
             choice = safe_input("  Select option: ").strip()
             
             if choice == '0':
-                print("\n  Goodbye! 👋\n")
+                print("\n  Goodbye! \n")
                 break
             elif choice == '1':
                 user_management_menu()
@@ -730,7 +730,7 @@ def main():
         print("\n\n  ✗ Cancelled by user")
         sys.exit(0)
     except Exception as e:
-        print(f"\n  ❌ Error: {e}")
+        print(f"\n  Error: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

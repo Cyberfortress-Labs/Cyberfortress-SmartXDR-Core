@@ -73,7 +73,7 @@ class EmailService:
             # Generate subject if not provided
             if subject is None:
                 risk_level = self._get_risk_level(risk_score)
-                subject = f"🚨 [{risk_level}] Security Alert Summary - {datetime.now().strftime('%Y-%m-%d')}"
+                subject = f"[{risk_level}] Security Alert Summary - {datetime.now().strftime('%Y-%m-%d')}"
             
             # Create HTML email
             html_content = self._build_html_email(
@@ -110,7 +110,7 @@ class EmailService:
                 server.login(self.from_email, self.email_password)
                 server.send_message(msg)
             
-            logger.info(f"✅ Alert summary email sent to {to_email}")
+            logger.info(f"Alert summary email sent to {to_email}")
             return True
             
         except Exception as e:
@@ -308,7 +308,7 @@ class EmailService:
     </div>
     
     <div class="section">
-        <h2>📊 Alert Summary</h2>
+        <h2>Alert Summary</h2>
         <div style="color: #333333 !important;">{summary_html}</div>
     </div>
 """
@@ -317,7 +317,7 @@ class EmailService:
         if ai_analysis:
             html += f"""
     <div class="ai-section">
-        <h2>🤖 AI Analysis & Recommendations</h2>
+        <h2>AI Analysis & Recommendations</h2>
         <div style="color: #ffffff !important;">{ai_analysis_html}</div>
     </div>
 """
@@ -325,7 +325,7 @@ class EmailService:
         # Add visualization if available
         html += """
     <div class="chart">
-        <h2 style="color: #333333 !important;">📈 Alert Visualization</h2>
+        <h2 style="color: #333333 !important;">Alert Visualization</h2>
         <img src="cid:visualization_chart" alt="Alert Visualization">
     </div>
     

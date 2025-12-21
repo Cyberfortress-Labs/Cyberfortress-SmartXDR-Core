@@ -56,6 +56,7 @@ SUMMARY_MODEL = os.environ.get('SUMMARY_MODEL', 'gpt-5-mini')
 # https://platform.openai.com/docs/api-reference
 OPENAI_TIMEOUT = 600.0  # 10 minutes default timeout
 OPENAI_MAX_RETRIES = 2  # Default retry count for failed requests
+TELEGRAM_API_TIMEOUT = int(os.environ.get('TELEGRAM_API_TIMEOUT', '300'))  # Telegram middleware timeout (5 min default)
 
 # Query settings
 DEFAULT_RESULTS = 25  # topK: Increased for better context coverage (was 15)

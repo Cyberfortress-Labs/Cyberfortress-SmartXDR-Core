@@ -94,7 +94,7 @@ class ConversationMemory:
         
         # LangChain per-session memory cache (for token-aware windowing)
         self._langchain_memories: Dict[str, Any] = {}
-        self.langchain_window_size = 5  # k=5 exchanges (10 messages total)
+        self.langchain_window_size = 3  # k=3 exchanges (6 messages total) - reduced for speed
         
         # Configuration
         self.max_messages_per_session = 20  # Max messages to keep

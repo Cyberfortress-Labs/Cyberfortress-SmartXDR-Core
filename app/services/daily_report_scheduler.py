@@ -82,7 +82,7 @@ class DailyReportScheduler:
                     # Already sent today, sleep until tomorrow
                     next_send = self._calculate_next_send_time()
                     sleep_seconds = (next_send - now).total_seconds()
-                    logger.info(f"📅 Report already sent today. Next send: {next_send.strftime('%Y-%m-%d %H:%M')}")
+                    logger.info(f"Report already sent today. Next send: {next_send.strftime('%Y-%m-%d %H:%M')}")
                     
                     # Sleep in 5-minute chunks to allow graceful shutdown
                     while sleep_seconds > 0 and self.running:
@@ -93,14 +93,14 @@ class DailyReportScheduler:
                 
                 # Check if it's time to send
                 if self._should_send_report():
-                    logger.info("⏰ Sending scheduled daily report...")
+                    logger.info("Sending scheduled daily report...")
                     self._send_daily_report()
                     last_sent_date = current_date
                     
                     # Calculate next send time (tomorrow at scheduled time)
                     next_send = self._calculate_next_send_time()
                     sleep_seconds = (next_send - datetime.now()).total_seconds()
-                    logger.info(f"✅ Report sent. Next send: {next_send.strftime('%Y-%m-%d %H:%M')} (in {sleep_seconds/3600:.1f}h)")
+                    logger.info(f"Report sent. Next send: {next_send.strftime('%Y-%m-%d %H:%M')} (in {sleep_seconds/3600:.1f}h)")
                 else:
                     # Calculate seconds until next check
                     next_send = self._calculate_next_send_time()
@@ -115,7 +115,7 @@ class DailyReportScheduler:
                         time.sleep(min(safe_sleep, 3600))  # Max 1 hour sleep chunks
             
             except Exception as e:
-                logger.error(f"❌ Scheduler error: {str(e)}")
+                logger.error(f"Scheduler error: {str(e)}")
                 time.sleep(60)
     
     def _calculate_next_send_time(self) -> datetime:
@@ -134,7 +134,7 @@ class DailyReportScheduler:
             return next_send
         
         except Exception as e:
-            logger.error(f"❌ Error calculating next send time: {str(e)}")
+            logger.error(f"Error calculating next send time: {str(e)}")
             # Fallback: send in 24 hours
             return datetime.now() + timedelta(days=1)
     
@@ -149,22 +149,22 @@ class DailyReportScheduler:
                     abs(now.minute - target_minute) < 1)
         
         except Exception as e:
-            logger.error(f"❌ Error parsing send time '{self.send_time}': {str(e)}")
+            logger.error(f"Error parsing send time '{self.send_time}': {str(e)}")
             return False
     
     def _send_daily_report(self):
         """Generate and send daily security report"""
         try:
             # Get alert summary for last 24 hours (daily report sent at 7am)
-            logger.info("📊 Generating alert summary for last 24 hours...")
+            logger.info("Generating alert summary for last 24 hours...")
             summary_data = self.alert_service.summarize_alerts(time_window_minutes=1440)  # 24 hours
             
             if not summary_data.get('success'):
-                logger.error(f"❌ Alert summary failed: {summary_data.get('error', 'Unknown error')}")
+                logger.error(f"Alert summary failed: {summary_data.get('error', 'Unknown error')}")
                 return
             
             # Get AI analysis and recommendations
-            logger.info("🤖 Generating AI analysis...")
+            logger.info("Generating AI analysis...")
             ai_analysis = self._get_ai_analysis(summary_data)
             
             # Add AI analysis to summary data

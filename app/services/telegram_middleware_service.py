@@ -14,7 +14,7 @@ import html
 import re
 
 from app.utils.logger import setup_logger
-from app.config import ALERT_TIME_WINDOW
+from app.config import ALERT_TIME_WINDOW, TELEGRAM_API_TIMEOUT
 
 logger = setup_logger("telegram_middleware")
 
@@ -384,13 +384,19 @@ class TelegramMiddlewareService:
     def send_typing_action(self, chat_id: int) -> bool:
         """Send typing indicator to chat"""
         try:
-            self._tg_session.post(
+            response = self._tg_session.post(
                 f"{self.api_base}/sendChatAction",
                 json={"chat_id": chat_id, "action": "typing"},
                 timeout=5
             )
-            return True
-        except:
+            if response.status_code == 200:
+                logger.info(f"Typing indicator sent to chat {chat_id}")
+                return True
+            else:
+                logger.warning(f"Failed to send typing: {response.status_code} - {response.text[:100]}")
+                return False
+        except Exception as e:
+            logger.warning(f"Typing action failed: {e}")
             return False
     
     # ========== Polling & Message Handling ==========
@@ -503,7 +509,7 @@ class TelegramMiddlewareService:
             # Optionally notify user they're not authorized
             self.send_message(
                 chat_id,
-                "⛔ <b>Access Denied</b>\n\n"
+                "<b>Access Denied</b>\n\n"
                 "You are not authorized to use this bot.\n"
                 f"Your Chat ID: <code>{chat_id}</code>\n\n"
                 "Please contact the administrator.",
@@ -521,7 +527,7 @@ class TelegramMiddlewareService:
             if rate_info.get("is_blocked"):
                 self.send_message(
                     chat_id,
-                    "🚫 <b>Temporarily Blocked</b>\n\n"
+                    "<b>Temporarily Blocked</b>\n\n"
                     "You have been temporarily blocked due to excessive requests.\n"
                     f"Try again after: {rate_info.get('blocked_until', 'a few minutes')}",
                     reply_to_message_id=message_id
@@ -529,7 +535,7 @@ class TelegramMiddlewareService:
             else:
                 self.send_message(
                     chat_id,
-                    "⏳ <b>Rate Limited</b>\n\n"
+                    "<b>Rate Limited</b>\n\n"
                     f"You have sent too many messages. Please wait a moment.\n"
                     f"Limit: {self.rate_limit_messages} messages per {self.rate_limit_window} seconds.",
                     reply_to_message_id=message_id
@@ -561,15 +567,16 @@ class TelegramMiddlewareService:
                 "/stats - Show usage statistics\n"
                 "/summary - Summarize recent ML-classified alerts\n"
                 "/sumlogs - Analyze ML logs with AI\n"
+                "/send-email - Trigger daily report email now\n"
                 "/id - Show your chat ID\n\n"
-                "🔒 This bot is protected by whitelist and rate limiting.",
+                "This bot is protected by whitelist and rate limiting.",
                 reply_to_message_id=message_id
             )
         
         elif command == "/help":
             self.send_message(
                 chat_id,
-                "📖 <b>SmartXDR Bot Help</b>\n\n"
+                "<b>SmartXDR Bot Help</b>\n\n"
                 "<b>What I can do:</b>\n"
                 "• Analyze security alerts and logs\n"
                 "• Map threats to MITRE ATT&CK framework\n"
@@ -599,12 +606,12 @@ class TelegramMiddlewareService:
         
         elif command == "/status":
             connection = self.test_connection()
-            telegram_status = "✅ Connected" if connection["telegram"]["connected"] else "❌ Disconnected"
-            smartxdr_status = "✅ Connected" if connection["smartxdr"]["connected"] else "❌ Disconnected"
+            telegram_status = "Connected" if connection["telegram"]["connected"] else "Disconnected"
+            smartxdr_status = "Connected" if connection["smartxdr"]["connected"] else "Disconnected"
             
             self.send_message(
                 chat_id,
-                f"📊 <b>Bot Status</b>\n\n"
+                f"<b>Bot Status</b>\n\n"
                 f"<b>Telegram API:</b> {telegram_status}\n"
                 f"<b>SmartXDR API:</b> {smartxdr_status}\n"
                 f"<b>API URL:</b> <code>{self.smartxdr_api_url}</code>\n\n"
@@ -685,7 +692,7 @@ class TelegramMiddlewareService:
             
             self.send_message(
                 chat_id,
-                f"📈 <b>Usage Statistics</b>\n\n"
+                f"<b>Usage Statistics</b>\n\n"
                 f"<b>Messages:</b>\n"
                 f"• Received: {self._stats['messages_received']}\n"
                 f"• Processed: {self._stats['messages_processed']}\n"
@@ -699,7 +706,7 @@ class TelegramMiddlewareService:
             chat = {"id": chat_id}
             self.send_message(
                 chat_id,
-                f"🆔 <b>Your Information</b>\n\n"
+                f"<b>Your Information</b>\n\n"
                 f"<b>User ID:</b> <code>{user.get('id')}</code>\n"
                 f"<b>Username:</b> @{user.get('username', 'N/A')}\n"
                 f"<b>Chat ID:</b> <code>{chat_id}</code>\n"
@@ -707,11 +714,26 @@ class TelegramMiddlewareService:
                 reply_to_message_id=message_id
             )
         
+        elif command == "/send-email" or command == "/sendemail":
+            # Trigger daily email report immediately
+            self.send_message(
+                chat_id,
+                "<b>Sending Daily Report Email...</b>\n\nThis may take a moment.",
+                reply_to_message_id=message_id
+            )
+            
+            # Run in background thread
+            threading.Thread(
+                target=self._handle_send_email,
+                args=(chat_id, message_id),
+                daemon=True
+            ).start()
+        
         else:
             # Unknown command
             self.send_message(
                 chat_id,
-                "❓ Unknown command. Use /help to see available commands.",
+                "Unknown command. Use /help to see available commands.",
                 reply_to_message_id=message_id
             )
     
@@ -725,8 +747,17 @@ class TelegramMiddlewareService:
             message_id: Original message ID for reply
             user: User info dict
         """
-        # Send typing indicator in background (non-blocking)
-        threading.Thread(target=self.send_typing_action, args=(chat_id,), daemon=True).start()
+        # Start continuous typing indicator (Telegram typing lasts only 5s)
+        typing_stop_event = threading.Event()
+        
+        def continuous_typing():
+            while not typing_stop_event.is_set():
+                self.send_typing_action(chat_id)
+                # Wait 4 seconds before next typing (Telegram typing lasts 5s)
+                typing_stop_event.wait(4)
+        
+        typing_thread = threading.Thread(target=continuous_typing, daemon=True)
+        typing_thread.start()
         
         start_time = time.time()
         
@@ -745,7 +776,7 @@ class TelegramMiddlewareService:
                     "query": query_to_send,
                     "session_id": session_id  # Enable conversation memory
                 },
-                timeout=60
+                timeout=TELEGRAM_API_TIMEOUT
             )
             
             elapsed = time.time() - start_time
@@ -759,7 +790,7 @@ class TelegramMiddlewareService:
                 
                 self.send_message(
                     chat_id,
-                    f"🤖<b>SmartXDR Analysis</b>\n\n{formatted_response}",
+                    f"{formatted_response}",
                     reply_to_message_id=message_id
                 )
                 
@@ -786,7 +817,7 @@ class TelegramMiddlewareService:
             elapsed = time.time() - start_time
             self.send_message(
                 chat_id,
-                f"⏱️ <b>Timeout</b>\n\nThe request took too long ({elapsed:.1f}s). Please try again.",
+                f"<b>Timeout</b>\n\nThe request took too long ({elapsed:.1f}s). Please try again.",
                 reply_to_message_id=message_id
             )
             self._stats["errors"] += 1
@@ -796,7 +827,7 @@ class TelegramMiddlewareService:
             elapsed = time.time() - start_time
             self.send_message(
                 chat_id,
-                "🔌 <b>Connection Error</b>\n\n"
+                "<b>Connection Error</b>\n\n"
                 "Cannot connect to SmartXDR API. Please ensure the server is running.",
                 reply_to_message_id=message_id
             )
@@ -807,11 +838,52 @@ class TelegramMiddlewareService:
             elapsed = time.time() - start_time
             self.send_message(
                 chat_id,
-                f"❌ <b>Error</b>\n\nAn unexpected error occurred: {html.escape(str(e))}",
+                f"<b>Error</b>\n\nAn unexpected error occurred: {html.escape(str(e))}",
                 reply_to_message_id=message_id
             )
             self._stats["errors"] += 1
             logger.error(f"Unexpected error: {e}")
+        
+        finally:
+            # Stop continuous typing indicator
+            typing_stop_event.set()
+    
+    def _handle_send_email(self, chat_id: int, message_id: int) -> None:
+        """
+        Handle /send-email command - trigger daily email report immediately
+        
+        Args:
+            chat_id: Telegram chat ID
+            message_id: Message ID to reply to
+        """
+        try:
+            # Send typing indicator
+            self.send_typing_action(chat_id)
+            
+            # Import and call the daily report scheduler
+            from app.services.daily_report_scheduler import DailyReportScheduler
+            
+            scheduler = DailyReportScheduler()
+            
+            # Call the internal method to send daily report
+            scheduler._send_daily_report()
+            
+            self.send_message(
+                chat_id,
+                "<b>Daily Report Email Sent!</b>\n\n"
+                "The email report has been sent to the configured recipients.",
+                reply_to_message_id=message_id
+            )
+            logger.info(f"Manual daily email triggered by chat {chat_id}")
+            
+        except Exception as e:
+            logger.error(f"Failed to send daily email: {e}")
+            self.send_message(
+                chat_id,
+                f"<b>Failed to Send Email</b>\n\n"
+                f"Error: {str(e)[:200]}",
+                reply_to_message_id=message_id
+            )
     
     def _handle_alert_summary(self, chat_id: int, message_id: int, time_arg: str = None, index_arg: str = None, include_ai: bool = False) -> None:
         """
@@ -854,11 +926,11 @@ class TelegramMiddlewareService:
             # Show processing message
             time_display = f"{time_window_minutes // 1440}d" if time_window_minutes >= 1440 else f"{time_window_minutes // 60}h" if time_window_minutes >= 60 else f"{time_window_minutes}m"
             index_display = index_arg if index_arg else "all indices"
-            ai_indicator = "🤖 AI Analysis Enabled" if include_ai else ""
+            ai_indicator = "AI Analysis Enabled" if include_ai else ""
             
             processing_msg = self.send_message(
                 chat_id,
-                f"⏳ <b>Processing Alert Summary...</b>\n\n"
+                f"<b>Processing Alert Summary...</b>\n\n"
                 f"Time: {time_display}\n"
                 f"Indices: {index_display}\n"
                 f"{ai_indicator}\n\n" if ai_indicator else "\n"
@@ -883,7 +955,7 @@ class TelegramMiddlewareService:
                 error_msg = result.get('error', 'Unknown error')
                 self.send_message(
                     chat_id,
-                    f"❌ <b>Alert Summary Failed</b>\n\n{html.escape(error_msg)}",
+                    f"<b>Alert Summary Failed</b>\n\n{html.escape(error_msg)}",
                     reply_to_message_id=message_id
                 )
                 return
@@ -894,7 +966,7 @@ class TelegramMiddlewareService:
                 time_display = f"{time_window_mins // 1440} days" if time_window_mins >= 1440 else f"{time_window_mins} minutes"
                 self.send_message(
                     chat_id,
-                    "ℹ️ <b>No Alerts Found</b>\n\n"
+                    "<b>No Alerts Found</b>\n\n"
                     f"No ML-classified alerts detected in the last {time_display}.",
                     reply_to_message_id=message_id
                 )
@@ -908,19 +980,19 @@ class TelegramMiddlewareService:
             
             # Send summary card
             summary_text = (
-                f"🚨 <b>ML Alert Summary</b>\n\n"
+                f"<b>ML Alert Summary</b>\n\n"
                 f"<b>Risk Score:</b> {risk_score}/100 "
             )
             
             # Color-code risk score
             if risk_score >= 70:
-                summary_text += "🔴 CRITICAL\n"
+                summary_text += "CRITICAL\n"
             elif risk_score >= 50:
-                summary_text += "🟠 HIGH\n"
+                summary_text += "HIGH\n"
             elif risk_score >= 30:
-                summary_text += "🟡 MEDIUM\n"
+                summary_text += "MEDIUM\n"
             else:
-                summary_text += "🟢 LOW\n"
+                summary_text += "LOW\n"
             
             summary_text += (
                 f"<b>Total Alerts:</b> {alerts_count}\n"
@@ -948,7 +1020,7 @@ class TelegramMiddlewareService:
             # Send AI analysis if available
             if include_ai and 'ai_analysis' in result and result['ai_analysis']:
                 ai_text = (
-                    f"🤖 <b>AI Analysis & Recommendations</b>\n\n"
+                    f"<b>AI Analysis & Recommendations</b>\n\n"
                     f"{self._format_response(result['ai_analysis'])}"
                 )
                 self.send_message(chat_id, ai_text, reply_to_message_id=message_id)
@@ -969,7 +1041,7 @@ class TelegramMiddlewareService:
                     }
                     params = {
                         'chat_id': chat_id,
-                        'caption': '📊 Alert Statistics Visualization'
+                        'caption': 'Alert Statistics Visualization'
                     }
                     
                     photo_response = self._tg_session.post(photo_url, params=params, files=files, timeout=10)
@@ -983,7 +1055,7 @@ class TelegramMiddlewareService:
         except requests.exceptions.Timeout:
             self.send_message(
                 chat_id,
-                "⏱️ <b>Timeout</b>\n\n"
+                "<b>Timeout</b>\n\n"
                 "Alert summary request timed out. The server might be busy.",
                 reply_to_message_id=message_id
             )
@@ -992,7 +1064,7 @@ class TelegramMiddlewareService:
         except requests.exceptions.ConnectionError:
             self.send_message(
                 chat_id,
-                "🔌 <b>Connection Error</b>\n\n"
+                "<b>Connection Error</b>\n\n"
                 "Cannot connect to SmartXDR API. Please ensure the server is running.",
                 reply_to_message_id=message_id
             )
@@ -1001,7 +1073,7 @@ class TelegramMiddlewareService:
         except Exception as e:
             self.send_message(
                 chat_id,
-                f"❌ <b>Error Generating Summary</b>\n\n{html.escape(str(e))}",
+                f"<b>Error Generating Summary</b>\n\n{html.escape(str(e))}",
                 reply_to_message_id=message_id
             )
             logger.error(f"Alert summary error: {e}")
@@ -1065,12 +1137,12 @@ class TelegramMiddlewareService:
             # Show processing message
             processing_msg = self.send_message(
                 chat_id,
-                f"⏳ <b>Analyzing ML Logs...</b>\n\n"
+                f"<b>Analyzing ML Logs...</b>\n\n"
                 f"<b>Question:</b> {html.escape(question or 'Tìm logs nguy hiểm')}\n"
                 f"<b>Time:</b> {hours}h\n"
                 f"<b>Index:</b> {index_pattern}\n"
                 f"<b>Severity:</b> {', '.join(severity_filter) if severity_filter else 'All'}\n\n"
-                "🔍 Querying Elasticsearch...",
+                "Querying Elasticsearch...",
                 reply_to_message_id=message_id
             )
             
@@ -1087,7 +1159,7 @@ class TelegramMiddlewareService:
             if result.get('status') != 'success':
                 self.send_message(
                     chat_id,
-                    f"❌ <b>Query Failed</b>\n\n{html.escape(result.get('error', 'Unknown error'))}",
+                    f"<b>Query Failed</b>\n\n{html.escape(result.get('error', 'Unknown error'))}",
                     reply_to_message_id=message_id
                 )
                 return
@@ -1098,7 +1170,7 @@ class TelegramMiddlewareService:
             if not logs:
                 self.send_message(
                     chat_id,
-                    "ℹ️ <b>No ML Logs Found</b>\n\n"
+                    "<b>No ML Logs Found</b>\n\n"
                     f"No logs with ML predictions found in the last {hours}h matching your criteria.",
                     reply_to_message_id=message_id
                 )
@@ -1157,7 +1229,7 @@ class TelegramMiddlewareService:
             if ai_response.get('status') != 'success':
                 self.send_message(
                     chat_id,
-                    f"❌ <b>AI Analysis Failed</b>\n\n{html.escape(ai_response.get('error', 'Unknown error'))}",
+                    f"<b>AI Analysis Failed</b>\n\n{html.escape(ai_response.get('error', 'Unknown error'))}",
                     reply_to_message_id=message_id
                 )
                 return
@@ -1165,7 +1237,7 @@ class TelegramMiddlewareService:
             # Send summary statistics with logs preview
             severity_breakdown = result.get('summary', {}).get('severity_breakdown', {})
             stats_text = (
-                f"📊 <b>ML Logs Summary</b>\n\n"
+                f"<b>ML Logs Summary</b>\n\n"
                 f"<b>Total Logs:</b> {total}\n"
                 f"<b>Analyzed:</b> {len(logs)}\n"
                 f"<b>Time Range:</b> {hours}h\n"
@@ -1174,8 +1246,8 @@ class TelegramMiddlewareService:
             )
             
             for severity, count in severity_breakdown.items():
-                emoji = "🔴" if severity == "ERROR" else "🟠" if severity == "WARNING" else "🟢"
-                stats_text += f"  {emoji} {severity}: {count}\n"
+                # emoji = "🔴" if severity == "ERROR" else "🟠" if severity == "WARNING" else "🟢"
+                stats_text += f"{severity}: {count}\n"
             
             # Add preview of logs data (truncated version for display)
             # stats_text += f"\n<b>Preview:</b>\n<pre>{logs_context_ai[:500]}...</pre>"
@@ -1205,13 +1277,13 @@ class TelegramMiddlewareService:
                 f.write(analysis)
             
             # Send file with short caption
-            caption = f"🤖 <b>AI Analysis Complete</b>\n\nQuestion: {question}\nTime: {hours}h | Logs: {len(logs)}"
+            caption = f"<b>AI Analysis Complete</b>\n\nQuestion: {question}\nTime: {hours}h | Logs: {len(logs)}"
             self.send_document(chat_id, filepath, caption=caption, reply_to_message_id=message_id)
             
         except Exception as e:
             self.send_message(
                 chat_id,
-                f"❌ <b>Error Analyzing Logs</b>\n\n{html.escape(str(e))}",
+                f"<b>Error Analyzing Logs</b>\n\n{html.escape(str(e))}",
                 reply_to_message_id=message_id
             )
             logger.error(f"Sumlogs analysis error: {e}")

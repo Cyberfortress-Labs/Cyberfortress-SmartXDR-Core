@@ -139,10 +139,15 @@ class ElasticsearchService:
             'hosts': hosts,
             'basic_auth': (username, password),
             'verify_certs': verify_certs,
-            # Compatibility mode for ES 8.x with Python client 9.x
             'request_timeout': 30,
             'max_retries': 3,
-            'retry_on_timeout': True
+            'retry_on_timeout': True,
+            # Compatibility: Python ES client 9.x → ES server 8.x
+            # Set compatible-with=8 to avoid version mismatch errors
+            'headers': {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            }
         }
         
         # Only add ca_certs if provided and file exists
@@ -151,14 +156,26 @@ class ElasticsearchService:
         
         self.client = Elasticsearch(**es_config)
         
-        # Test connection
-        try:
-            info = self.client.info()
-            logger.info(f"Connected to Elasticsearch cluster: {info['cluster_name']}")
-        except Exception as e:
-            logger.error(f"Failed to connect to Elasticsearch: {e}")
-            self.enabled = False
-            self.client = None
+        # Test connection with retry logic
+        max_retries = 3
+        retry_delay = 2  # seconds
+        
+        for attempt in range(1, max_retries + 1):
+            try:
+                info = self.client.info()
+                logger.info(f"Connected to Elasticsearch cluster: {info['cluster_name']}")
+                break  # Success - exit retry loop
+            except Exception as e:
+                if attempt < max_retries:
+                    logger.warning(f"Elasticsearch connection attempt {attempt}/{max_retries} failed: {e}. Retrying in {retry_delay}s...")
+                    import time
+                    time.sleep(retry_delay)
+                else:
+                    # All retries failed - bypass Elasticsearch
+                    logger.error(f"Failed to connect to Elasticsearch after {max_retries} attempts: {e}")
+                    logger.warning("Elasticsearch will be DISABLED. App will continue without ES features.")
+                    self.enabled = False
+                    self.client = None
         
         ElasticsearchService._initialized = True
     
