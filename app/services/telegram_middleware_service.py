@@ -1046,7 +1046,7 @@ class TelegramMiddlewareService:
                         'caption': 'Alert Statistics Visualization'
                     }
                     
-                    photo_response = self._tg_session.post(photo_url, params=params, files=files, timeout=10)
+                    photo_response = self._tg_session.post(photo_url, params=params, files=files, timeout=60)
                     if not photo_response.ok:
                         logger.warning(f"Failed to send visualization: {photo_response.text}")
                 except Exception as e:
@@ -1260,10 +1260,11 @@ class TelegramMiddlewareService:
             analysis = ai_response.get('answer', 'No analysis available')
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"ml_logs_analysis_{timestamp}.md"
-            filepath = os.path.join("logs", filename)
+            logs_dir = "/tmp/logs"  # Use /tmp for write access in Docker
+            filepath = os.path.join(logs_dir, filename)
             
             # Ensure logs directory exists
-            os.makedirs("logs", exist_ok=True)
+            os.makedirs(logs_dir, exist_ok=True)
             
             # Write analysis to markdown (use full logs data)
             with open(filepath, 'w', encoding='utf-8') as f:
