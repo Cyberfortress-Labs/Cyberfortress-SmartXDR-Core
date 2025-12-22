@@ -76,6 +76,25 @@ This is used for managing and monitoring the IDS/IPS system.
 This is used for network security monitoring management.
 
 ## Device Roles
+### Router
+- **Name**: Router/Linux Router
+- **IP**: 192.168.71.5,10.81.85.3
+- **Subnet**: 192.168.71.0/24 (Internet Zone)
+- **WAN IP**: 10.81.85.3 (WAN Management)
+- **NAT IP**: 192.168.71.5 (NAT Management)
+- **Role**: NAT Gateway
+- **Purpose**: Provides Internet access via NAT gateway.
+
+### pfSense
+- **Name**: pfSense/Firewall
+- **IP**:  10.81.85.2, 192.168.100.2, 192.168.85.2, 192.168.95.2
+- **WAN IP**: 10.81.85.2 (WAN Management)
+- **LAN IP**: 192.168.85.2 (LAN/XDR Management)
+- **GUEST IP**: 192.168.95.2 (Guest Management)
+- **SOC IP**: 192.168.100.2 (SOC Management)
+- **Role**: Multi-Interface Firewall & Router
+- **Purpose**: Routes and filters traffic between WAN, LAN, Guest, and SOC networks. Feeds LAN traffic into Suricata/Zeek inline inspection pipeline.
+
 
 ### SIEM Server (192.168.100.128)
 - **Name**: SIEM Server (Elastic Stack)
