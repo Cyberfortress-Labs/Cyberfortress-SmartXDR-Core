@@ -72,6 +72,10 @@ MAX_RERANK_CANDIDATES = 60
 # Lightweight model optimized for relevance scoring
 CROSS_ENCODER_MODEL = os.environ.get('CROSS_ENCODER_MODEL', 'cross-encoder/ms-marco-MiniLM-L-6-v2')
 
+# Enable/disable re-ranking (disable if OOM issues occur)
+# Set RERANKING_ENABLED=false in .env to disable
+RERANKING_ENABLED = os.environ.get('RERANKING_ENABLED', 'true').lower() in ('true', '1', 'yes')
+
 # RAG Chunking settings
 MIN_CHUNK_SIZE = 100  # Minimum chars per chunk (avoid too short chunks)
 MAX_CHUNK_SIZE = 2000  # Maximum chars per chunk

@@ -640,6 +640,10 @@ class RAGService:
         
         return filtered_docs, filtered_dists, filtered_metas
     
+    # Class-level cache for CrossEncoder model (lazy singleton)
+    _cross_encoder = None
+    _cross_encoder_loaded = False
+    
     def _rerank_documents(
         self, 
         query: str, 
@@ -648,17 +652,34 @@ class RAGService:
     ) -> Tuple[List[str], List[float]]:
         """
         Re-rank documents using cross-encoder for better relevance.
-        Falls back to distance-based ranking if cross-encoder unavailable.
+        Uses lazy loading singleton to avoid OOM on startup.
+        Falls back to distance-based ranking if unavailable/disabled.
         """
+        from app.config import RERANKING_ENABLED
+        
+        # Check if re-ranking is disabled via config
+        if not RERANKING_ENABLED:
+            logger.debug("Re-ranking disabled via RERANKING_ENABLED=false")
+            ranked = sorted(zip(documents, distances), key=lambda x: x[1])
+            return [r[0] for r in ranked], [r[1] for r in ranked]
+        
         try:
-            from sentence_transformers import CrossEncoder
-            from app.config import CROSS_ENCODER_MODEL
+            # Lazy load model (singleton pattern)
+            if not RAGService._cross_encoder_loaded:
+                from sentence_transformers import CrossEncoder
+                from app.config import CROSS_ENCODER_MODEL
+                
+                logger.info(f"Loading CrossEncoder model: {CROSS_ENCODER_MODEL}")
+                RAGService._cross_encoder = CrossEncoder(CROSS_ENCODER_MODEL, max_length=512)
+                RAGService._cross_encoder_loaded = True
+                logger.info("CrossEncoder model loaded successfully")
             
-            # Lightweight cross-encoder for relevance scoring
-            model = CrossEncoder(CROSS_ENCODER_MODEL, max_length=512)
+            model = RAGService._cross_encoder
+            if model is None:
+                raise RuntimeError("CrossEncoder failed to load")
             
             # Score query-document pairs
-            pairs = [(query, doc[:DEBUG_TEXT_LENGTH]) for doc in documents]  # Limit doc length for speed
+            pairs = [(query, doc[:DEBUG_TEXT_LENGTH]) for doc in documents]
             scores = model.predict(pairs)
             
             # Sort by cross-encoder score (higher = more relevant)
@@ -672,8 +693,7 @@ class RAGService:
             return [r[0] for r in ranked], [r[1] for r in ranked]
             
         except ImportError:
-            # Cross-encoder not installed, fall back to distance sort
-            logger.debug("Cross-encoder not available, using distance-based ranking")
+            logger.debug("sentence-transformers not installed, using distance-based ranking")
             ranked = sorted(zip(documents, distances), key=lambda x: x[1])
             return [r[0] for r in ranked], [r[1] for r in ranked]
         except Exception as e:

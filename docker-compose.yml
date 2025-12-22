@@ -75,9 +75,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 3G
         reservations:
-          memory: 512M
+          memory: 1G
 
   # ChromaDB Vector Database Service (RAG Knowledge Base)
   chromadb-data:
