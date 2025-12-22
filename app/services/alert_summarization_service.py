@@ -32,7 +32,8 @@ from app.config import (
     RISK_SCORE_PROBABILITY_WEIGHT,
     RISK_SCORE_SEVERITY_WEIGHT,
     RISK_SCORE_ESCALATION_WEIGHT,
-    DEBUG_MODE
+    DEBUG_MODE,
+    WHITELIST_IP_QUERY
 )
 from app.core.severity import severity_manager
 
@@ -99,13 +100,15 @@ class AlertSummarizationService:
             logger.error("Alert Summarization Service initialized but Elasticsearch connection FAILED (check password/connection)")
     
     def summarize_alerts(self, time_window_minutes: Optional[int] = None, 
-                        source_ip: Optional[str] = None) -> Dict[str, Any]:
+                        source_ip: Optional[str] = None,
+                        index_pattern: Optional[str] = None) -> Dict[str, Any]:
         """
         Summarize ML-classified alerts from Elasticsearch
         
         Args:
             time_window_minutes: Time window for grouping (uses config default if None)
             source_ip: Filter by source IP (optional)
+            index_pattern: Filter by index pattern (e.g., "*wazuh*", "*pfsense*")
         
         Returns:
             Dict with summarized alerts, risk scores, and MITRE tags
@@ -115,7 +118,7 @@ class AlertSummarizationService:
                 time_window_minutes = ALERT_TIME_WINDOW
             
             # Query Elasticsearch
-            alerts = self._query_alerts(time_window_minutes, source_ip)
+            alerts = self._query_alerts(time_window_minutes, source_ip, index_pattern)
             
             if not alerts:
                 return {
@@ -282,8 +285,15 @@ class AlertSummarizationService:
             logger.error(f"Error generating visualization: {e}")
             return None
     
-    def _query_alerts(self, time_window_minutes: int, source_ip: Optional[str]) -> List[Dict]:
-        """Query Elasticsearch for ML-classified alerts"""
+    def _query_alerts(self, time_window_minutes: int, source_ip: Optional[str], 
+                       index_pattern: Optional[str] = None) -> List[Dict]:
+        """Query Elasticsearch for ML-classified alerts
+        
+        Args:
+            time_window_minutes: Time window in minutes
+            source_ip: Optional filter by source IP
+            index_pattern: Optional filter by index pattern (e.g., "*wazuh*")
+        """
         try:
             # Check if Elasticsearch client is available
             if not self.es_service.enabled or self.es_service.client is None:
@@ -328,14 +338,16 @@ class AlertSummarizationService:
                 "sort": [{"@timestamp": {"order": "desc"}}]  # Get most recent first
             }
             
-            # Query all indices at once (more efficient and catches data streams)
+            # Determine index to query - use pattern if provided, otherwise query all
+            search_index = index_pattern if index_pattern else "*"
+            
             alerts = []
             try:
-                response = self.es_service.client.search(index="*", body=query)
+                response = self.es_service.client.search(index=search_index, body=query)
                 alerts = [hit["_source"] for hit in response.get("hits", {}).get("hits", [])]
                 
                 if DEBUG_MODE:
-                    logger.debug(f"Found {len(alerts)} alerts in Elasticsearch")
+                    logger.debug(f"Found {len(alerts)} alerts in index '{search_index}'")
             except Exception as e:
                 logger.error(f"Could not query Elasticsearch: {str(e)}")
             
@@ -390,6 +402,10 @@ class AlertSummarizationService:
                 # 4. Final fallback
                 if not source_ip:
                     source_ip = "unknown"
+                
+                # Skip whitelisted IPs (system infrastructure)
+                if source_ip in WHITELIST_IP_QUERY:
+                    continue
                 
                 # Get ML prediction values (nested structure)
                 ml_pred = alert.get("ml", {}).get("prediction", {})
@@ -460,23 +476,25 @@ class AlertSummarizationService:
     
     def _calculate_risk_score(self, grouped_alerts: List[Dict]) -> float:
         """
-        Calculate risk score with improved formula:
-        - Base score starts at 0.5 (not 0)
-        - Logarithmic scaling for alert counts (avoid easy 100 score)
-        - Weighted by severity distribution
-        - Considers attack pattern escalation
+        Calculate risk score with balanced formula:
+        - ERROR logs dominate scoring (they are the real threats)
+        - WARNING logs contribute moderately
+        - INFO logs contribute minimally
+        - Volume has diminishing returns (logarithmic)
         
-        Formula:
-        base_score = 0.5
-        volume_score = log10(total_alerts + 1) * 15  # Logarithmic scaling
-        severity_score = (ERROR% * 30) + (WARNING% * 15) + (INFO% * 5)
-        confidence_score = avg_confidence * 25
-        escalation_score = escalation_level * 15
+        Thresholds (from SeverityManager):
+        - CRITICAL: >= 70
+        - HIGH: >= 50
+        - MEDIUM: >= 30
+        - LOW: < 30
         
-        Final: base_score + volume + severity + confidence + escalation (max 100)
+        Formula tuned for:
+        - WARNING-only logs: typically 20-45 (LOW to MEDIUM)
+        - Mixed WARNING+ERROR: typically 40-70 (MEDIUM to HIGH)
+        - ERROR-heavy: typically 60-100 (HIGH to CRITICAL)
         """
         if not grouped_alerts:
-            return 0.5  # Base score
+            return 0.0
         
         import math
         
@@ -486,28 +504,32 @@ class AlertSummarizationService:
         warning_count = sum(g["alert_count"] for g in grouped_alerts if g["severity"] == "WARNING")
         info_count = sum(g["alert_count"] for g in grouped_alerts if g["severity"] == "INFO")
         
-        # 1. Base score (always starts at 0.5)
+        # 1. Base score (minimal)
         base_score = 0.5
         
-        # 2. Volume score (logarithmic to prevent easy 100)
-        # log10(1) = 0, log10(10) = 1, log10(100) = 2, log10(1000) = 3
-        volume_score = math.log10(total_alerts + 1) * 10  # Reduced from 15 to 10
+        # 2. Volume score (logarithmic, capped at ~30 for 10000 alerts)
+        # log10(10) = 1 → 8 points
+        # log10(100) = 2 → 16 points
+        # log10(1000) = 3 → 24 points
+        volume_score = math.log10(total_alerts + 1) * 8
         
-        # 3. Severity distribution score (weighted percentages)
+        # 3. Severity score - ERROR DOMINATES
+        # This is the key factor for reaching CRITICAL
         error_pct = error_count / total_alerts if total_alerts > 0 else 0
         warning_pct = warning_count / total_alerts if total_alerts > 0 else 0
         info_pct = info_count / total_alerts if total_alerts > 0 else 0
         
-        severity_score = (error_pct * 35) + (warning_pct * 15) + (info_pct * 3)  # Increased ERROR weight, reduced INFO
+        # ERROR = high impact (40 max), WARNING = low impact (8 max), INFO = minimal (2 max)
+        severity_score = (error_pct * 40) + (warning_pct * 8) + (info_pct * 2)
         
-        # 4. Confidence score (average ML prediction probability)
+        # 4. Confidence score (reduced weight - ML confidence shouldn't inflate score too much)
         total_probability = sum(g["avg_probability"] * g["alert_count"] for g in grouped_alerts)
         avg_confidence = total_probability / total_alerts if total_alerts > 0 else 0
-        confidence_score = avg_confidence * 30  # Increased from 25 to 30
+        confidence_score = avg_confidence * 15  # Reduced from 30 to 15
         
-        # 5. Escalation score (attack pattern sequences)
+        # 5. Escalation score (attack pattern sequences - bonus for multi-stage attacks)
         escalation_level = self._detect_escalation(grouped_alerts)
-        escalation_score = escalation_level * 20  # Increased from 15 to 20
+        escalation_score = escalation_level * 10  # Reduced from 20 to 10
         
         # Final score calculation
         final_score = base_score + volume_score + severity_score + confidence_score + escalation_score

@@ -22,6 +22,9 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+# Import WHITELIST_IP_QUERY for filtering system IPs
+from app.config import WHITELIST_IP_QUERY
+
 logger = logging.getLogger(__name__)
 
 # Import source config loader
@@ -1469,21 +1472,25 @@ class ElasticsearchService:
                     "_id": hit.get("_id", ""),  # Document ID for easy lookup
                     "timestamp": source.get("@timestamp", ""),
                     "ml_prediction": predicted_value,
-                    "ml_probability": round(probability, 2),
-                    "ml_input": ml_input[:200],  # Truncate for token optimization
-                    "source_ip": source_ip,
-                    "dest_ip": dest_ip,
-                    "event_type": event_type,
-                    "event_action": event_action,
-                    "event_original": event_original[:300] if event_original else "",  # Truncate for tokens
-                    "agent": source.get("agent", {}).get("name", "N/A"),
-                    "index": hit.get("_index", "")
+                    \"ml_probability\": round(probability, 2),
+                    \"ml_input\": ml_input[:200],  # Truncate for token optimization
+                    \"source_ip\": source_ip,
+                    \"dest_ip\": dest_ip,
+                    \"event_type\": event_type,
+                    \"event_action\": event_action,
+                    \"event_original\": event_original[:300] if event_original else \"\",  # Truncate for tokens
+                    \"agent\": source.get(\"agent\", {}).get(\"name\", \"N/A\"),
+                    \"index\": hit.get(\"_index\", \"\")
                 })
+            
+            # Filter out whitelisted IPs (system infrastructure)
+            if WHITELIST_IP_QUERY:
+                logs = [log for log in logs if log.get(\"source_ip\") not in WHITELIST_IP_QUERY]
             
             # Build summary
             severity_counts = {}
             for log in logs:
-                severity = log["ml_prediction"]
+                severity = log[\"ml_prediction\"]
                 severity_counts[severity] = severity_counts.get(severity, 0) + 1
             
             return {

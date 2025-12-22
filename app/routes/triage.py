@@ -55,11 +55,13 @@ def summarize_ml_alerts():
         time_window_minutes = data.get('time_window_minutes')
         source_ip = data.get('source_ip')
         include_ai = data.get('include_ai_analysis', False)
+        index_pattern = data.get('index_pattern')  # New: filter by index pattern
         
         # Call alert summarization service
         result = alert_summarization_service.summarize_alerts(
             time_window_minutes=time_window_minutes,
-            source_ip=source_ip
+            source_ip=source_ip,
+            index_pattern=index_pattern
         )
         
         # Add AI analysis if requested and successful

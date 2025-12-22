@@ -965,12 +965,18 @@ class TelegramMiddlewareService:
             
             # Call SmartXDR API for alert summarization
             # Use parsed time or ALERT_TIME_WINDOW from config (supports 7d/14d/28d format)
+            request_body = {
+                "time_window_minutes": time_window_minutes,
+                "include_ai_analysis": include_ai
+            }
+            
+            # Add index filter if specified
+            if index_arg:
+                request_body["index_pattern"] = index_arg
+            
             response = self._session.post(
                 f"{self.smartxdr_api_url}/api/triage/summarize-alerts",
-                json={
-                    "time_window_minutes": time_window_minutes,
-                    "include_ai_analysis": include_ai
-                },
+                json=request_body,
                 timeout=60 if include_ai else 30  # Longer timeout for AI analysis
             )
             
