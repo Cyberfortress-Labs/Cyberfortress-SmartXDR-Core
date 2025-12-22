@@ -22,6 +22,9 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
+# Import centralized severity manager
+from app.core.severity import severity_manager
+
 
 class EmailService:
     """Service for sending emails via SMTP"""
@@ -119,15 +122,8 @@ class EmailService:
             return False
     
     def _get_risk_level(self, risk_score: float) -> str:
-        """Get risk level label from score"""
-        if risk_score >= 70:
-            return "CRITICAL"
-        elif risk_score >= 50:
-            return "HIGH"
-        elif risk_score >= 30:
-            return "MEDIUM"
-        else:
-            return "LOW"
+        """Get risk level label from score - delegates to SeverityManager"""
+        return severity_manager.get_risk_level(risk_score)
     
     def _build_html_email(
         self,
@@ -347,15 +343,8 @@ class EmailService:
         return html
     
     def _get_risk_color(self, risk_score: float) -> str:
-        """Get color based on risk score"""
-        if risk_score >= 70:
-            return "#d32f2f"  # Red
-        elif risk_score >= 50:
-            return "#f57c00"  # Orange
-        elif risk_score >= 30:
-            return "#fbc02d"  # Yellow
-        else:
-            return "#388e3c"  # Green
+        """Get color based on risk score - delegates to SeverityManager"""
+        return severity_manager.get_risk_color(risk_score)
 
 
 # Singleton instance

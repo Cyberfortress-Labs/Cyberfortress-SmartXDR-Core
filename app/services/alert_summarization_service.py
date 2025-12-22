@@ -34,6 +34,7 @@ from app.config import (
     RISK_SCORE_ESCALATION_WEIGHT,
     DEBUG_MODE
 )
+from app.core.severity import severity_manager
 
 logger = setup_logger(__name__)
 
@@ -647,22 +648,12 @@ Giữ phản hồi dưới 250 từ, cụ thể và có thể hành động."""
             return ""
     
     def _build_detailed_summary(self, alert_context: str, grouped_alerts: List[Dict], risk_score: float) -> str:
-        """Build detailed summary from grouped alerts"""
+        """Build detailed summary from grouped alerts using SeverityManager"""
         summary = f"ML Alert Analysis\n\n"
         summary += f"Risk Assessment:\n"
         
-        if risk_score >= 70:
-            summary += f"CRITICAL RISK ({risk_score:.1f}/100)\n"
-            summary += "Immediate action required. Multiple attack patterns detected with high confidence.\n\n"
-        elif risk_score >= 50:
-            summary += f"HIGH RISK ({risk_score:.1f}/100)\n"
-            summary += "Significant security concern. Review alerts and implement recommended actions.\n\n"
-        elif risk_score >= 30:
-            summary += f"MEDIUM RISK ({risk_score:.1f}/100)\n"
-            summary += "Monitor closely. Take precautionary measures and investigate patterns.\n\n"
-        else:
-            summary += f"LOW RISK ({risk_score:.1f}/100)\n"
-            summary += "Routine security monitoring. Continue standard procedures.\n\n"
+        # Use SeverityManager for risk assessment
+        summary += severity_manager.format_risk_assessment(risk_score) + "\n\n"
         
         # Detected Patterns
         if grouped_alerts:
@@ -675,21 +666,9 @@ Giữ phản hồi dưới 250 từ, cụ thể và có thể hành động."""
                     patterns[pattern] = []
                 patterns[pattern].append(group)
             
-            pattern_descriptions = {
-                "reconnaissance": "Information gathering to identify targets and vulnerabilities",
-                "brute_force": "Credential attack attempts (login, password bruteforce)",
-                "lateral_movement": "Movement within network to compromise additional systems",
-                "exfiltration": "Data theft or unauthorized data transfer",
-                "network_attack": "Network-level attacks (DDoS, flooding, amplification)",
-                "malware": "Malware, trojan, virus, ransomware, or exploit detection",
-                "web_attack": "Web application attacks (SQL injection, XSS, etc.)",
-                "blocked_traffic": "Firewall blocked connections and denied traffic",
-                "suspicious_traffic": "Suspicious or anomalous network activity",
-                "unknown": "Unclassified security activity"
-            }
-            
             for pattern, groups in patterns.items():
-                desc = pattern_descriptions.get(pattern, "Security event")
+                # Use SeverityManager for pattern descriptions
+                desc = severity_manager.get_pattern_description(pattern)
                 total_alerts = sum(g['alert_count'] for g in groups)
                 avg_prob = sum(g['avg_probability'] for g in groups) / len(groups)
                 unique_ips = len(set(g['source_ip'] for g in groups))
@@ -712,29 +691,9 @@ Giữ phản hồi dưới 250 từ, cụ thể và có thể hành động."""
                 summary += f"     - Severity: {group['severity']}\n"
                 summary += f"     - Probability: {group['avg_probability']:.1%}\n"
         
-        # Recommended Actions
+        # Use SeverityManager for recommendations
         summary += "<b>Recommended Actions:</b>\n"
-        
-        if risk_score >= 70:
-            summary += "  1. IMMEDIATE: Block or isolate affected source IPs\n"
-            summary += "  2. Investigate active sessions from affected IPs\n"
-            summary += "  3. Review and reset credentials for compromised accounts\n"
-            summary += "  4. Escalate to Security Operations Center (SOC)\n"
-            summary += "  5. Document incident for forensic analysis\n"
-        elif risk_score >= 50:
-            summary += "  1. Conduct in-depth analysis of alert patterns\n"
-            summary += "  2. Enable enhanced monitoring for affected assets\n"
-            summary += "  3. Prepare incident response procedures\n"
-            summary += "  4. Alert security team for investigation\n"
-        elif risk_score >= 30:
-            summary += "  1. Monitor trends and pattern changes\n"
-            summary += "  2. Investigate high-confidence alerts\n"
-            summary += "  3. Review firewall and access control rules\n"
-            summary += "  4. Update threat intelligence\n"
-        else:
-            summary += "  1. Continue routine monitoring\n"
-            summary += "  2. Archive alerts for audit trail\n"
-            summary += "  3. Review and update detection rules\n"
+        summary += severity_manager.format_recommendations(risk_score)
         
         return summary
     

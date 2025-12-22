@@ -1150,8 +1150,10 @@ Hãy phân tích và đưa ra:
     def _determine_risk_level(self, analyzer_reports: list) -> str:
         """
         Tính risk level dựa trên tất cả registered analyzers.
-        Sử dụng registry pattern - tự động support analyzer mới.
+        Sử dụng registry pattern + SeverityManager cho consistent thresholds.
         """
+        from app.core.severity import get_risk_level
+        
         max_risk_score = 0
         
         for report in analyzer_reports:
@@ -1167,15 +1169,8 @@ Hãy phân tích và đưa ra:
                 risk_score = handler.get_risk_score(report_data)
                 max_risk_score = max(max_risk_score, risk_score)
         
-        # Convert score to level
-        if max_risk_score >= 80:
-            return "CRITICAL"
-        elif max_risk_score >= 60:
-            return "HIGH"
-        elif max_risk_score >= 30:
-            return "MEDIUM"
-        else:
-            return "LOW"
+        # Use centralized SeverityManager for consistent thresholds
+        return get_risk_level(max_risk_score)
     
     def _compute_threat_stats(self, analyzer_reports: list) -> dict:
         """
