@@ -63,15 +63,13 @@ services:
       # Development: mount scripts and app for live reload
       - ./scripts:/app/scripts:ro
       - ./app:/app/app:ro
+      - ./gunicorn.conf.py:/app/gunicorn.conf.py:ro
+      - huggingface-cache:/home/smartxdr/.cache/huggingface
     networks:
       - smartxdr-net
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8080/health" ]
-      interval: 30s
-      timeout: 10s
-      start_period: 40s
-      retries: 3
     deploy:
       resources:
         limits:
@@ -185,3 +183,8 @@ volumes:
   smartxdr-core-data:
     driver: local
     name: smartxdr-core-data
+
+  # Hugging Face Model Cache
+  huggingface-cache:
+    driver: local
+    name: smartxdr-huggingface-cache

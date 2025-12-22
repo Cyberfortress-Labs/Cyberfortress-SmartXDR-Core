@@ -59,8 +59,8 @@ RUN update-ca-certificates && \
 
 # Create non-root user and directories with proper permissions
 RUN useradd -m -u 1000 smartxdr && \
-    mkdir -p /app/data /app/logs /app/chroma_db && \
-    chown -R smartxdr:smartxdr /app && \
+    mkdir -p /app/data /app/logs /app/chroma_db /home/smartxdr/.cache/huggingface && \
+    chown -R smartxdr:smartxdr /app /home/smartxdr && \
     chmod -R 755 /app/chroma_db
 
 # Copy entrypoint script

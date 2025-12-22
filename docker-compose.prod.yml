@@ -65,6 +65,9 @@ services:
       - ./prompts:/app/prompts:ro
       - ./assets:/app/assets:ro
       - ./sources_config:/app/sources_config:ro
+      - ./gunicorn.conf.py:/app/gunicorn.conf.py:ro
+      - huggingface-cache:/home/smartxdr/.cache/huggingface
+
     networks:
       - smartxdr-net
     restart: unless-stopped
