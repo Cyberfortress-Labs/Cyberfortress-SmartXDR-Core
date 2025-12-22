@@ -947,6 +947,6 @@
     {
         "category": "SmartXDR Core",
         "question": "SmartXDR dùng model AI nào?",
-        "answer": "Có thể là OpenAI GPT-4, Local LLM (Llama 3), hoặc custom ML model tùy cấu hình."
+        "answer": "Hiện tại đang sử dụng gpt-5-mini"
     }
 ]
