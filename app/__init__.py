@@ -129,6 +129,32 @@ def create_app():
         """Health check endpoint"""
         return {'status': 'healthy', 'service': 'Cyberfortress SmartXDR Core'}, 200
     
+    # Preload CrossEncoder model in background thread (avoids first-query latency)
+    from app.config import RERANKING_ENABLED
+    if RERANKING_ENABLED:
+        import threading
+        def preload_reranker():
+            try:
+                from app.rag.service import RAGService
+                from app.config import CROSS_ENCODER_MODEL
+                
+                logger.info(f"[Preload] Loading CrossEncoder model in background: {CROSS_ENCODER_MODEL}")
+                
+                # Trigger lazy load by accessing the model
+                service = RAGService()
+                if not RAGService._cross_encoder_loaded:
+                    from sentence_transformers import CrossEncoder
+                    RAGService._cross_encoder = CrossEncoder(CROSS_ENCODER_MODEL, max_length=512)
+                    RAGService._cross_encoder_loaded = True
+                    logger.info("[Preload] CrossEncoder model loaded successfully")
+            except ImportError:
+                logger.warning("[Preload] sentence-transformers not installed, skipping preload")
+            except Exception as e:
+                logger.warning(f"[Preload] Failed to preload CrossEncoder: {e}")
+        
+        preload_thread = threading.Thread(target=preload_reranker, daemon=True)
+        preload_thread.start()
+    
     return app
 
 

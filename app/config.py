@@ -76,15 +76,23 @@ CROSS_ENCODER_MODEL = os.environ.get('CROSS_ENCODER_MODEL', 'cross-encoder/ms-ma
 # Set RERANKING_ENABLED=false in .env to disable
 RERANKING_ENABLED = os.environ.get('RERANKING_ENABLED', 'true').lower() in ('true', '1', 'yes')
 
+# Preload re-ranker model on startup (avoids latency on first query)
+# Set PRELOAD_RERANKER=true in .env to enable (requires ~500MB extra RAM)
+PRELOAD_RERANKER = os.environ.get('PRELOAD_RERANKER', 'false').lower() in ('true', '1', 'yes')
+
 # RAG Chunking settings
 MIN_CHUNK_SIZE = 100  # Minimum chars per chunk (avoid too short chunks)
 MAX_CHUNK_SIZE = 2000  # Maximum chars per chunk
 MIN_BATCH_SIZE = 50  # Minimum batch size for embedding
 BATCH_SIZE = 100  # Maximum batch size for embedding (reduced for OpenAI token limits)
-MAX_CONTEXT_CHARS = 2000 
-DEBUG_TEXT_LENGTH=1000
-STRICT_THRESHOLD=1.0   # High relevance
-FALLBACK_THRESHOLD=1.4  # Accept looser matches if strict fails
+
+# Context size for LLM (increase if responses say 'no info' but sources exist)
+MAX_CONTEXT_CHARS = 6000  # ~1500 tokens, enough for ~3-4 full documents
+DEBUG_TEXT_LENGTH = 1000
+
+# Distance thresholds for relevance filtering
+STRICT_THRESHOLD = 1.0   # High relevance
+FALLBACK_THRESHOLD = 1.4  # Accept looser matches if strict fails
 
 
 # Token pricing (per 1M tokens)
