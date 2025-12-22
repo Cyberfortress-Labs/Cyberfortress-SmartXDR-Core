@@ -11,7 +11,7 @@ from pathlib import Path
 
 from app.rag.repository import RAGRepository
 from app.rag.models import Document, DocumentMetadata, QueryResult
-from app.config import DEBUG_MODE, DEBUG_TEXT_LENGTH
+from app.config import DEBUG_MODE, DEBUG_TEXT_LENGTH, MAX_RERANK_CANDIDATES
 
 
 logger = logging.getLogger('smartxdr.rag.service')
@@ -420,7 +420,7 @@ class RAGService:
         query_text: str,
         top_k: int = None,
         filters: Optional[Dict[str, Any]] = None,
-        distance_threshold: float = 1.7
+        distance_threshold: float = 1.0
     ) -> Dict[str, Any]:
         """
         Query the knowledge base
@@ -510,23 +510,39 @@ class RAGService:
         self,
         query_text: str,
         top_k: int = None,
-        filters: Optional[Dict[str, Any]] = None
+        filters: Optional[Dict[str, Any]] = None,
+        use_reranking: bool = True
     ) -> Tuple[str, List[str]]:
         """
-        Build context string from query results with prioritization and fallback.
+        Build context string from query results with prioritization, re-ranking and fallback.
+        
+        Enhancements:
+        - Dynamic distance thresholds with fallback
+        - Cross-encoder re-ranking for better relevance
+        - MMR for document diversity
+        - Token-aware context building
         
         Args:
             query_text: Query text
             top_k: Number of documents to retrieve (default: from config)
             filters: Metadata filters
+            use_reranking: Whether to apply cross-encoder re-ranking
         
         Returns:
             Tuple of (context_text, sources)
         """
-        from app.config import DEFAULT_RESULTS
+        from app.config import DEFAULT_RESULTS, MAX_CONTEXT_CHARS, STRICT_THRESHOLD, FALLBACK_THRESHOLD
         if top_k is None:
             top_k = DEFAULT_RESULTS
-        results = self.query(query_text, top_k, filters)
+        
+        # Distance thresholds tuned for text-embedding-3-small
+        # STRICT_THRESHOLD = 1.0   # High relevance
+        # FALLBACK_THRESHOLD = 1.4  # Accept looser matches if strict fails
+        
+        # Step 1: Initial retrieval (fetch more for re-ranking)
+
+        retrieve_k = min(top_k * 2, MAX_RERANK_CANDIDATES) if use_reranking else top_k
+        results = self.query(query_text, retrieve_k, filters, distance_threshold=FALLBACK_THRESHOLD)
         
         if results["status"] == "error" or not results["documents"]:
             # Fallback: Return hint for LLM to use general knowledge
@@ -535,21 +551,42 @@ class RAGService:
         # Get documents with distances for prioritization
         documents = results["documents"]
         distances = results.get("distances", [])
+        metadatas = results.get("metadatas", [])
         sources = results["sources"]
         
-        # Check context quality based on average distance
+        # Step 2: Filter by strict threshold first
+        strict_docs, strict_dists, strict_metas = self._filter_by_threshold(
+            documents, distances, metadatas, STRICT_THRESHOLD
+        )
+        
+        # If strict filtering removes everything, use fallback results
+        if not strict_docs:
+            logger.info(f"Strict threshold returned 0 results, using fallback for query: {query_text[:DEBUG_TEXT_LENGTH]}...")
+        else:
+            documents, distances, metadatas = strict_docs, strict_dists, strict_metas
+        
+        # Step 3: Re-ranking with cross-encoder (if available and enabled)
+        if use_reranking and len(documents) > 3:
+            documents, distances = self._rerank_documents(query_text, documents, distances)
+        
+        # Step 4: Apply MMR for diversity (avoid redundant chunks)
+        if len(documents) > top_k:
+            documents, distances, metadatas = self._apply_mmr(
+                documents, distances, metadatas, top_k
+            )
+        
+        # Step 5: Build context with quality indicator
         avg_distance = sum(distances) / len(distances) if distances else 0
         best_distance = min(distances) if distances else 0
         
-        # Build context with quality indicator
         context_parts = []
         
         # Add quality hint for LLM
-        if best_distance < 0.8:
+        if best_distance < 0.6:
             quality_hint = "HIGH CONFIDENCE CONTEXT (exact match found)"
-        elif best_distance < 1.2:
+        elif best_distance < 1.0:
             quality_hint = "GOOD CONTEXT (relevant documents found)"
-        elif best_distance < 1.5:
+        elif best_distance < 1.3:
             quality_hint = "MODERATE CONTEXT (loosely related documents)"
         else:
             quality_hint = "LOW CONFIDENCE CONTEXT (may need inference)"
@@ -557,23 +594,150 @@ class RAGService:
         context_parts.append(f"[Context Quality: {quality_hint}]")
         context_parts.append("")
         
-        # Sort documents by distance (best first) for prioritization
-        if distances:
-            doc_with_dist = list(zip(documents, distances))
-            doc_with_dist.sort(key=lambda x: x[1])  # Sort by distance ascending
-            documents = [d[0] for d in doc_with_dist]
+        # Build token-aware context
+        current_length = len(context_parts[0])
         
-        # Add documents
         for idx, doc in enumerate(documents):
-            context_parts.append(f"[Document {idx + 1}]\n{doc}")
+            doc_text = f"[Document {idx + 1}]\n{doc}"
+            
+            # Check if adding this document would exceed limit
+            if current_length + len(doc_text) + 10 > MAX_CONTEXT_CHARS:
+                # Truncate to fit remaining space
+                remaining = MAX_CONTEXT_CHARS - current_length - 50
+                if remaining > 200:
+                    doc_text = f"[Document {idx + 1}]\n{doc[:remaining]}..."
+                    context_parts.append(doc_text)
+                break
+            
+            context_parts.append(doc_text)
+            current_length += len(doc_text) + 10
         
         context_text = "\n\n---\n\n".join(context_parts)
         
         # Add fallback hint if context quality is low
-        if avg_distance > 1.5 and len(documents) > 0:
+        if avg_distance > 1.3 and len(documents) > 0:
             context_text += "\n\n[NOTE: Context quality is low. If the above information doesn't directly answer the question, use your general knowledge about the topic to provide a helpful response.]"
         
         return context_text, sources
+    
+    def _filter_by_threshold(
+        self, 
+        documents: List[str], 
+        distances: List[float], 
+        metadatas: List[Dict],
+        threshold: float
+    ) -> Tuple[List[str], List[float], List[Dict]]:
+        """Filter documents by distance threshold."""
+        filtered_docs = []
+        filtered_dists = []
+        filtered_metas = []
+        
+        for doc, dist, meta in zip(documents, distances, metadatas):
+            if dist < threshold:
+                filtered_docs.append(doc)
+                filtered_dists.append(dist)
+                filtered_metas.append(meta)
+        
+        return filtered_docs, filtered_dists, filtered_metas
+    
+    def _rerank_documents(
+        self, 
+        query: str, 
+        documents: List[str], 
+        distances: List[float]
+    ) -> Tuple[List[str], List[float]]:
+        """
+        Re-rank documents using cross-encoder for better relevance.
+        Falls back to distance-based ranking if cross-encoder unavailable.
+        """
+        try:
+            from sentence_transformers import CrossEncoder
+            from app.config import CROSS_ENCODER_MODEL
+            
+            # Lightweight cross-encoder for relevance scoring
+            model = CrossEncoder(CROSS_ENCODER_MODEL, max_length=512)
+            
+            # Score query-document pairs
+            pairs = [(query, doc[:DEBUG_TEXT_LENGTH]) for doc in documents]  # Limit doc length for speed
+            scores = model.predict(pairs)
+            
+            # Sort by cross-encoder score (higher = more relevant)
+            ranked = sorted(
+                zip(documents, distances, scores),
+                key=lambda x: x[2],
+                reverse=True
+            )
+            
+            logger.debug(f"Re-ranked {len(documents)} documents, top score: {max(scores):.3f}")
+            return [r[0] for r in ranked], [r[1] for r in ranked]
+            
+        except ImportError:
+            # Cross-encoder not installed, fall back to distance sort
+            logger.debug("Cross-encoder not available, using distance-based ranking")
+            ranked = sorted(zip(documents, distances), key=lambda x: x[1])
+            return [r[0] for r in ranked], [r[1] for r in ranked]
+        except Exception as e:
+            logger.warning(f"Re-ranking failed: {e}, using distance-based ranking")
+            ranked = sorted(zip(documents, distances), key=lambda x: x[1])
+            return [r[0] for r in ranked], [r[1] for r in ranked]
+    
+    def _apply_mmr(
+        self, 
+        documents: List[str], 
+        distances: List[float],
+        metadatas: List[Dict],
+        k: int,
+        diversity_threshold: float = 0.5
+    ) -> Tuple[List[str], List[float], List[Dict]]:
+        """
+        Apply Maximal Marginal Relevance to select diverse documents.
+        Avoids returning multiple highly similar chunks.
+        """
+        if len(documents) <= k:
+            return documents, distances, metadatas
+        
+        # Always include best match
+        selected_indices = [0]
+        
+        for i in range(1, len(documents)):
+            if len(selected_indices) >= k:
+                break
+            
+            # Check overlap with already selected documents
+            is_diverse = True
+            for sel_idx in selected_indices:
+                overlap = self._text_overlap(documents[i], documents[sel_idx])
+                if overlap > diversity_threshold:
+                    is_diverse = False
+                    break
+            
+            if is_diverse:
+                selected_indices.append(i)
+        
+        # If we don't have enough diverse docs, fill with best remaining
+        if len(selected_indices) < k:
+            for i in range(len(documents)):
+                if i not in selected_indices:
+                    selected_indices.append(i)
+                    if len(selected_indices) >= k:
+                        break
+        
+        return (
+            [documents[i] for i in selected_indices],
+            [distances[i] for i in selected_indices],
+            [metadatas[i] for i in selected_indices]
+        )
+    
+    def _text_overlap(self, text1: str, text2: str) -> float:
+        """Calculate word overlap ratio between two texts."""
+        words1 = set(text1.lower().split())
+        words2 = set(text2.lower().split())
+        
+        if not words1 or not words2:
+            return 0.0
+        
+        intersection = words1 & words2
+        return len(intersection) / min(len(words1), len(words2))
     
     # ==================== Statistics & Management ====================
     

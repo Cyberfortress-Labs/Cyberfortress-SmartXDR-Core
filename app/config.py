@@ -66,6 +66,11 @@ TELEGRAM_API_TIMEOUT = int(os.environ.get('TELEGRAM_API_TIMEOUT', '300'))  # Tel
 
 # Query settings
 DEFAULT_RESULTS = 18  # topK: Increased for better context coverage (was 10)
+MAX_RERANK_CANDIDATES = 60
+
+# Cross-Encoder Re-ranking Model (for sentence-transformers)
+# Lightweight model optimized for relevance scoring
+CROSS_ENCODER_MODEL = os.environ.get('CROSS_ENCODER_MODEL', 'cross-encoder/ms-marco-MiniLM-L-6-v2')
 
 # RAG Chunking settings
 MIN_CHUNK_SIZE = 100  # Minimum chars per chunk (avoid too short chunks)
@@ -74,6 +79,9 @@ MIN_BATCH_SIZE = 50  # Minimum batch size for embedding
 BATCH_SIZE = 100  # Maximum batch size for embedding (reduced for OpenAI token limits)
 MAX_CONTEXT_CHARS = 2000 
 DEBUG_TEXT_LENGTH=1000
+STRICT_THRESHOLD=1.0   # High relevance
+FALLBACK_THRESHOLD=1.4  # Accept looser matches if strict fails
+
 
 # Token pricing (per 1M tokens)
 INPUT_PRICE_PER_1M = 0.25

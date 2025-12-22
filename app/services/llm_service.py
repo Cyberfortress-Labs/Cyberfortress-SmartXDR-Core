@@ -347,8 +347,21 @@ class LLMService:
                 filters=filters
             )
         
-        # Combine RAG context with conversation history
+        # Combine RAG context with conversation history (token-aware)
         if conversation_history_text:
+            # Limit combined context to prevent token explosion
+            from app.config import MAX_CONTEXT_CHARS
+            max_history_chars = MAX_CONTEXT_CHARS // 3  # Reserve 1/3 for history
+            max_rag_chars = MAX_CONTEXT_CHARS - max_history_chars
+            
+            # Truncate history if too long
+            if len(conversation_history_text) > max_history_chars:
+                conversation_history_text = conversation_history_text[:max_history_chars] + "\n[...history truncated...]"
+            
+            # Truncate RAG context if too long
+            if len(context_text) > max_rag_chars:
+                context_text = context_text[:max_rag_chars] + "\n[...context truncated...]"
+            
             enhanced_context = f"{conversation_history_text}\n\n---\n\n{context_text}"
         else:
             enhanced_context = context_text

@@ -384,7 +384,7 @@ class ResponseCache:
             if now - data['timestamp'] >= self.ttl
         ]
         for key in expired_keys:
-            del self._local_cache[cache_key]
+            del self._local_cache[key]
     
     def get_stats(self) -> Dict[str, Any]:
         """Get cache statistics"""
