@@ -552,3 +552,97 @@ Keywords: {title}, {category}, {', '.join(tags[:5]) if tags else ''}"""
         chunks.append(chunk_text)
     
     return chunks
+
+
+def dataflow_to_natural_text(data: Dict[str, Any], filename: str) -> List[str]:
+    """
+    Convert dataflow/pipeline JSON to natural language chunks for RAG.
+    
+    Intelligently handles:
+    - phases[] array: Creates summary chunk + individual phase chunks
+    - nodes[] array: Creates summary and individual node chunks
+    - edges[] array: Grouped by phase
+    
+    This ensures questions like "how many phases?" or "list all phases" 
+    can be answered because ALL phases are in a single summary chunk.
+    """
+    chunks = []
+    
+    # Extract metadata
+    metadata = data.get("metadata", {})
+    doc_name = metadata.get("name", data.get("name", "Dataflow"))
+    doc_desc = metadata.get("description", data.get("description", ""))
+    
+    # 1. PHASES SUMMARY CHUNK - Critical for "how many phases?" questions
+    phases = data.get("phases", [])
+    if phases:
+        phase_list = []
+        for i, phase in enumerate(phases):
+            phase_name = phase.get("name", f"Phase {i+1}")
+            phase_desc = phase.get("description", "")
+            phase_list.append(f"  {i+1}. {phase_name}: {phase_desc[:150]}")
+        
+        phases_summary = f"""{doc_name}
+
+PHASES SUMMARY:
+This dataflow pipeline consists of {len(phases)} phases:
+
+{chr(10).join(phase_list)}
+
+Total number of phases: {len(phases)}
+How many phases? Answer: {len(phases)} phases
+
+Source: {filename}
+Keywords: phases, pipeline, dataflow, {len(phases)} phases, workflow stages"""
+        chunks.append(phases_summary)
+        
+        # 2. INDIVIDUAL PHASE CHUNKS - For detailed questions about specific phases
+        for phase in phases:
+            phase_id = phase.get("id", "")
+            phase_name = phase.get("name", "Unknown Phase")
+            phase_desc = phase.get("description", "")
+            edge_ids = phase.get("edge_ids", [])
+            
+            phase_chunk = f"""{doc_name} - {phase_name}
+
+Phase ID: {phase_id}
+Phase Name: {phase_name}
+Description: {phase_desc}
+
+Related Data Flows: {', '.join(edge_ids) if edge_ids else 'N/A'}
+
+Source: {filename}
+Keywords: {phase_name}, {phase_id}, phase, pipeline stage"""
+            chunks.append(phase_chunk)
+    
+    # 3. NODES SUMMARY CHUNK - For "what components?" questions
+    nodes = data.get("nodes", [])
+    if nodes:
+        node_names = [n.get("role", n.get("id", "")) for n in nodes]
+        nodes_summary = f"""{doc_name} - Components/Nodes
+
+Total components in this dataflow: {len(nodes)}
+Components: {', '.join(node_names[:20])}{'...' if len(node_names) > 20 else ''}
+
+Source: {filename}
+Keywords: nodes, components, devices, dataflow elements"""
+        chunks.append(nodes_summary)
+    
+    # 4. ROUTING PIPELINES CHUNK - For traffic flow questions
+    routing = data.get("routing_pipelines", {})
+    if routing:
+        routing_parts = []
+        for flow_name, flow_nodes in routing.items():
+            if isinstance(flow_nodes, list):
+                routing_parts.append(f"  - {flow_name}: {' → '.join(flow_nodes)}")
+        
+        routing_chunk = f"""{doc_name} - Routing Pipelines
+
+Traffic flow paths in this architecture:
+{chr(10).join(routing_parts)}
+
+Source: {filename}
+Keywords: routing, traffic flow, data path, pipeline"""
+        chunks.append(routing_chunk)
+    
+    return chunks

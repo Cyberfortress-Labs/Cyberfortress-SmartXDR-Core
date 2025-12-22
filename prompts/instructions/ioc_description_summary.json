@@ -3,7 +3,7 @@
     "version": "2.0.0",
     "description": "Prompt để tóm tắt IOC ngắn gọn kiểu CTI cho description",
     "system_prompt": "Bạn là chuyên gia CTI (Cyber Threat Intelligence).\n\nNhiệm vụ: Viết MỘT ĐOẠN VĂN NGẮN (2-3 câu, tối đa 250 ký tự) mô tả IOC.\n\nQuy tắc BẮT BUỘC:\n- KHÔNG dùng bullet points, numbered list, hay tiêu đề\n- KHÔNG liệt kê chi tiết từng nguồn\n- Chỉ viết 1 đoạn văn liền mạch\n- Nêu: mức độ nguy hiểm + kết luận chính + 1 khuyến nghị\n- Ví dụ tốt: 'IP này có mức độ đe dọa THẤP. Không phát hiện hoạt động độc hại từ các nguồn threat intel. Tiếp tục giám sát nếu xuất hiện trong logs.'\n- Chỉ trả về text thuần túy, KHÔNG markdown",
-    "user_prompt_template": "Viết MỘT ĐOẠN VĂN NGẮN (2-3 câu, <250 ký tự) mô tả IOC sau:\n\n{content}",
+    "user_prompt_template": "Viết MỘT ĐOẠN VĂN NGẮN (3-6 câu, <500 ký tự) mô tả IOC sau:\n\n{content}",
     "settings": {
         "max_chars": 300
     }

@@ -191,9 +191,7 @@ class LLMService:
         prompt_file = self.prompts_dir / "instructions" / "ioc_description_summary.json"
         
         # Fallback prompts if file not found
-        fallback_system = """Bạn là chuyên gia CTI.
-Viết MỘT ĐOẠN VĂN NGẮN (2-3 câu, tối đa 250 ký tự) mô tả IOC.
-KHÔNG dùng bullet points hay list. Chỉ viết 1 đoạn văn liền mạch."""
+        fallback_system = """Bạn là chuyên gia CTI. Viết MỘT ĐOẠN VĂN NGẮN (3-6 câu, tối đa 500 ký tự) mô tả IOC. KHÔNG dùng bullet points hay list. Chỉ viết 1 đoạn văn liền mạch."""
         fallback_user = "Viết MỘT ĐOẠN VĂN NGẮN mô tả IOC:\n\n{content}"
         fallback_settings = {"max_chars": 300}
         
@@ -561,16 +559,88 @@ KHÔNG dùng bullet points hay list. Chỉ viết 1 đoạn văn liền mạch."
         """
         Extract main subjects/topics from a query (device names, system types).
         Returns list of subject keywords found.
+        
+        Keywords are loaded dynamically from assets/ecosystem/cft_all_devices_lite.json
         """
-        # Known device/system keywords to detect topic
-        subjects = [
-            'attacker', 'siem', 'elastic', 'wazuh', 'suricata', 'zeek', 
-            'pfsense', 'firewall', 'router', 'gateway', 'server', 'windows',
-            'linux', 'iris', 'soar', 'misp', 'n8n', 'waf', 'dvwa', 'kibana',
-            'elastalert', 'nat', 'idps', 'ids', 'ips'
-        ]
+        # Get device keywords (cached for performance)
+        subjects = self._get_device_keywords()
         found = [s for s in subjects if s in text.lower()]
         return found
+    
+    # Cache for device keywords
+    _device_keywords_cache = None
+    _device_keywords_mtime = 0
+    
+    def _get_device_keywords(self) -> list:
+        """
+        Load device keywords from cft_all_devices_lite.json.
+        Extracts id and name from all_devices array.
+        Caches result and reloads if file changes.
+        """
+        import os
+        import json
+        from app.config import ECOSYSTEM_DIR
+        
+        json_path = os.path.join(ECOSYSTEM_DIR, "cft_all_devices_lite.json")
+        
+        try:
+            # Check if file changed since last load
+            current_mtime = os.path.getmtime(json_path) if os.path.exists(json_path) else 0
+            
+            if self._device_keywords_cache and current_mtime == self._device_keywords_mtime:
+                return self._device_keywords_cache
+            
+            # Load and parse JSON
+            with open(json_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            keywords = set()
+            
+            # Extract from all_devices array
+            for device in data.get("all_devices", []):
+                # Add device id (e.g., "suricata-01" -> "suricata")
+                device_id = device.get("id", "")
+                if device_id:
+                    # Extract base name without number suffix
+                    base_id = device_id.rsplit('-', 1)[0] if '-' in device_id else device_id
+                    keywords.add(base_id.lower())
+                    keywords.add(device_id.lower())
+                
+                # Add device name words (e.g., "Suricata Inline IDPS" -> "suricata", "idps")
+                device_name = device.get("name", "")
+                if device_name:
+                    for word in device_name.split():
+                        # Skip common words
+                        if len(word) > 2 and word.lower() not in ['the', 'and', 'for', 'with']:
+                            keywords.add(word.lower())
+                
+                # Add category
+                category = device.get("category", "")
+                if category:
+                    for word in category.split():
+                        if len(word) > 2:
+                            keywords.add(word.lower())
+            
+            # Add zone names from network_zones
+            for zone_name in data.get("network_zones", {}).keys():
+                for word in zone_name.split():
+                    if len(word) > 2:
+                        keywords.add(word.lower())
+            
+            # Cache result
+            self._device_keywords_cache = list(keywords)
+            self._device_keywords_mtime = current_mtime
+            
+            if DEBUG_MODE:
+                print(f"[LLM Service] Loaded {len(keywords)} device keywords from JSON")
+            
+            return self._device_keywords_cache
+            
+        except Exception as e:
+            if DEBUG_MODE:
+                print(f"[LLM Service] Failed to load device keywords: {e}")
+            # Fallback to minimal set if JSON fails
+            return ['siem', 'firewall', 'server', 'attacker', 'wazuh', 'elastic']
     
     def _shares_topic_keywords(self, entity: str, query: str) -> bool:
         """
