@@ -126,3 +126,8 @@ RISK_SCORE_ESCALATION_WEIGHT = 0.1  # [DEPRECATED]
 ALERT_MIN_PROBABILITY = 0.5  # Minimum ML prediction probability threshold (lowered to include INFO alerts)
 ALERT_MIN_SEVERITY = "INFO"  # Minimum severity level (INFO, WARNING, ERROR)
 ALERT_SOURCE_TYPES = ["suricata", "zeek", "pfsense", "modsecurity", "apache", "nginx", "mysql", "windows", "wazuh"]
+
+# IP Whitelist for triage queries - these IPs will be excluded from /summary, /sumlogs results
+# Use comma-separated list in .env: WHITELIST_IP_QUERY=192.168.1.1,192.168.1.2,10.0.0.1
+_whitelist_str = os.environ.get('WHITELIST_IP_QUERY', '')
+WHITELIST_IP_QUERY = set(ip.strip() for ip in _whitelist_str.split(',') if ip.strip())
