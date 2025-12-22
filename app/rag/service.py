@@ -11,7 +11,7 @@ from pathlib import Path
 
 from app.rag.repository import RAGRepository
 from app.rag.models import Document, DocumentMetadata, QueryResult
-from app.config import DEBUG_MODE
+from app.config import DEBUG_MODE, DEBUG_TEXT_LENGTH
 
 
 logger = logging.getLogger('smartxdr.rag.service')
@@ -420,7 +420,7 @@ class RAGService:
         query_text: str,
         top_k: int = None,
         filters: Optional[Dict[str, Any]] = None,
-        distance_threshold: float = 1.4
+        distance_threshold: float = 1.7
     ) -> Dict[str, Any]:
         """
         Query the knowledge base
@@ -481,7 +481,7 @@ class RAGService:
             avg_time = self.stats["avg_query_time_ms"]
             self.stats["avg_query_time_ms"] = (avg_time * (total_queries - 1) + query_time_ms) / total_queries
             
-            logger.info(f"Query executed: query='{query_text[:50]}...', results={len(filtered_docs)}, time={query_time_ms:.2f}ms")
+            logger.info(f"Query executed: query='{query_text[:DEBUG_TEXT_LENGTH]}...', results={len(filtered_docs)}, time={query_time_ms:.2f}ms")
             
             return {
                 "status": "success",
@@ -513,7 +513,7 @@ class RAGService:
         filters: Optional[Dict[str, Any]] = None
     ) -> Tuple[str, List[str]]:
         """
-        Build context string from query results
+        Build context string from query results with prioritization and fallback.
         
         Args:
             query_text: Query text
@@ -529,15 +529,49 @@ class RAGService:
         results = self.query(query_text, top_k, filters)
         
         if results["status"] == "error" or not results["documents"]:
-            return "No relevant context found.", []
+            # Fallback: Return hint for LLM to use general knowledge
+            return "No relevant context found. Use general cybersecurity knowledge to answer if possible.", []
         
-        # Build context
+        # Get documents with distances for prioritization
+        documents = results["documents"]
+        distances = results.get("distances", [])
+        sources = results["sources"]
+        
+        # Check context quality based on average distance
+        avg_distance = sum(distances) / len(distances) if distances else 0
+        best_distance = min(distances) if distances else 0
+        
+        # Build context with quality indicator
         context_parts = []
-        for idx, doc in enumerate(results["documents"]):
+        
+        # Add quality hint for LLM
+        if best_distance < 0.8:
+            quality_hint = "HIGH CONFIDENCE CONTEXT (exact match found)"
+        elif best_distance < 1.2:
+            quality_hint = "GOOD CONTEXT (relevant documents found)"
+        elif best_distance < 1.5:
+            quality_hint = "MODERATE CONTEXT (loosely related documents)"
+        else:
+            quality_hint = "LOW CONFIDENCE CONTEXT (may need inference)"
+        
+        context_parts.append(f"[Context Quality: {quality_hint}]")
+        context_parts.append("")
+        
+        # Sort documents by distance (best first) for prioritization
+        if distances:
+            doc_with_dist = list(zip(documents, distances))
+            doc_with_dist.sort(key=lambda x: x[1])  # Sort by distance ascending
+            documents = [d[0] for d in doc_with_dist]
+        
+        # Add documents
+        for idx, doc in enumerate(documents):
             context_parts.append(f"[Document {idx + 1}]\n{doc}")
         
         context_text = "\n\n---\n\n".join(context_parts)
-        sources = results["sources"]
+        
+        # Add fallback hint if context quality is low
+        if avg_distance > 1.5 and len(documents) > 0:
+            context_text += "\n\n[NOTE: Context quality is low. If the above information doesn't directly answer the question, use your general knowledge about the topic to provide a helpful response.]"
         
         return context_text, sources
     

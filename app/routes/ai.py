@@ -7,6 +7,7 @@ from flask import Blueprint, request, jsonify
 from app import get_collection
 from app.services.llm_service import LLMService
 from app.middleware.auth import require_api_key
+from app.config import *
 
 # Get logger
 logger = logging.getLogger('smartxdr.ai')
@@ -31,7 +32,7 @@ def ask_llm():
     Request Body:
         {
             "query": "What is Suricata's management IP?",
-            "n_results": 10,  // optional, default: 10
+            "n_results": 25,  // optional, default: DEFAULT_RESULTS
             "filter": {},     // optional, metadata filter
             "session_id": "uuid"  // optional, for conversation memory
         }
@@ -101,15 +102,15 @@ def ask_llm():
             }), 400
         
         # Optional parameters
-        n_results = data.get('n_results', 10)
+        n_results = data.get('n_results', DEFAULT_RESULTS)
         filter_metadata = data.get('filter', None)
         session_id = data.get('session_id', None)  # NEW: conversation memory
         
         # Validate n_results
-        if not isinstance(n_results, int) or n_results < 1 or n_results > 50:
+        if not isinstance(n_results, int) or n_results < 1 or n_results > 100:
             return jsonify({
                 'status': 'error',
-                'message': 'n_results must be an integer between 1 and 50'
+                'message': f'n_results must be an integer between 1 and 100'
             }), 400
         
         # Validate session_id if provided
@@ -119,7 +120,7 @@ def ask_llm():
                 'message': 'session_id must be a string'
             }), 400
         
-        logger.info(f"Processing query: {query[:100]}..." + (f" [session: {session_id[:8]}...]" if session_id else ""))
+        logger.info(f"Processing query: {query[:DEBUG_TEXT_LENGTH]}..." + (f" [session: {session_id[:DEBUG_TEXT_LENGTH]}...]" if session_id else ""))
         
         # Call LLM Service with new RAG architecture
         result = llm_service.ask_rag(

@@ -247,7 +247,7 @@ KHÔNG dùng bullet points hay list. Chỉ viết 1 đoạn văn liền mạch."
         if DEBUG_MODE:
             logger.debug(f"Question: {query}")
             if session_id:
-                print(f"[LLM Service] Session: {session_id[:8]}...")
+                print(f"[LLM Service] Session: {session_id[:DEBUG_TEXT_LENGTH]}...")
         
         # Check rate limit
         if not self.usage_tracker.check_rate_limit():
@@ -298,7 +298,7 @@ KHÔNG dùng bullet points hay list. Chỉ viết 1 đoạn văn liền mạch."
             
             if cached_response:
                 if DEBUG_MODE:
-                    print(f"[LLM Service] CACHE HIT for: {query[:50]}...")
+                    print(f"[LLM Service] CACHE HIT for: {query[:DEBUG_TEXT_LENGTH]}...")
                 # Get sources from RAG for cached response
                 query_result = rag_service.query(query, top_k, filters)
                 
@@ -323,14 +323,15 @@ KHÔNG dùng bullet points hay list. Chỉ viết 1 đoạn văn liền mạch."
         # Build context using RAGService
         # Enhance query with conversation context for better RAG search
         # But skip for short/simple queries (greetings, etc.) to save time
+        # Also avoid context pollution by checking relevance
         rag_query = query
         if conversation_history_text and len(query) > 20:
-            # Only extract entities for substantive queries
-            context_entities = self._extract_context_entities(conversation_history_text)
+            # Only extract entities that are RELEVANT to current query
+            context_entities = self._extract_relevant_entities(query, conversation_history_text)
             if context_entities:
                 rag_query = f"{query} (context: {context_entities})"
                 if DEBUG_MODE:
-                    print(f"[LLM Service] Enhanced RAG query: {rag_query[:100]}...")
+                    print(f"[LLM Service] Enhanced RAG query: {rag_query[:DEBUG_TEXT_LENGTH]}...")
         
         context_text, sources = rag_service.build_context_from_query(
             query_text=rag_query,
@@ -496,6 +497,99 @@ KHÔNG dùng bullet points hay list. Chỉ viết 1 đoạn văn liền mạch."
                 "error": str(e),
                 "answer": f"Error generating answer: {str(e)}"
             }
+    
+    def _extract_relevant_entities(self, current_query: str, history_text: str) -> str:
+        """
+        Extract entities from conversation history that are RELEVANT to the current query.
+        
+        Uses semantic approach (no hardcoded IPs or rules) to determine relevance:
+        1. Direct mention: Entity appears in current query
+        2. Topic continuity: Check if query continues previous topic or switches topic
+        3. Keyword overlap: Shared keywords between entity context and query
+        
+        Args:
+            current_query: The current user question
+            history_text: Conversation history text
+        
+        Returns:
+            Space-separated relevant entities, or empty string if none
+        """
+        import re
+        
+        # Extract all entities from history
+        all_entities = self._simple_entity_extraction(history_text)
+        if not all_entities:
+            return ""
+        
+        entities_list = all_entities.split()
+        query_lower = current_query.lower()
+        
+        # Detect if this is a topic change (new subject not mentioned before)
+        # If query introduces a completely new topic, don't pollute with old context
+        query_subjects = self._extract_query_subjects(query_lower)
+        history_subjects = self._extract_query_subjects(history_text.lower())
+        
+        # If query subject is NOT in history, this is a topic change - skip context
+        if query_subjects and not any(subj in history_text.lower() for subj in query_subjects):
+            if DEBUG_MODE:
+                print(f"[LLM Service] Topic change detected, skipping history context")
+            return ""
+        
+        # Filter entities that are relevant to current query
+        relevant = []
+        for entity in entities_list:
+            entity_lower = entity.lower()
+            
+            # Skip "IP" prefix without the actual IP
+            if entity_lower == "ip":
+                continue
+            
+            # Include if entity appears directly in current query
+            if entity_lower in query_lower:
+                relevant.append(entity)
+                continue
+            
+            # Include if entity shares topic keywords with query
+            # (e.g., both mention same device name or same zone)
+            if self._shares_topic_keywords(entity, query_lower):
+                relevant.append(entity)
+        
+        # Limit to 3 relevant entities
+        return ' '.join(relevant[:3])
+    
+    def _extract_query_subjects(self, text: str) -> list:
+        """
+        Extract main subjects/topics from a query (device names, system types).
+        Returns list of subject keywords found.
+        """
+        # Known device/system keywords to detect topic
+        subjects = [
+            'attacker', 'siem', 'elastic', 'wazuh', 'suricata', 'zeek', 
+            'pfsense', 'firewall', 'router', 'gateway', 'server', 'windows',
+            'linux', 'iris', 'soar', 'misp', 'n8n', 'waf', 'dvwa', 'kibana',
+            'elastalert', 'nat', 'idps', 'ids', 'ips'
+        ]
+        found = [s for s in subjects if s in text.lower()]
+        return found
+    
+    def _shares_topic_keywords(self, entity: str, query: str) -> bool:
+        """
+        Check if entity and query share common topic keywords.
+        Uses keyword overlap without hardcoded IP rules.
+        """
+        # Extract keywords from entity (remove IP pattern for cleaner matching)
+        import re
+        entity_clean = re.sub(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', '', entity).strip()
+        
+        # If entity is just an IP, check if query mentions IP-related terms
+        if re.match(r'^IP\s+\d', entity):
+            return 'ip' in query or 'address' in query or 'máy' in query
+        
+        # Check if entity keyword appears in query
+        if entity_clean.lower() in query:
+            return True
+        
+        return False
     
     def _extract_context_entities(self, history_text: str) -> str:
         """
@@ -1057,7 +1151,7 @@ Hãy phân tích và đưa ra:
             # Query RAG với top_k nhỏ để tập trung vào context quan trọng nhất
             context_text, sources = rag_service.build_context_from_query(
                 query_text=rag_query,
-                top_k=5,  # Lấy 5 documents liên quan nhất
+                top_k=DEFAULT_RESULTS,  # Lấy DEFAULT_RESULTS documents liên quan nhất
                 filters={"is_active": True}
             )
             
@@ -1071,7 +1165,7 @@ Hãy phân tích và đưa ra:
                 print(f"[DEBUG LLM] RAG context sources: {sources}")
             
             # Truncate context nếu quá dài (giữ token usage hợp lý)
-            max_context_chars = 1500
+            max_context_chars = MAX_CONTEXT_CHARS
             if len(context_text) > max_context_chars:
                 context_text = context_text[:max_context_chars] + "..."
             

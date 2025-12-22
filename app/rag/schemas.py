@@ -4,6 +4,7 @@ Pydantic Schemas for RAG API validation
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field, validator
 from datetime import datetime
+from app.config import DEFAULT_RESULTS
 
 
 class DocumentMetadataSchema(BaseModel):
@@ -125,7 +126,7 @@ class ListDocumentsResponse(BaseModel):
 class RAGQueryRequest(BaseModel):
     """Request for RAG query"""
     query: str = Field(..., description="User's question")
-    top_k: int = Field(default=5, ge=1, le=20, description="Number of documents to retrieve")
+    top_k: int = Field(default=DEFAULT_RESULTS, ge=1, le=100, description="Number of documents to retrieve")
     filters: Optional[Dict[str, Any]] = Field(default=None, description="Metadata filters")
     include_sources: bool = Field(default=True, description="Include source documents in response")
     
@@ -143,7 +144,7 @@ class RAGQueryRequest(BaseModel):
         json_schema_extra = {
             "example": {
                 "query": "How do I configure Suricata IDS?",
-                "top_k": 5,
+                "top_k": DEFAULT_RESULTS,
                 "filters": {
                     "is_active": True,
                     "tags": "security"
@@ -170,7 +171,7 @@ class RAGQueryResponse(BaseModel):
                 "sources": ["docs/suricata_guide.md", "config/suricata.yaml"],
                 "cached": False,
                 "metadata": {
-                    "documents_retrieved": 5,
+                    "documents_retrieved": DEFAULT_RESULTS,
                     "processing_time_ms": 234
                 }
             }
