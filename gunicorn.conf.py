@@ -6,14 +6,15 @@ bind = "0.0.0.0:8080"
 backlog = 2048
 
 # Worker processes
-# Use 1 worker to avoid loading CrossEncoder model multiple times (saves ~500MB RAM per worker)
-# Threads handle concurrency within the single worker
-workers = 1
+# preload_app=True enables Copy-on-Write: model loads once in master, shared across workers
+# This allows multiple workers WITHOUT multiplying RAM usage
+workers = 2
 threads = 4
 worker_class = "gthread"
 worker_connections = 1000
 timeout = 120
 keepalive = 2
+preload_app = True  # Critical: load model BEFORE forking workers
 
 # Logging
 accesslog = "-"  # stdout
