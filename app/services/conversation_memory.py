@@ -116,31 +116,13 @@ class ConversationMemory:
         logger.info(f"ConversationMemory initialized (storage: {storage_type}, LangChain: {langchain_status})")
     
     def _init_redis(self):
-        """Initialize Redis connection if available"""
-        redis_host = os.getenv("REDIS_HOST")
-        redis_port = int(os.getenv("REDIS_PORT", "6379"))
+        """Initialize using shared Redis client"""
+        from app.utils.redis_client import get_redis_client
         
-        if redis_host:
-            try:
-                import redis
-                self._redis = redis.Redis(
-                    host=redis_host,
-                    port=redis_port,
-                    db=0,
-                    decode_responses=True,
-                    socket_timeout=5,
-                    socket_connect_timeout=5
-                )
-                # Test connection
-                self._redis.ping()
-                self._redis_available = True
-                logger.info(f"Redis connected at {redis_host}:{redis_port}")
-            except Exception as e:
-                logger.warning(f"Redis not available ({e}), using in-memory fallback")
-                self._redis = None
-                self._redis_available = False
-        else:
-            logger.info("Redis not configured (REDIS_HOST not set), using in-memory storage")
+        redis_wrapper = get_redis_client()
+        self._redis = redis_wrapper.client
+        self._redis_available = redis_wrapper.available
+
     
     def _get_redis_key(self, session_id: str) -> str:
         """Get Redis key for a session"""

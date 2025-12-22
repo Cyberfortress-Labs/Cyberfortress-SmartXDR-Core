@@ -23,8 +23,12 @@ class APIKeyManager:
         # Check if auth is enabled
         self.auth_enabled = os.getenv('API_AUTH_ENABLED', 'true').lower() == 'true'
         
-        # Rate limiting tracker (in-memory for now)
+        # Rate limiting tracker (in-memory for now - TODO: move to Redis)
         self._request_counts = {}
+        
+        # Initialize Redis for API key caching
+        self._redis = None
+        self._init_redis()
         
         # IP Whitelist (optional)
         whitelist_str = os.getenv('API_IP_WHITELIST', '')
@@ -42,13 +46,54 @@ class APIKeyManager:
         if not self.auth_enabled:
             logger.warning("API Authentication is DISABLED! All endpoints are public.")
         else:
-            logger.info("API Authentication enabled (SQLAlchemy)")
+            logger.info("API Authentication enabled (SQLAlchemy + Redis Cache)")
+
+    def _init_redis(self):
+        """Initialize Redis using shared client"""
+        try:
+            from app.utils.redis_client import get_redis_client
+            redis_wrapper = get_redis_client()
+            self._redis = redis_wrapper.client
+            if self._redis:
+                logger.info("Auth Manager connected to Redis")
+        except Exception as e:
+            logger.warning(f"Auth Manager failed to connect to Redis: {e}")
     
     def validate_key(self, api_key: str) -> Optional[dict]:
-        """Validate API key using SQLAlchemy"""
+        """
+        Validate API key using Redis Cache (Fast) + SQLAlchemy (Secure Fallback)
+        
+        Strategy:
+        1. Compute SHA256(raw_key) -> 'Fast Hash'
+        2. Check Redis for 'Fast Hash' (O(1))
+        3. If miss: Scan DB and verify Argon2 (O(N))
+        4. If valid: Cache result in Redis for 10 mins
+        """
         if not api_key:
             return None
+            
+        import hashlib
+        import json
         
+        # 1. Compute Fast Hash for Cache Lookup
+        # We don't store raw key in Redis, but a fast hash of it
+        # This is safe because Redis TTL is short and it's internal
+        fast_hash = hashlib.sha256(api_key.encode()).hexdigest()
+        cache_key = f"api_key:{fast_hash}"
+        
+        # 2. Check Redis Cache
+        if self._redis:
+            try:
+                cached_data = self._redis.get(cache_key)
+                if cached_data:
+                    # Update usage stats async or periodically? 
+                    # For now we skip DB usage update on cache hit for speed
+                    # Or we could fire-and-forget an update task
+                    return json.loads(cached_data)
+            except Exception as e:
+                logger.warning(f"Redis get error: {e}")
+        
+        # 3. DB Fallback (Slow path)
         # Get all active keys
         active_keys = APIKeyModel.query.filter_by(enabled=True).all()
         
@@ -60,15 +105,19 @@ class APIKeyManager:
                     logger.warning(f"API key expired: {key_model.name}")
                     return None
                 
-                # Update usage stats
-                key_model.last_used_at = datetime.utcnow()
-                key_model.usage_count += 1
-                db.session.commit()
+                # Update usage stats (DB write is slow, but necessary on first check/refresh)
+                try:
+                    key_model.last_used_at = datetime.utcnow()
+                    key_model.usage_count += 1
+                    db.session.commit()
+                except Exception as e:
+                    logger.error(f"Failed to update key usage stats: {e}")
+                    db.session.rollback()
                 
                 # Parse permissions
                 permissions = json.loads(key_model.permissions)
                 
-                return {
+                result = {
                     'id': key_model.id,
                     'name': key_model.name,
                     'description': key_model.description,
@@ -76,6 +125,21 @@ class APIKeyManager:
                     'rate_limit': key_model.rate_limit,
                     'enabled': key_model.enabled
                 }
+                
+                # 4. Cache Success in Redis
+                if self._redis:
+                    try:
+                        # Cache for 10 minutes (600s)
+                        # Enough to save DB calls, short enough for permission revocation
+                        self._redis.setex(
+                            cache_key,
+                            600,
+                            json.dumps(result)
+                        )
+                    except Exception as e:
+                        logger.warning(f"Redis set error: {e}")
+                
+                return result
         
         return None
     
