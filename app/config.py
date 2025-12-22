@@ -87,7 +87,7 @@ MIN_BATCH_SIZE = 50  # Minimum batch size for embedding
 BATCH_SIZE = 100  # Maximum batch size for embedding (reduced for OpenAI token limits)
 
 # Context size for LLM (increase if responses say 'no info' but sources exist)
-MAX_CONTEXT_CHARS = 6000  # ~1500 tokens, enough for ~3-4 full documents
+MAX_CONTEXT_CHARS = 4500 
 DEBUG_TEXT_LENGTH = 1000
 
 # Distance thresholds for relevance filtering
