@@ -323,19 +323,29 @@ class LLMService:
         # But skip for short/simple queries (greetings, etc.) to save time
         # Also avoid context pollution by checking relevance
         rag_query = query
-        if conversation_history_text and len(query) > 20:
-            # Only extract entities that are RELEVANT to current query
-            context_entities = self._extract_relevant_entities(query, conversation_history_text)
-            if context_entities:
-                rag_query = f"{query} (context: {context_entities})"
-                if DEBUG_MODE:
-                    print(f"[LLM Service] Enhanced RAG query: {rag_query[:DEBUG_TEXT_LENGTH]}...")
         
-        context_text, sources = rag_service.build_context_from_query(
-            query_text=rag_query,
-            top_k=top_k,
-            filters=filters
-        )
+        # Check if this is a simple query that doesn't need RAG
+        skip_rag = self._should_skip_rag(query)
+        
+        if skip_rag:
+            if DEBUG_MODE:
+                print(f"[LLM Service] Skipping RAG for simple query: {query[:50]}")
+            context_text = ""
+            sources = set()
+        else:
+            if conversation_history_text and len(query) > 20:
+                # Only extract entities that are RELEVANT to current query
+                context_entities = self._extract_relevant_entities(query, conversation_history_text)
+                if context_entities:
+                    rag_query = f"{query} (context: {context_entities})"
+                    if DEBUG_MODE:
+                        print(f"[LLM Service] Enhanced RAG query: {rag_query[:DEBUG_TEXT_LENGTH]}...")
+            
+            context_text, sources = rag_service.build_context_from_query(
+                query_text=rag_query,
+                top_k=top_k,
+                filters=filters
+            )
         
         # Combine RAG context with conversation history
         if conversation_history_text:
@@ -357,8 +367,9 @@ class LLMService:
             answer = answer_with_tokens
             
             # Add source citations
-            if sources:
-                answer += f"\n\nSources: {', '.join(sorted(sources))}"
+            if DEBUG_MODE:
+                if sources:
+                    answer += f"\n\nSources: {', '.join(sorted(sources))}"
             
             # Cache the response (only if use_cache=True and no session)
             if use_cache and not session_id:
@@ -495,6 +506,58 @@ class LLMService:
                 "error": str(e),
                 "answer": f"Error generating answer: {str(e)}"
             }
+    
+    def _should_skip_rag(self, query: str) -> bool:
+        """
+        Determine if RAG retrieval should be skipped for simple queries.
+        
+        Skips RAG for:
+        - Greetings (hi, hello, chào, xin chào)
+        - Identity questions (bạn là gì, who are you)
+        - Simple thanks (cảm ơn, thanks)
+        - Very short queries (< 10 chars)
+        
+        Returns:
+            True if RAG should be skipped, False otherwise
+        """
+        import re
+        
+        query_lower = query.lower().strip()
+        
+        # Very short queries don't need RAG
+        if len(query_lower) < 10:
+            return True
+        
+        # Greeting patterns (Vietnamese + English)
+        greeting_patterns = [
+            r'^(hi|hello|hey|chào|xin chào|alo|yo)[\s!?.,]*$',
+            r'^(hi|hello|chào)[\s!?.,]*(bạn|you|em|anh|chị)?[\s!?.,]*$',
+        ]
+        
+        # Identity/intro questions
+        identity_patterns = [
+            r'bạn là (gì|ai|cái gì)',
+            r'(who|what) are you',
+            r'giới thiệu (bản thân|về bạn)',
+            r'tell me about yourself',
+            r'^bạn có thể làm gì',
+            r'^what can you do',
+        ]
+        
+        # Thanks patterns
+        thanks_patterns = [
+            r'^(cảm ơn|thank|thanks|tks|cám ơn)[\s!?.,]*$',
+            r'^(ok|okay|được rồi|hiểu rồi)[\s!?.,]*$',
+        ]
+        
+        # Check all patterns
+        all_patterns = greeting_patterns + identity_patterns + thanks_patterns
+        
+        for pattern in all_patterns:
+            if re.search(pattern, query_lower, re.IGNORECASE):
+                return True
+        
+        return False
     
     def _extract_relevant_entities(self, current_query: str, history_text: str) -> str:
         """
