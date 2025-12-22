@@ -650,14 +650,14 @@ Giữ phản hồi dưới 250 từ, cụ thể và có thể hành động."""
     def _build_detailed_summary(self, alert_context: str, grouped_alerts: List[Dict], risk_score: float) -> str:
         """Build detailed summary from grouped alerts using SeverityManager"""
         summary = f"ML Alert Analysis\n\n"
-        summary += f"Risk Assessment:\n"
+        summary += f"<b>Risk Assessment:</b>\n"
         
         # Use SeverityManager for risk assessment
         summary += severity_manager.format_risk_assessment(risk_score) + "\n\n"
         
         # Detected Patterns
         if grouped_alerts:
-            summary += "Detected Attack Patterns:\n"
+            summary += "<b>Detected Attack Patterns:</b>\n"
             patterns = {}
             
             for group in grouped_alerts:
@@ -673,7 +673,7 @@ Giữ phản hồi dưới 250 từ, cụ thể và có thể hành động."""
                 avg_prob = sum(g['avg_probability'] for g in groups) / len(groups)
                 unique_ips = len(set(g['source_ip'] for g in groups))
                 
-                summary += f"\n  • {pattern.upper().replace('_', ' ')}\n"
+                summary += f"\n  • <b>{pattern.upper().replace('_', ' ')}</b>\n"
                 summary += f"    - Description: {desc}\n"
                 summary += f"    - Total Alerts: {total_alerts}\n"
                 summary += f"    - Avg Confidence: {avg_prob*100:.1f}%\n"
@@ -692,7 +692,7 @@ Giữ phản hồi dưới 250 từ, cụ thể và có thể hành động."""
                 summary += f"     - Probability: {group['avg_probability']:.1%}\n"
         
         # Use SeverityManager for recommendations
-        summary += "<b>Recommended Actions:</b>\n"
+        summary += "\n<b>Recommended Actions:</b>\n"
         summary += severity_manager.format_recommendations(risk_score)
         
         return summary

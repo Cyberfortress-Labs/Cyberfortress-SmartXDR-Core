@@ -1025,7 +1025,7 @@ class TelegramMiddlewareService:
                 f"<b>Timestamp:</b> {result.get('timestamp', 'N/A')}\n\n"
             )
             
-            summary_text += f"<b>Summary:</b>\n{self._format_response(summary)}\n\n"
+            summary_text += f"<b>Summary:</b>\n{summary}\n\n"
             
             # Add grouped alerts summary
             if grouped:
