@@ -9,7 +9,7 @@ import requests
 import json
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional, Callable
+from typing import Dict, Any, List, Optional, Callable, Tuple
 from collections import defaultdict
 import html
 import re
@@ -98,6 +98,11 @@ class TelegramMiddlewareService:
         
         # Custom message handler (optional)
         self._custom_handler: Optional[Callable] = None
+        
+        # Message deduplication cache (prevents duplicate responses on Telegram retry)
+        # Format: {(chat_id, message_id): timestamp}
+        self._processed_messages: Dict[Tuple[int, int], datetime] = {}
+        self._dedup_ttl = 300  # 5 minutes TTL for dedup cache
                 
         logger.info(f"TelegramMiddlewareService initialized")
         logger.info(f"SmartXDR API URL: {self.smartxdr_api_url}")
@@ -481,6 +486,27 @@ class TelegramMiddlewareService:
         
         if not chat_id or not text:
             return
+        
+        # === DEDUPLICATION CHECK ===
+        # Prevent duplicate processing when Telegram retries on timeout
+        now = datetime.now()
+        dedup_key = (chat_id, message_id)
+        
+        # Clean expired entries (every 100 messages)
+        if len(self._processed_messages) > 100:
+            cutoff = now - timedelta(seconds=self._dedup_ttl)
+            self._processed_messages = {
+                k: v for k, v in self._processed_messages.items() 
+                if v > cutoff
+            }
+        
+        # Check if already processed
+        if dedup_key in self._processed_messages:
+            logger.info(f"Duplicate message ignored: chat={chat_id}, msg_id={message_id}")
+            return
+        
+        # Mark as processing
+        self._processed_messages[dedup_key] = now
         
         # Get user info for logging
         user = message.get("from", {})

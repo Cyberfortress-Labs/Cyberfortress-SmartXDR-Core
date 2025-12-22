@@ -6,7 +6,9 @@ bind = "0.0.0.0:8080"
 backlog = 2048
 
 # Worker processes
-workers = 2
+# Use 1 worker to avoid loading CrossEncoder model multiple times (saves ~500MB RAM per worker)
+# Threads handle concurrency within the single worker
+workers = 1
 threads = 4
 worker_class = "gthread"
 worker_connections = 1000
