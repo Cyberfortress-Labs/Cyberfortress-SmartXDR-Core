@@ -90,8 +90,8 @@ def _search_and_build_context(collection, query: str, n_results: int, filter_met
             min_distance = min(results["distances"][0])
             if DEBUG_MODE:
                 logger.debug(f"Closest match distance: {min_distance:.4f}")
-            # Relaxed threshold from 1.2 to 1.4 to be more inclusive
-            has_relevant_results = min_distance < 1.4
+            # Relaxed threshold from 1.4 to 1.7 to be more inclusive
+            has_relevant_results = min_distance < 1.7
         else:
             has_relevant_results = True
     else:
@@ -113,7 +113,7 @@ def _search_and_build_context(collection, query: str, n_results: int, filter_met
     sources = set()
     
     for idx, (doc, meta, dist) in enumerate(zip(context_list, metadatas_list, distances)):
-        if dist < 1.4:
+        if dist < 1.7:
             context_parts.append(f"[Document {idx + 1}]\n{doc}")
             if meta and "source" in meta:
                 sources.add(meta["source"])

@@ -231,7 +231,7 @@ class ResponseCache:
                         # SAFETY CHECK: Reject if entities or action verbs conflict
                         cached_query = cached_data.get('original_query', '')
                         if self._has_entity_or_action_conflict(query, cached_query):
-                            logger.warning(f"Semantic cache REJECTED: conflict detected between '{query[:50]}' and '{cached_query[:50]}'")
+                            logger.warning(f"Semantic cache REJECTED: conflict detected between '{query[:DEBUG_TEXT_LENGTH]}' and '{cached_query[:DEBUG_TEXT_LENGTH]}'")
                         else:
                             logger.debug(f"Cache hit (semantic match {similarity:.1%})")
                             return cached_data['response']

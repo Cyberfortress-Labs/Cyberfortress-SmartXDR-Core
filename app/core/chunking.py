@@ -95,6 +95,32 @@ Role in SOC: {role}
 This is part of the Security Operations Center infrastructure."""
         texts.append(zone_chunk)
     
+    # 1c. OS/Version/Software chunk for system info queries
+    # This helps when users ask "What OS does X run?" or "Version of X?"
+    os_info = data.get("os", "")
+    if os_info:
+        os_chunk = f"""Operating System Information for {name}:
+The operating system of {name} is: {os_info}
+{name} runs on: {os_info}
+OS of {name}: {os_info}
+What OS does {name} use? Answer: {os_info}
+{name} operating system: {os_info}
+Hệ điều hành của {name} là: {os_info}
+{name} chạy trên hệ điều hành: {os_info}
+OS của máy {name}: {os_info}
+
+Device Details:
+- Name: {name}
+- ID: {device_id}
+- IP: {ip}
+- Category: {category}
+- Role: {role}
+- Operating System: {os_info}
+
+Keywords: {name}, OS, operating system, {os_info}, version, software
+Source: {filename}"""
+        texts.append(os_chunk)
+    
     # 2. Network configuration
     if "subnet" in data or "ip_range" in data or "vmnet" in data:
         network_info = f"""Network config for {name} (ID: {device_id}):

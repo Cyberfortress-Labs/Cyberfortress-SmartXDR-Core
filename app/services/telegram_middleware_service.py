@@ -16,7 +16,7 @@ import re
 import os
 
 from app.utils.logger import setup_logger
-from app.config import ALERT_TIME_WINDOW, TELEGRAM_API_TIMEOUT, TIMEZONE_OFFSET
+from app.config import ALERT_TIME_WINDOW, TELEGRAM_API_TIMEOUT, TIMEZONE_OFFSET, DEBUG_TEXT_LENGTH
 
 logger = setup_logger("telegram_middleware")
 
@@ -791,7 +791,7 @@ class TelegramMiddlewareService:
             # Call SmartXDR API with session_id for conversation memory
             # Use chat_id as session identifier so each Telegram chat has its own context
             session_id = f"telegram-{chat_id}"
-            logger.info(f"Sending query to SmartXDR: {query_to_send[:50]}... [session: {session_id}]")
+            logger.info(f"Sending query to SmartXDR: {query_to_send[:DEBUG_TEXT_LENGTH]}... [session: {session_id}]")
             
             response = self._session.post(
                 f"{self.smartxdr_api_url}/api/ai/ask",
