@@ -72,7 +72,7 @@ MIN_CHUNK_SIZE = 100  # Minimum chars per chunk (avoid too short chunks)
 MAX_CHUNK_SIZE = 2000  # Maximum chars per chunk
 MIN_BATCH_SIZE = 50  # Minimum batch size for embedding
 BATCH_SIZE = 100  # Maximum batch size for embedding (reduced for OpenAI token limits)
-MAX_CONTEXT_CHARS = 4500
+MAX_CONTEXT_CHARS = 3000 
 DEBUG_TEXT_LENGTH=1000
 
 # Token pricing (per 1M tokens)

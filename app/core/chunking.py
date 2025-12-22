@@ -85,14 +85,15 @@ Device Details:
 - Zone: {zone}"""
         texts.append(ip_lookup)
     
-    # 1b. Zone/Category chunk for better filtering
-    if zone == "SOC Subnet" or "SOC" in category:
-        zone_chunk = f"""{name} ({device_id}) is a SOC component
+    # 1b. Zone chunk for better filtering (dynamic - works for any zone)
+    # Create zone-specific chunk if device has a defined zone
+    if zone and zone != "Unknown":
+        zone_chunk = f"""{name} ({device_id}) is part of {zone}
 Category: {category}
-Located in: {zone} (192.168.100.0/24)
+Located in: {zone}
 IP: {ip}
-Role in SOC: {role}
-This is part of the Security Operations Center infrastructure."""
+Role: {role}
+This device is part of the {zone} infrastructure."""
         texts.append(zone_chunk)
     
     # 1c. OS/Version/Software chunk for system info queries

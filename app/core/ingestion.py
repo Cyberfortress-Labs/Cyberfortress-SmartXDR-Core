@@ -114,10 +114,10 @@ def ingest_data(collection):
             documents = []
             metadatas = []
             
-            # Handle different file types
-            if filename == "devices.json":
+            # Handle different file types BY CONTENT STRUCTURE (not filename)
+            # === DEVICE INVENTORY (array of devices) ===
+            if isinstance(data, dict) and "devices" in data and isinstance(data["devices"], list):
                 # Inventory file - create overview
-                if "devices" in data and isinstance(data["devices"], list):
                     # General overview
                     overview = f"""Device list in SOC system:
 {chr(10).join(f"- {d.get('name', 'N/A')} ({d.get('id', 'N/A')}): {d.get('category', 'N/A')} in {d.get('zone', 'N/A')}" for d in data["devices"])}"""
@@ -137,25 +137,27 @@ def ingest_data(collection):
                             zones[zone] = []
                         zones[zone].append(d)
                     
-                    # SOC Subnet detailed summary
-                    if "SOC Subnet" in zones:
-                        soc_devices = zones["SOC Subnet"]
-                        soc_summary = f"""SOC Subnet components (192.168.100.0/24):
-{chr(10).join(f"- {d.get('name', 'N/A')} ({d.get('id', 'N/A')}): {d.get('role', 'N/A')}" for d in soc_devices)}
+                    # Create summary for EACH zone (dynamic, not hardcoded)
+                    for zone_name, zone_devices in zones.items():
+                        if zone_name == "Unknown":
+                            continue
+                        zone_summary = f"""{zone_name} components:
+{chr(10).join(f"- {d.get('name', 'N/A')} ({d.get('id', 'N/A')}): {d.get('role', 'N/A')}" for d in zone_devices)}
 
-These are the core Security Operations Center infrastructure components responsible for monitoring, detection, analysis, and incident response."""
-                        ids.append(f"{filename}-soc-summary")
-                        documents.append(soc_summary)
+Total devices in {zone_name}: {len(zone_devices)}
+These are infrastructure components in the {zone_name} zone."""
+                        ids.append(f"{filename}-{zone_name.lower().replace(' ', '-')}-summary")
+                        documents.append(zone_summary)
                         metadatas.append({
                             "source": filename,
                             "file_hash": current_hash,
-                            "type": "soc_components",
-                            "zone": "SOC Subnet"
+                            "type": "zone_components",
+                            "zone": zone_name
                         })
             
-            elif filename == "network_map.json":
+            # === NETWORK MAP (detect by content, not filename) ===
+            elif isinstance(data, dict) and "network_map" in data and isinstance(data["network_map"], list):
                 # Network map - VMnet descriptions
-                if "network_map" in data and isinstance(data["network_map"], list):
                     for net in data["network_map"]:
                         net_text = f"""VMware Virtual Network: {net.get('vmnet', 'N/A')}
 Type: {net.get('type', 'N/A')}
@@ -208,8 +210,9 @@ Purpose: {net.get('description', 'N/A')}"""
                         "type": "device_detail"
                     })
             
-            # === MITRE ATT&CK DATA ===
-            elif filename == "mitre_techniques_only.json":
+            # === MITRE ATT&CK DATA (detect by content structure, not filename) ===
+            # MITRE techniques list: array of objects with mitre_id
+            elif isinstance(data, list) and len(data) > 0 and isinstance(data[0], dict) and "mitre_id" in data[0]:
                 # Process techniques only file
                 if isinstance(data, list):
                     logger.info(f"   -> Processing {len(data)} MITRE techniques...")
@@ -227,7 +230,8 @@ Purpose: {net.get('description', 'N/A')}"""
                                 "is_subtechnique": technique.get("is_subtechnique", False)
                             })
             
-            elif filename == "mitre_attack_clean.json":
+            # MITRE full data: dict with tactics/groups/techniques keys
+            elif isinstance(data, dict) and ("tactics" in data or "groups" in data):
                 # Process full MITRE data (tactics, groups, software)
                 if isinstance(data, dict):
                     # Process tactics

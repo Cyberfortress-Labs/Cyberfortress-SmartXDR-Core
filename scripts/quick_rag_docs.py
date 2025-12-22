@@ -45,7 +45,8 @@ from app.core.chunking import (
     json_to_natural_text, 
     mitre_to_natural_text,
     markdown_to_chunks,
-    text_to_chunks
+    text_to_chunks,
+    dataflow_to_natural_text
 )
 
 
@@ -237,6 +238,11 @@ class OptimizedIngester:
                     chunks.append(mitre_to_natural_text(technique))
                 
                 return chunks
+            
+            # Check for dataflow/pipeline JSON (has phases array)
+            if isinstance(data, dict) and 'phases' in data and isinstance(data['phases'], list):
+                print(f"Dataflow/Pipeline detected: {len(data.get('phases', []))} phases")
+                return dataflow_to_natural_text(data, filename)
             
             # Fallback for other JSON - use text_to_chunks with overlap
             text_formatted = json.dumps(data, indent=2, ensure_ascii=False)

@@ -94,12 +94,13 @@ class ConversationMemory:
         
         # LangChain per-session memory cache (for token-aware windowing)
         self._langchain_memories: Dict[str, Any] = {}
-        self.langchain_window_size = 3  # k=3 exchanges (6 messages total) - reduced for speed
+        self.langchain_window_size = 2  # k=2 exchanges (4 messages total) - optimized for token savings
         
         # Configuration
-        self.max_messages_per_session = 20  # Max messages to keep
+        self.max_messages_per_session = 10  # Max messages to keep (reduced for efficiency)
         self.default_history_limit = 10  # Default: last 5 pairs (user + assistant)
         self.session_ttl = 3600  # 1 hour TTL for sessions
+        self.message_max_age_minutes = 30  # Only use messages from last 30 minutes
         self.redis_key_prefix = "conv:"  # Redis key prefix
         
         # Summarization config (for token optimization)
@@ -370,7 +371,7 @@ class ConversationMemory:
         
         return result
     
-    def format_langchain_history(self, session_id: str, max_chars: int = 3000) -> str:
+    def format_langchain_history(self, session_id: str, max_chars: int = 1500) -> str:
         """
         Format conversation history from LangChain messages for prompt.
         Better than raw formatting - ensures pairs and proper windowing.
@@ -419,7 +420,7 @@ class ConversationMemory:
             return self._get_history_memory(session_id, limit)
     
     def _get_history_redis(self, session_id: str, limit: int) -> List[Message]:
-        """Get history from Redis"""
+        """Get history from Redis with time-based filtering"""
         key = self._get_redis_key(session_id)
         
         try:
@@ -429,10 +430,25 @@ class ConversationMemory:
             
             messages = [Message.from_dict(m) for m in json.loads(data)]
             
+            # Filter out old messages (older than message_max_age_minutes)
+            from datetime import datetime, timedelta
+            cutoff_time = datetime.utcnow() - timedelta(minutes=self.message_max_age_minutes)
+            
+            recent_messages = []
+            for msg in messages:
+                try:
+                    # Parse timestamp (ISO format)
+                    msg_time = datetime.fromisoformat(msg.timestamp.replace('Z', '+00:00').replace('+00:00', ''))
+                    if msg_time > cutoff_time:
+                        recent_messages.append(msg)
+                except (ValueError, AttributeError):
+                    # If timestamp parsing fails, include the message
+                    recent_messages.append(msg)
+            
             # Refresh TTL on access
             self._redis.expire(key, self.session_ttl)
             
-            return messages[-limit:] if len(messages) > limit else messages
+            return recent_messages[-limit:] if len(recent_messages) > limit else recent_messages
         except Exception as e:
             logger.error(f"Redis error in get_history: {e}")
             return self._get_history_memory(session_id, limit)
