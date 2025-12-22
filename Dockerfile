@@ -42,12 +42,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# Install cloudflared for Telegram webhook tunneling
-RUN CLOUDFLARED_VERSION="2024.10.0" && \
-    ARCH=$(dpkg --print-architecture) && \
-    wget -q "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-${ARCH}" -O /usr/local/bin/cloudflared && \
-    chmod +x /usr/local/bin/cloudflared && \
-    cloudflared --version
 
 # Copy installed packages from builder
 COPY --from=builder /install /usr/local

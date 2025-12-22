@@ -1,7 +1,5 @@
 # Production Deployment Configuration
 # Uses pre-built images from DockerHub instead of building locally
-# Note: This configuration is currently outdated. Use docker-compose.yml instead.
-# TODO: Update this file to match docker-compose.yml services
 
 services:
   # Nginx - Reverse Proxy (HTTPS)
@@ -213,3 +211,8 @@ volumes:
   smartxdr-core-data:
     driver: local
     name: smartxdr-core-data
+
+  # Hugging Face Model Cache
+  huggingface-cache:
+    driver: local
+    name: smartxdr-huggingface-cache
