@@ -8,13 +8,12 @@ backlog = 2048
 # Worker processes
 # preload_app=True enables Copy-on-Write: model loads once in master, shared across workers
 # This allows multiple workers WITHOUT multiplying RAM usage
-workers = 2
-threads = 4
+workers = 1
+threads = 8
 worker_class = "gthread"
 worker_connections = 1000
 timeout = 120
 keepalive = 2
-preload_app = True  # Critical: load model BEFORE forking workers
 
 # Logging
 accesslog = "-"  # stdout

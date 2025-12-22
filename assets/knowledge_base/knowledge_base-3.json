@@ -1,0 +1,54 @@
+{
+    "metadata": {
+        "name": "VMware Virtual Network Configuration",
+        "platform": "VMware Workstation Pro",
+        "version": "25H2",
+        "host_os": "Windows 11 Home SL",
+        "host_os_version": "25H2",
+        "description": "Virtual network topology for Intelligent SOC Ecosystem on VMware Workstation Pro"
+    },
+    "network_map": [
+        {
+            "vmnet": "VMnet 8",
+            "type": "NAT",
+            "subnet": "192.168.71.0/24",
+            "gateway": "192.168.71.2",
+            "description": "Provides Internet access via NAT gateway."
+        },
+        {
+            "vmnet": "VMnet 2",
+            "type": "Host-only",
+            "subnet": "10.81.85.0/24",
+            "gateway": "10.81.85.1",
+            "description": "Used as WAN network connecting pfSense to upstream router."
+        },
+        {
+            "vmnet": "VMnet 3",
+            "type": "Host-only",
+            "subnet": "192.168.85.0/24",
+            "gateway": "192.168.85.1",
+            "description": "Used as LAN ingress network for Suricata and Zeek (inline pipeline)."
+        },
+        {
+            "vmnet": "VMnet 4",
+            "type": "Host-only",
+            "subnet": "192.168.41.0/24",
+            "gateway": "192.168.41.1",
+            "description": "Used as LAN egress network for Suricata in bridge mode. All hosts behind Suricata actually receive IP in 192.168.85.0/24 subnet."
+        },
+        {
+            "vmnet": "VMnet 5",
+            "type": "Host-only",
+            "subnet": "192.168.100.0/24",
+            "gateway": "192.168.100.1",
+            "description": "Management network for SOC servers (Elastic, Wazuh, IRIS, MISP, n8n, Zeek, Suricata)."
+        },
+        {
+            "vmnet": "VMnet 10",
+            "type": "Host-only",
+            "subnet": "192.168.95.0/24",
+            "gateway": "192.168.95.1",
+            "description": "Dedicated for Guest Subnet and testing internal attacker scenarios."
+        }
+    ]
+}
