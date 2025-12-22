@@ -613,7 +613,7 @@ class TelegramMiddlewareService:
                 "• <code>/summary --time 24h</code> - Last 24 hours\n"
                 "• <code>/summary --time 3d</code> - Last 3 days\n"
                 "• <code>/summary --time 7d --ai</code> - Include AI analysis\n"
-                "• <code>/summary --time 7d --index suricata,zeek</code> - Custom filter\n\n"
+                "• <code>/summary --time 7d --index *suricata*,*zeek*</code> - Custom filter\n\n"
                 "<b>ML Logs Analysis:</b>\n"
                 "• <code>/sumlogs trong 24h gần đây, logs nào có dấu hiệu tấn công? --index *suricata*</code>\n"
                 "• <code>/sumlogs liệt kê logs nguy hiểm --time 24h --index all</code>\n"

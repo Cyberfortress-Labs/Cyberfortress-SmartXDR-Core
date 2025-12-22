@@ -656,8 +656,8 @@ Giữ phản hồi dưới 250 từ, cụ thể và có thể hành động."""
             # Prepend system prompt to query for LLM
             full_query = f"{system_prompt}\n\n{query}"
             
-            # Call LLM with RAG
-            response = self.llm_service.ask_rag(full_query)
+            # Call LLM with RAG - disable cache for real-time alert analysis
+            response = self.llm_service.ask_rag(full_query, use_cache=False)
             
             if response.get('status') == 'success':
                 return response.get('answer', '')

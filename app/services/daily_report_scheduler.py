@@ -255,8 +255,8 @@ Provide:
 
 Keep response under 300 words, actionable and specific."""
             
-            # Use LLM with RAG
-            response = self.llm_service.ask_rag(query)
+            # Use LLM with RAG - disable cache for real-time analysis
+            response = self.llm_service.ask_rag(query, use_cache=False)
             
             if response.get('status') == 'success':
                 return response.get('answer', 'AI analysis unavailable')
