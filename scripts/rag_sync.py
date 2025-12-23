@@ -88,9 +88,9 @@ _skip_files_str = os.environ.get('RAG_SYNC_SKIP_FILES', 'README.md')
 SKIP_FILES = set(f.strip() for f in _skip_files_str.split(',') if f.strip())
 
 
-def log(msg: str):
-    """Log message using app logger"""
-    logger.info(msg)
+# def log(msg: str):
+#     """Log message using app logger"""
+#     logger.info(msg)
 
 
 class RAGSync:
@@ -111,13 +111,13 @@ class RAGSync:
         """Initialize ChromaDB via RAGRepository"""
         from app.rag.repository import RAGRepository
         
-        log("Connecting to ChromaDB...")
+        logger("Connecting to ChromaDB...")
         self.repo = RAGRepository(
             persist_directory=str(CHROMA_DB_PATH),
             collection_name="knowledge_base"
         )
         self.collection = self.repo.collection
-        log(f"Connected. Current docs: {self.collection.count()}")
+        logger(f"Connected. Current docs: {self.collection.count()}")
     
     def compute_file_hash(self, path: Path) -> str:
         """Compute SHA256 hash of file content"""
@@ -168,7 +168,7 @@ class RAGSync:
     
     def scan_directory(self) -> Dict[str, FileInfo]:
         """Scan data directory and build file index"""
-        log(f"\n[DETECT] Scanning {self.data_dir}...")
+        logger.infor(f"\n[DETECT] Scanning {self.data_dir}...")
         files = {}
         
         for root, dirs, filenames in os.walk(str(self.data_dir)):
@@ -190,7 +190,7 @@ class RAGSync:
                     size=fpath.stat().st_size
                 )
         
-        log(f"Found {len(files)} files in data directory")
+        logger.infor(f"Found {len(files)} files in data directory")
         return files
     
     def get_indexed_files(self) -> Dict[str, Dict]:
@@ -198,7 +198,7 @@ class RAGSync:
         if self.dry_run:
             return {}
         
-        log("[DETECT] Loading indexed documents...")
+        logger.infor("[DETECT] Loading indexed documents...")
         indexed = {}
         
         try:
@@ -223,9 +223,9 @@ class RAGSync:
                         }
                     indexed[source]['doc_ids'].append(results['ids'][i])
             
-            log(f"Found {len(indexed)} indexed files")
+            logger.infor(f"Found {len(indexed)} indexed files")
         except Exception as e:
-            log(f"Error loading indexed documents: {e}")
+            logger.error(f"Error loading indexed documents: {e}")
         
         return indexed
     
@@ -265,11 +265,11 @@ class RAGSync:
             if current.file_hash != indexed_hash:
                 updated_files.append(path)
         
-        log(f"\n[DETECT] Diff results:")
-        log(f"  New files:     {len(new_files)}")
-        log(f"  Updated files: {len(updated_files)}")
-        log(f"  Deleted files: {len(deleted_files)}")
-        log(f"  Unchanged:     {len(current_paths) - len(new_files) - len(updated_files)}")
+        logger.infor(f"\n[DETECT] Diff results:")
+        logger.infor(f"  New files:     {len(new_files)}")
+        logger.infor(f"  Updated files: {len(updated_files)}")
+        logger.infor(f"  Deleted files: {len(deleted_files)}")
+        logger.infor(f"  Unchanged:     {len(current_paths) - len(new_files) - len(updated_files)}")
         
         return new_files, updated_files, deleted_files
     
@@ -378,14 +378,14 @@ class RAGSync:
         if not files:
             return
         
-        log(f"\n[ACTION] Adding {len(files)} new files...")
+        logger.infor(f"\n[ACTION] Adding {len(files)} new files...")
         
         for path in files:
             try:
                 documents = self.process_file(path)
                 
                 if not documents:
-                    log(f"  ! No content: {path[:50]}")
+                    logger.infor(f"  ! No content: {path[:50]}")
                     self.result.skipped += 1
                     continue
                 
@@ -399,11 +399,11 @@ class RAGSync:
                             metadatas=[d['metadata'] for d in batch]
                         )
                 
-                log(f"  + Added: {path[:50]} ({len(documents)} chunks)")
+                logger.infor(f"  + Added: {path[:50]} ({len(documents)} chunks)")
                 self.result.added += 1
                 
             except Exception as e:
-                log(f"  x Error: {path[:50]} - {e}")
+                logger.error(f"  x Error: {path[:50]} - {e}")
                 self.result.errors += 1
     
     def update_files(self, files: List[str], indexed_files: Dict[str, Dict]):
@@ -416,7 +416,7 @@ class RAGSync:
         if not files:
             return
         
-        log(f"\n[ACTION] Updating {len(files)} modified files...")
+        logger.infor(f"\n[ACTION] Updating {len(files)} modified files...")
         
         for path in files:
             try:
@@ -424,7 +424,7 @@ class RAGSync:
                 new_documents = self.process_file(path)
                 
                 if not new_documents:
-                    log(f"  No content after update: {path[:50]}")
+                    logger.infor(f"  No content after update: {path[:50]}")
                     self.result.skipped += 1
                     continue
                 
@@ -444,11 +444,11 @@ class RAGSync:
                             metadatas=[d['metadata'] for d in batch]
                         )
                 
-                log(f"  ✓ Updated: {path[:50]} ({len(new_documents)} chunks)")
+                logger.infor(f"  ✓ Updated: {path[:50]} ({len(new_documents)} chunks)")
                 self.result.updated += 1
                 
             except Exception as e:
-                log(f"  ✗ Error: {path[:50]} - {e}")
+                logger.error(f"  ✗ Error: {path[:50]} - {e}")
                 self.result.errors += 1
     
     def delete_files(self, files: List[str], indexed_files: Dict[str, Dict]):
@@ -456,35 +456,35 @@ class RAGSync:
         if not files:
             return
         
-        log(f"\n[ACTION] Deleting {len(files)} removed files...")
+        logger.infor(f"\n[ACTION] Deleting {len(files)} removed files...")
         
         for path in files:
             try:
                 doc_ids = indexed_files.get(path, {}).get('doc_ids', [])
                 
                 if not doc_ids:
-                    log(f"  No docs found: {path[:50]}")
+                    logger.infor(f"  No docs found: {path[:50]}")
                     continue
                 
                 if not self.dry_run:
                     self.collection.delete(ids=doc_ids)
                 
-                log(f"  ✓ Deleted: {path[:50]} ({len(doc_ids)} chunks)")
+                logger.infor(f"  ✓ Deleted: {path[:50]} ({len(doc_ids)} chunks)")
                 self.result.deleted += 1
                 
             except Exception as e:
-                log(f"  ✗ Error: {path[:50]} - {e}")
+                logger.error(f"  ✗ Error: {path[:50]} - {e}")
                 self.result.errors += 1
     
     def sync(self):
         """Run full sync: Detect → Action → Clean"""
-        log("=" * 70)
-        log("RAG Sync - Auto-sync documents to ChromaDB")
-        log("=" * 70)
-        log(f"Data directory: {self.data_dir}")
-        log(f"Mode: {'DRY RUN' if self.dry_run else 'LIVE'}")
-        log(f"Force re-index: {self.force}")
-        log("=" * 70)
+        logger.infor("=" * 70)
+        logger.infor("RAG Sync - Auto-sync documents to ChromaDB")
+        logger.infor("=" * 70)
+        logger.infor(f"Data directory: {self.data_dir}")
+        logger.infor(f"Mode: {'DRY RUN' if self.dry_run else 'LIVE'}")
+        logger.infor(f"Force re-index: {self.force}")
+        logger.infor("=" * 70)
         
         # DETECT: Scan and compare
         current_files = self.scan_directory()
@@ -495,7 +495,7 @@ class RAGSync:
             new_files = list(current_files.keys())
             updated_files = []
             deleted_files = list(indexed_files.keys())
-            log(f"\n[FORCE MODE] Re-indexing all {len(new_files)} files")
+            logger.infor(f"\n[FORCE MODE] Re-indexing all {len(new_files)} files")
         else:
             new_files, updated_files, deleted_files = self.diff_files(
                 current_files, indexed_files
@@ -504,7 +504,7 @@ class RAGSync:
         # Check if anything to do
         total_changes = len(new_files) + len(updated_files) + len(deleted_files)
         if total_changes == 0:
-            log("\n✓ Everything is in sync! No changes needed.")
+            logger.infor("\n✓ Everything is in sync! No changes needed.")
             return self.result
         
         # ACTION: Process changes
@@ -516,25 +516,25 @@ class RAGSync:
         
         # Summary
         elapsed = time.time() - self.start_time
-        log("\n" + "=" * 70)
-        log("[SUMMARY]")
-        log("=" * 70)
-        log(f"  Added:   {self.result.added} files")
-        log(f"  Updated: {self.result.updated} files")
-        log(f"  Deleted: {self.result.deleted} files")
-        log(f"  Skipped: {self.result.skipped} files")
-        log(f"  Errors:  {self.result.errors}")
-        log(f"  Time:    {elapsed:.1f}s")
+        logger.infor("\n" + "=" * 70)
+        logger.infor("[SUMMARY]")
+        logger.infor("=" * 70)
+        logger.infor(f"  Added:   {self.result.added} files")
+        logger.infor(f"  Updated: {self.result.updated} files")
+        logger.infor(f"  Deleted: {self.result.deleted} files")
+        logger.infor(f"  Skipped: {self.result.skipped} files")
+        logger.infor(f"  Errors:  {self.result.errors}")
+        logger.infor(f"  Time:    {elapsed:.1f}s")
         
         if not self.dry_run:
-            log(f"\nTotal in DB: {self.collection.count()} documents")
+            logger.infor(f"\nTotal in DB: {self.collection.count()} documents")
         
         if self.dry_run:
-            log("\nDRY RUN - No changes were made")
+            logger.infor("\nDRY RUN - No changes were made")
         else:
-            log("\n✓ Sync complete!")
+            logger.infor("\n✓ Sync complete!")
         
-        log("=" * 70)
+        logger.infor("=" * 70)
         
         return self.result
 
@@ -583,11 +583,11 @@ Examples:
     # Validate directory
     data_dir = Path(args.directory)
     if not data_dir.exists():
-        log(f"Error: Directory not found: {data_dir}")
+        logger.error(f"Error: Directory not found: {data_dir}")
         sys.exit(1)
     
     if not data_dir.is_dir():
-        log(f"Error: Not a directory: {data_dir}")
+        logger.error(f"Error: Not a directory: {data_dir}")
         sys.exit(1)
     
     try:
@@ -603,10 +603,10 @@ Examples:
             sys.exit(1)
             
     except KeyboardInterrupt:
-        log("\n⚠ Interrupted by user")
+        logger.infor("\nInterrupted by user")
         sys.exit(1)
     except Exception as e:
-        log(f"\n✗ Error: {e}")
+        logger.error(f"\n✗ Error: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
