@@ -84,18 +84,37 @@ def run_sync():
     start_time = time.time()
     
     try:
-        # Stream output directly to container logs (don't capture)
+        # Capture output to avoid interfering with interactive CLI sessions
         result = subprocess.run(
             [sys.executable, '-u', str(SYNC_SCRIPT), str(DATA_DIR)],
+            capture_output=True,
+            text=True,
             timeout=600  # 10 minute timeout
         )
         
         elapsed = time.time() - start_time
         
         if result.returncode == 0:
+            # Log summary from output
+            lines = result.stdout.strip().split('\n') if result.stdout else []
+            summary_keywords = ['Added:', 'Updated:', 'Deleted:', 'Unchanged:', 'Everything is in sync']
+            summary_lines = [l for l in lines if any(k in l for k in summary_keywords)]
+            
+            if summary_lines:
+                for line in summary_lines[-5:]:
+                    # Extract just the message part after [INFO]
+                    if '[INFO]' in line:
+                        msg = line.split('[INFO]')[-1].strip()
+                    else:
+                        msg = line.strip()
+                    if msg:
+                        logger.info(msg)
+            
             logger.info(f"Sync completed in {elapsed:.1f}s")
         else:
             logger.error(f"Sync failed (exit code {result.returncode})")
+            if result.stderr:
+                logger.error(f"Error: {result.stderr[:300]}")
                 
     except subprocess.TimeoutExpired:
         logger.error("Sync timed out after 10 minutes")

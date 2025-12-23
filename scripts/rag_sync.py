@@ -266,10 +266,10 @@ class RAGSync:
                 updated_files.append(path)
         
         logger.info(f"[DETECT] Diff results:")
-        logger.info(f"  New files:     {len(new_files)}")
-        logger.info(f"  Updated files: {len(updated_files)}")
-        logger.info(f"  Deleted files: {len(deleted_files)}")
-        logger.info(f"  Unchanged:     {len(current_paths) - len(new_files) - len(updated_files)}")
+        logger.info(f"New files:     {len(new_files)}")
+        logger.info(f"Updated files: {len(updated_files)}")
+        logger.info(f"Deleted files: {len(deleted_files)}")
+        logger.info(f"Unchanged:     {len(current_paths) - len(new_files) - len(updated_files)}")
         
         return new_files, updated_files, deleted_files
     
@@ -519,20 +519,20 @@ class RAGSync:
         logger.info("\n" + "=" * 70)
         logger.info("[SUMMARY]")
         logger.info("=" * 70)
-        logger.info(f"  Added:   {self.result.added} files")
-        logger.info(f"  Updated: {self.result.updated} files")
-        logger.info(f"  Deleted: {self.result.deleted} files")
-        logger.info(f"  Skipped: {self.result.skipped} files")
-        logger.info(f"  Errors:  {self.result.errors}")
-        logger.info(f"  Time:    {elapsed:.1f}s")
+        logger.info(f"Added:   {self.result.added} files")
+        logger.info(f"Updated: {self.result.updated} files")
+        logger.info(f"Deleted: {self.result.deleted} files")
+        logger.info(f"Skipped: {self.result.skipped} files")
+        logger.info(f"Errors:  {self.result.errors}")
+        logger.info(f"Time:    {elapsed:.1f}s")
         
         if not self.dry_run:
-            logger.info(f"\nTotal in DB: {self.collection.count()} documents")
+            logger.info(f"Total in DB: {self.collection.count()} documents")
         
         if self.dry_run:
-            logger.info("\nDRY RUN - No changes were made")
+            logger.info("DRY RUN - No changes were made")
         else:
-            logger.info("\n✓ Sync complete!")
+            logger.info("Sync complete!")
         
         logger.info("=" * 70)
         

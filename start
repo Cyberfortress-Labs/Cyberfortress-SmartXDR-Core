@@ -149,7 +149,8 @@ case "$COMMAND" in
     
     manage)
         printf "${BLUE}Opening SmartXDR Manager...${NC}\n"
-        docker compose -f "$COMPOSE_FILE" exec api python scripts/smartxdr_manager.py
+        # Use -it for interactive TTY, stdbuf to fix buffering
+        docker compose -f "$COMPOSE_FILE" exec -it api stdbuf -oL python scripts/smartxdr_manager.py
         ;;
     
     health)
