@@ -14,6 +14,9 @@ from app.core.chunking import (
     markdown_to_chunks, text_to_chunks, playbook_json_to_chunks, knowledge_base_json_to_chunks
 )
 from app.utils.logger import ingestion_logger as logger
+
+
+def get_file_hash(filepath):
     """Calculate SHA256 hash to detect file changes."""
     with open(filepath, "rb") as f:
         return hashlib.sha256(f.read()).hexdigest()
