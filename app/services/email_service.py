@@ -39,7 +39,7 @@ class EmailService:
             self.enabled = False
         else:
             self.enabled = True
-            logger.info(f"Email service initialized: {self.from_email} {self.to_emails}")
+            logger.info(f"Email service initialized: {self.from_email} -> {self.to_emails}")
     
     def send_alert_summary_email(
         self,

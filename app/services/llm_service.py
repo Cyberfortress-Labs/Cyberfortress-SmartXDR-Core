@@ -275,7 +275,7 @@ class LLMService:
                     is_langchain = "Previous conversation:" in conversation_history_text
                     format_type = "LANGCHAIN" if is_langchain else ("SUMMARY" if is_summary else "RAW")
                     logger.info(f"[LLM Service] History: {format_type} ({len(conversation_history_text)} chars)")
-                    logger.info(f"[LLM Service] Content preview: {conversation_history_text[:150]}...")
+                    logger.info(f"[LLM Service] Content preview: {conversation_history_text[:500]}...")
                     
             except Exception as e:
                 if DEBUG_MODE:

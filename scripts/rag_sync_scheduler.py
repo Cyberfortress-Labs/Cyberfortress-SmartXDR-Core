@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from app.utils.logger import setup_logger
 
 # Setup logger
-logger = setup_logger("RAG-Scheduler")
+logger = setup_logger("smartxdr.rag_sync.scheduler")
 
 # Configuration
 DEFAULT_INTERVAL = 60  # 60 minutes = 1 hour

@@ -55,7 +55,7 @@ from app.core.chunking import (
 import json
 
 # Setup logger
-logger = setup_logger("rag_sync")
+logger = setup_logger("smartxdr.rag_sync")
 
 
 @dataclass

@@ -16,6 +16,32 @@ import json
 from pathlib import Path
 from datetime import datetime, timedelta
 
+# CRITICAL: Set environment variable BEFORE importing app to prevent model preload
+os.environ['SKIP_MODEL_PRELOAD'] = 'true'
+
+# SECURITY: Completely disable ALL logging to prevent sensitive data capture
+# This is critical because CLI handles passwords and credentials
+import logging
+
+# Disable root logger completely
+logging.disable(logging.CRITICAL)
+
+# Replace all handlers with NullHandler (sends logs to nowhere)
+class SilentHandler(logging.NullHandler):
+    def emit(self, record):
+        pass
+
+# Set all known loggers to use NullHandler
+for logger_name in ['', 'root', 'smartxdr', 'smartxdr.app', 'smartxdr.llm', 
+                    'smartxdr.rag', 'smartxdr.openai', 'smartxdr.redis',
+                    'smartxdr.cache', 'smartxdr.routes', 'app', 'flask',
+                    'sentence_transformers', 'transformers', 'huggingface_hub',
+                    'urllib3', 'httpx', 'chromadb', 'sqlalchemy']:
+    logger = logging.getLogger(logger_name)
+    logger.handlers = [SilentHandler()]
+    logger.propagate = False
+    logger.setLevel(logging.CRITICAL + 1)  # Higher than CRITICAL = disabled
+
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -44,7 +70,7 @@ def print_header(title: str):
 def print_menu(title: str, options: list):
     """Print a styled menu"""
     print("\n╔" + "═" * 58 + "╗")
-    print(f"║  {title:^54}  ║")
+    print(f"║  {title:^54} ║")
     print("╠" + "═" * 58 + "╣")
     for i, opt in enumerate(options):
         if opt == "---":
@@ -111,7 +137,7 @@ def check_first_run() -> bool:
 
 def create_first_admin():
     """Force creation of first admin user on first run"""
-    clear_screen()
+    # clear_screen()
     print("""
 ╔══════════════════════════════════════════════════════════╗
 ║                                                          ║
@@ -135,11 +161,11 @@ def create_first_admin():
         username = safe_input("Username: ").strip().lower()
         if username and len(username) >= 3:
             break
-        print(" Username must be at least 3 characters")
+        print("Username must be at least 3 characters")
     
     # Get password
     gen_password = generate_password()
-    print(f"\n  Generated strong password: {gen_password}")
+    print(f"\nGenerated strong password: {gen_password}")
     print("(Press Enter to use this password, or type your own)")
     
     while True:
@@ -170,7 +196,7 @@ def create_first_admin():
     
     print(f"""
 ╔══════════════════════════════════════════════════════════╗
-║  First Admin Created Successfully!                    ║
+║  First Admin Created Successfully!                       ║
 ╠══════════════════════════════════════════════════════════╣
 ║  Email:    {email:<45} ║
 ║  Username: {username:<45} ║
@@ -186,11 +212,11 @@ def login_admin() -> bool:
     """Authenticate admin user before accessing CLI"""
     from flask_security.utils import verify_and_update_password
     
-    clear_screen()
+    # clear_screen()
     print("""
 ╔══════════════════════════════════════════════════════════╗
 ║                                                          ║
-║        SmartXDR Management Console                       ║
+║             SmartXDR Management Console                  ║
 ║                                                          ║
 ║   Please login with admin credentials to continue.       ║
 ║                                                          ║
@@ -672,7 +698,7 @@ def main_menu(app):
     """Main menu loop"""
     with app.app_context():
         while True:
-            clear_screen()
+            # clear_screen()
             print("""
 ╔══════════════════════════════════════════════════════════╗
 ║                                                          ║
@@ -693,7 +719,7 @@ def main_menu(app):
             choice = safe_input("Select option: ").strip()
             
             if choice == '0':
-                print("\n  Goodbye! \n")
+                print("\nGoodbye! \n")
                 break
             elif choice == '1':
                 user_management_menu()
