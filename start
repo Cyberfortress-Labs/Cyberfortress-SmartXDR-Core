@@ -61,6 +61,13 @@ case "$COMMAND" in
         ;;
     
     up|start)
+        # Check for --no-sync flag
+        NO_SYNC=false
+        if [[ "$2" == "--no-sync" ]]; then
+            NO_SYNC=true
+            shift
+        fi
+        
         printf "${YELLOW}Starting SmartXDR services...${NC}\n"
         
         # Check for local chroma_db and set environment variable
@@ -98,7 +105,37 @@ case "$COMMAND" in
         
         if [ "$CHROMA_DB_SOURCE" = "chroma-db" ]; then
             printf "\n"
-            printf "${BLUE}ℹ To ingest documents: ${YELLOW}./start quick_rag <path>${NC}\n"
+            printf "${BLUE}[i] To ingest documents: ${YELLOW}./start quick_rag <path>${NC}\n"
+        fi
+        
+        # Auto-sync RAG data/ directory if it exists and has files
+        if [ "$NO_SYNC" = false ] && [ -d "data" ] && [ -n "$(find data -type f 2>/dev/null | head -1)" ]; then
+            printf "\n"
+            printf "${BLUE}Auto-syncing RAG data/ directory...${NC}\n"
+            
+            # Wait for API to be healthy (max 60 seconds)
+            printf "${YELLOW}Waiting for API to be ready...${NC}\n"
+            for i in {1..12}; do
+                if docker compose -f "$COMPOSE_FILE" exec -T api curl -sf http://localhost:8080/health > /dev/null 2>&1; then
+                    printf "${GREEN}API is ready${NC}\n"
+                    break
+                fi
+                if [ $i -eq 12 ]; then
+                    printf "${YELLOW}API not ready, skipping auto-sync. Run './start rag_sync' manually.${NC}\n"
+                    break 2
+                fi
+                sleep 5
+            done
+            
+            # Run sync with 3-minute timeout (shows output)
+            printf "${BLUE}Running RAG sync (3 min timeout)...${NC}\n"
+            timeout 180 docker compose -f "$COMPOSE_FILE" exec -T api python -u scripts/rag_sync.py data
+            SYNC_EXIT=$?
+            if [ $SYNC_EXIT -eq 124 ]; then
+                printf "${YELLOW}RAG sync timed out. Run './start rag_sync' to complete.${NC}\n"
+            elif [ $SYNC_EXIT -ne 0 ]; then
+                printf "${YELLOW}RAG sync had issues (exit $SYNC_EXIT).${NC}\n"
+            fi
         fi
         ;;
     
@@ -158,13 +195,27 @@ case "$COMMAND" in
         printf "${BLUE}RAG Database Management:${NC}\n"
         printf "\n"
         printf "  ${GREEN}1. Mount existing DB:${NC}\n"
-        printf "     Place chroma_db/ in project root → ./start restart\n"
+        printf "     Place chroma_db/ in project root -> ./start restart\n"
         printf "\n"
         printf "  ${GREEN}2. Ingest documents:${NC}\n"
         printf "     ./start quick_rag <path>\n"
         printf "\n"
-        printf "  ${GREEN}3. Restore backup:${NC}\n"
+        printf "  ${GREEN}3. Auto-sync data/ directory:${NC}\n"
+        printf "     ./start rag_sync\n"
+        printf "\n"
+        printf "  ${GREEN}4. Restore backup:${NC}\n"
         printf "     tar xzf backup/chroma.tar.gz -C . && ./start restart\n"
+        ;;
+    
+    rag_sync)
+        shift 1 2>/dev/null || true
+        EXTRA_ARGS="$@"
+        printf "${BLUE}Running RAG Sync (Detect -> Action -> Clean)...${NC}\n"
+        printf "  Data path: data/\n"
+        if [ -n "$EXTRA_ARGS" ]; then
+            printf "  Extra args: ${EXTRA_ARGS}\n"
+        fi
+        docker compose -f "$COMPOSE_FILE" exec api python scripts/rag_sync.py data ${EXTRA_ARGS}
         ;;
     
     clean)
@@ -275,7 +326,8 @@ case "$COMMAND" in
         printf "  ${GREEN}manage${NC}      Open SmartXDR Manager CLI\n"
         printf "  ${GREEN}health${NC}      Check API health\n"
         printf "  ${GREEN}quick_rag${NC}   Ingest documents to RAG (./start quick_rag [path])\n"
-        printf "  ${GREEN}sync_rag${NC}    Copy local chroma_db to container\n"
+        printf "  ${GREEN}rag_sync${NC}    Auto-sync data/ directory to RAG (detect->action->clean)\n"
+        printf "  ${GREEN}sync_rag${NC}    Show RAG database management options\n"
         printf "  ${GREEN}clean${NC}       Remove containers and volumes\n"
         printf "  ${GREEN}rebuild${NC}     Rebuild from scratch\n"
         printf "  ${GREEN}pull${NC}        Pull latest images\n"

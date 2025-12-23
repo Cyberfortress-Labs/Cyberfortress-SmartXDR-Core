@@ -63,6 +63,13 @@ echo "DEBUG: TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:+***set***}"
     setup_telegram_webhook
 ) &
 
+# Start RAG sync scheduler in background (if enabled)
+RAG_SYNC_ENABLED=$(echo "${RAG_SYNC_ENABLED:-true}" | tr '[:upper:]' '[:lower:]')
+if [ "$RAG_SYNC_ENABLED" = "true" ] && [ -f "/app/scripts/rag_sync_scheduler.py" ]; then
+    echo "[SmartXDR] Starting RAG sync scheduler (interval: ${RAG_SYNC_INTERVAL:-60} minutes)..."
+    python /app/scripts/rag_sync_scheduler.py &
+fi
+
 # Start gunicorn
 echo "Starting Gunicorn..."
 exec gunicorn --config gunicorn.conf.py run:app

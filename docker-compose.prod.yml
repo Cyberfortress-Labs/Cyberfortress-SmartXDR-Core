@@ -65,6 +65,8 @@ services:
       - ./sources_config:/app/sources_config:ro
       - ./gunicorn.conf.py:/app/gunicorn.conf.py:ro
       - huggingface-cache:/home/smartxdr/.cache/huggingface
+      # Data directory for RAG auto-sync
+      - ./data:/app/data:ro
 
     networks:
       - smartxdr-net
