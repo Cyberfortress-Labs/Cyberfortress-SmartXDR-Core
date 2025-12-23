@@ -185,3 +185,7 @@ db/
 
 # Cloudflare Tunnel credentials
 cloudflared/
+
+# Data for RAG
+data/*
+!data/README.md
