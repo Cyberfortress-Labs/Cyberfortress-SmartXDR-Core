@@ -9,40 +9,40 @@ echo "Starting SmartXDR Core..."
 # Function to setup Telegram webhook
 setup_telegram_webhook() {
     if [ "$TELEGRAM_BOT_ENABLED" = "true" ] && [ "$TELEGRAM_WEBHOOK_ENABLED" = "true" ] && [ -n "$TELEGRAM_BOT_TOKEN" ]; then
-        echo "[SmartXDR] Setting up Telegram webhook..."
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [smartxdr.app] [INFO] Setting up Telegram webhook..."
         
         if [ -n "$TUNNEL_DOMAIN" ]; then
             # Using named tunnel domain
             WEBHOOK_URL="https://${TUNNEL_DOMAIN}/api/telegram/webhook"
-            echo "[SmartXDR] Using named tunnel: $WEBHOOK_URL"
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] [smartxdr.app] [INFO] Using named tunnel: $WEBHOOK_URL"
             
             # Wait for tunnel to be ready
-            echo "[SmartXDR] Waiting for tunnel to be ready..."
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] [smartxdr.app] [INFO] Waiting for tunnel to be ready..."
             for i in {1..30}; do
                 if curl -s -f "https://${TUNNEL_DOMAIN}/health" > /dev/null 2>&1; then
-                    echo "[SmartXDR] Tunnel is ready"
+                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [smartxdr.app] [INFO] Tunnel is ready"
                     break
                 fi
                 sleep 2
             done
             
             # Set webhook
-            echo "[SmartXDR] Setting webhook..."
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] [smartxdr.app] [INFO] Setting webhook..."
             RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
                 -H "Content-Type: application/json" \
                 -d "{\"url\":\"${WEBHOOK_URL}\",\"allowed_updates\":[\"message\",\"callback_query\"],\"drop_pending_updates\":true}")
             
             if echo "$RESPONSE" | grep -q '"ok":true'; then
-                echo "[SmartXDR] Webhook set successfully: $WEBHOOK_URL"
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] [smartxdr.app] [INFO] Webhook set successfully: $WEBHOOK_URL"
             else
-                echo "[SmartXDR] Failed to set webhook: $RESPONSE"
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] [smartxdr.app] [ERROR] Failed to set webhook: $RESPONSE"
             fi
         else
-            echo "[SmartXDR] TUNNEL_DOMAIN not set, webhook not configured"
-            echo "[SmartXDR] Please set TUNNEL_DOMAIN in .env file"
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] [smartxdr.app] [INFO] TUNNEL_DOMAIN not set, webhook not configured"
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] [smartxdr.app] [INFO] Please set TUNNEL_DOMAIN in .env file"
         fi
     else
-        echo "[SmartXDR] Telegram webhook disabled, using polling mode"
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [smartxdr.app] [INFO] Telegram webhook disabled, using polling mode"
     fi
 }
 
@@ -52,10 +52,10 @@ TELEGRAM_WEBHOOK_ENABLED=$(echo "${TELEGRAM_WEBHOOK_ENABLED:-false}" | tr '[:upp
 TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
 TUNNEL_DOMAIN="${TUNNEL_DOMAIN:-}"
 
-echo "DEBUG: TELEGRAM_BOT_ENABLED=$TELEGRAM_BOT_ENABLED"
-echo "DEBUG: TELEGRAM_WEBHOOK_ENABLED=$TELEGRAM_WEBHOOK_ENABLED"
-echo "DEBUG: TUNNEL_DOMAIN=${TUNNEL_DOMAIN:+***set***}"
-echo "DEBUG: TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:+***set***}"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] [smartxdr.app] [INFO] TELEGRAM_BOT_ENABLED=$TELEGRAM_BOT_ENABLED"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] [smartxdr.app] [INFO] TELEGRAM_WEBHOOK_ENABLED=$TELEGRAM_WEBHOOK_ENABLED"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] [smartxdr.app] [INFO] TUNNEL_DOMAIN=${TUNNEL_DOMAIN:+***set***}"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] [smartxdr.app] [INFO] TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:+***set***}"
 
 # Setup webhook in background after gunicorn starts
 (
@@ -66,10 +66,10 @@ echo "DEBUG: TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:+***set***}"
 # Start RAG sync scheduler in background (if enabled)
 RAG_SYNC_ENABLED=$(echo "${RAG_SYNC_ENABLED:-true}" | tr '[:upper:]' '[:lower:]')
 if [ "$RAG_SYNC_ENABLED" = "true" ] && [ -f "/app/scripts/rag_sync_scheduler.py" ]; then
-    echo "[SmartXDR] Starting RAG sync scheduler (interval: ${RAG_SYNC_INTERVAL:-60} minutes)..."
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [smartxdr.app] [INFO] Starting RAG sync scheduler (interval: ${RAG_SYNC_INTERVAL:-60} minutes)..."
     python /app/scripts/rag_sync_scheduler.py &
 fi
 
 # Start gunicorn
-echo "Starting Gunicorn..."
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] [smartxdr.app] [INFO] Starting Gunicorn..."
 exec gunicorn --config gunicorn.conf.py run:app
