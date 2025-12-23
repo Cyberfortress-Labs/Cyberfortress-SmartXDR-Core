@@ -56,3 +56,6 @@ langchain-community>=0.4.1
 
 # Cross-Encoder Re-ranking (optional, for better RAG relevance)
 sentence-transformers>=2.2.0
+
+# PDF Processing
+pymupdf>=1.24.0

@@ -64,6 +64,7 @@ services:
       - ./scripts:/app/scripts:ro
       - ./app:/app/app:ro
       - ./gunicorn.conf.py:/app/gunicorn.conf.py:ro
+      - ./docker-entrypoint.sh:/app/docker-entrypoint.sh:ro
       - huggingface-cache:/home/smartxdr/.cache/huggingface
       # Data directory for RAG auto-sync
       - ./data:/app/data:ro

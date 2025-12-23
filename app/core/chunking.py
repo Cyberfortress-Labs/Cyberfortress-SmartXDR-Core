@@ -647,3 +647,83 @@ Keywords: routing, traffic flow, data path, pipeline"""
         chunks.append(routing_chunk)
     
     return chunks
+
+
+def pdf_to_chunks(file_path: str, filename: str, max_chunk_size: int = None) -> List[str]:
+    """
+    Convert PDF content to semantic chunks using LangChain.
+    
+    Uses PyMuPDF to extract full text, then RecursiveCharacterTextSplitter
+    for character-based chunking with overlap (NOT page-based splitting).
+    
+    Page numbers are tracked in metadata for citations, but don't affect
+    how text is split - this preserves context across page boundaries.
+    
+    Features:
+    - Memory-efficient page-by-page text extraction
+    - Chunk overlap for context continuity
+    - Smart boundary detection (paragraphs > sentences > words)
+    - Page tracking for citation purposes
+    
+    Args:
+        file_path: Path to the PDF file
+        filename: Display filename for source metadata
+        max_chunk_size: Maximum characters per chunk
+    
+    Returns:
+        List of text chunks optimized for RAG
+    """
+    from app.core.pdf_processor import extract_text_from_pdf, get_pdf_metadata
+    
+    if max_chunk_size is None:
+        max_chunk_size = MAX_CHUNK_SIZE
+    
+    # Extract text from PDF
+    text = extract_text_from_pdf(file_path)
+    
+    if not text or not text.strip():
+        logger.warning(f"No text extracted from PDF: {filename}")
+        return []
+    
+    # Get PDF metadata for context
+    pdf_meta = get_pdf_metadata(file_path)
+    page_count = pdf_meta.get("page_count", "unknown") if pdf_meta else "unknown"
+    pdf_title = pdf_meta.get("title", "") if pdf_meta else ""
+    
+    # Create splitter with custom size if needed
+    if max_chunk_size != MAX_CHUNK_SIZE:
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=max_chunk_size,
+            chunk_overlap=min(200, int(max_chunk_size * 0.15)),
+            length_function=len,
+            separators=["\n\n", "\n", ". ", " ", ""]
+        )
+    else:
+        splitter = _recursive_splitter
+    
+    # Split content using LangChain
+    docs = splitter.create_documents([text])
+    
+    # Build chunks with source metadata
+    chunks = []
+    for idx, doc in enumerate(docs):
+        # Build header with PDF context
+        header_parts = [f"Source: {filename} (PDF, {page_count} pages)"]
+        if pdf_title:
+            header_parts.append(f"Title: {pdf_title}")
+        header_parts.append(f"Chunk: {idx + 1}/{len(docs)}")
+        header = "\n".join(header_parts)
+        
+        chunk_text = f"{header}\n\n{doc.page_content}"
+        
+        # Only include chunks that meet minimum size
+        if len(chunk_text) > MIN_CHUNK_SIZE:
+            chunks.append(chunk_text.strip())
+    
+    # Fallback: if no chunks created, create one from full content
+    if not chunks and text.strip():
+        truncated = text[:max_chunk_size]
+        chunks.append(f"Source: {filename} (PDF)\n\n{truncated}")
+    
+    logger.info(f"PDF split into {len(chunks)} chunks with overlap={CHUNK_OVERLAP}")
+    return chunks

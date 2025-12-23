@@ -46,7 +46,8 @@ from app.core.chunking import (
     mitre_to_natural_text,
     markdown_to_chunks,
     text_to_chunks,
-    dataflow_to_natural_text
+    dataflow_to_natural_text,
+    pdf_to_chunks
 )
 
 
@@ -67,9 +68,9 @@ class OptimizedIngester:
     2. REST API calls (requires running server)
     """
     
-    SUPPORTED_EXT = {'.md', '.txt', '.rst', '.json', '.yaml', '.yml', '.py', '.js', '.ts', '.go', '.java'}
+    SUPPORTED_EXT = {'.md', '.txt', '.rst', '.json', '.yaml', '.yml', '.py', '.js', '.ts', '.go', '.java', '.pdf'}
     SKIP = {'__pycache__', '.git', '.venv', 'node_modules', '.pytest_cache', 'chroma_db'}
-    MAX_SIZE = 5 * 1024 * 1024  # 5MB
+    MAX_SIZE = 10 * 1024 * 1024  # 10MB (increased for PDFs)
     
     def __init__(
         self, 
@@ -168,6 +169,11 @@ class OptimizedIngester:
         return False
     
     def read_file(self, path: Path) -> Optional[str]:
+        """Read text file content. Returns None for PDFs (handled separately by pdf_to_chunks)"""
+        # PDFs are binary, don't try to read as text
+        if path.suffix.lower() == '.pdf':
+            return "[PDF]"  # Placeholder, actual processing done by pdf_to_chunks
+        
         try:
             return path.read_text(encoding='utf-8')
         except:
@@ -176,24 +182,42 @@ class OptimizedIngester:
             except:
                 return None
     
-    def chunk_text(self, text: str, file_ext: str = '', filename: str = '') -> List[str]:
+    def compute_file_hash(self, path: Path) -> str:
+        """Compute SHA256 hash of file content for change detection"""
+        try:
+            # For PDFs, read binary; for text files, read text
+            if path.suffix.lower() == '.pdf':
+                with open(path, 'rb') as f:
+                    return hashlib.sha256(f.read()).hexdigest()
+            else:
+                content = path.read_text(encoding='utf-8')
+                return hashlib.sha256(content.encode('utf-8')).hexdigest()
+        except:
+            return hashlib.sha256(str(path).encode()).hexdigest()
+    
+    def chunk_text(self, text: str, file_ext: str = '', filename: str = '', file_path: str = None) -> List[str]:
         """
         Smart chunking based on file type using LangChain splitters.
         Benefits: Chunk overlap for context, smart boundary detection.
         
+        - PDF: Use pdf_to_chunks (requires file_path)
         - JSON: Delegate to app.core.chunking for semantic processing
         - Markdown: Use markdown_to_chunks with header-aware splitting
         - Others: Use text_to_chunks with RecursiveCharacterTextSplitter
         """
+        # Route by file extension
+        ext_lower = file_ext.lower()
+        
+        # PDF files - need file path for binary processing
+        if ext_lower == '.pdf' and file_path:
+            return pdf_to_chunks(file_path, filename, self.chunk_size)
+        
         if not text or not text.strip():
             return []
         
         # Short content - no need to chunk
         if len(text) <= self.chunk_size:
             return [text]
-        
-        # Route by file extension
-        ext_lower = file_ext.lower()
         
         # JSON files - semantic chunking
         if ext_lower == '.json':
@@ -380,15 +404,24 @@ class OptimizedIngester:
                 
                 category = self.get_category(fpath, directory)
                 
-                # Chunk with file extension and filename context
-                chunks = self.chunk_text(content, fpath.suffix, fpath.name)
+                # Compute file hash for change detection
+                file_hash = self.compute_file_hash(fpath)
+                
+                # Chunk with file extension, filename, and file_path (for PDF)
+                chunks = self.chunk_text(content, fpath.suffix, fpath.name, file_path=str(fpath))
+                
+                # For PDFs, get actual file size
+                if fpath.suffix.lower() == '.pdf':
+                    file_size_kb = fpath.stat().st_size / 1024
+                else:
+                    file_size_kb = len(content) / 1024
                 
                 # Progress
                 elapsed = time.time() - self.start_time
                 rate = self.stats['files'] / elapsed if elapsed > 0 else 0
                 
                 print(f"[{file_count}] {rel_path[:55]}")
-                print(f"{category}|{len(content)/1024:.1f}KB |{len(chunks)} chunks | {rate:.1f} files/s")
+                print(f"{category}|{file_size_kb:.1f}KB |{len(chunks)} chunks | {rate:.1f} files/s")
                 
                 if dry_run:
                     self.stats['chunks'] += len(chunks)
@@ -417,7 +450,9 @@ class OptimizedIngester:
                             'total': len(chunks),
                             'version': 'v1.0.0',
                             'is_active': True,
-                            'date': datetime.now().isoformat()
+                            'date': datetime.now().isoformat(),
+                            'file_hash': file_hash,  # For change detection
+                            'mtime': fpath.stat().st_mtime  # For quick change check
                         }
                     })
                     
@@ -456,7 +491,7 @@ class OptimizedIngester:
         print(f"Rate: {self.stats['files']/elapsed:.1f} files/s" if elapsed > 0 else "")
         
         if not dry_run and not self.use_api:
-            print(f"\n📚 Total in DB: {self.collection.count()} documents")
+            print(f"\nTotal in DB: {self.collection.count()} documents")
         
         if dry_run:
             print("\nDRY RUN - run without --dry-run to import")

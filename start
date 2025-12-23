@@ -108,34 +108,12 @@ case "$COMMAND" in
             printf "${BLUE}[i] To ingest documents: ${YELLOW}./start quick_rag <path>${NC}\n"
         fi
         
-        # Auto-sync RAG data/ directory if it exists and has files
-        if [ "$NO_SYNC" = false ] && [ -d "data" ] && [ -n "$(find data -type f 2>/dev/null | head -1)" ]; then
+        # Info about RAG sync (handled by background scheduler in container)
+        if [ -d "data" ] && [ -n "$(find data -type f -name '*.md' -o -name '*.pdf' -o -name '*.json' 2>/dev/null | head -1)" ]; then
             printf "\n"
-            printf "${BLUE}Auto-syncing RAG data/ directory...${NC}\n"
-            
-            # Wait for API to be healthy (max 60 seconds)
-            printf "${YELLOW}Waiting for API to be ready...${NC}\n"
-            for i in {1..12}; do
-                if docker compose -f "$COMPOSE_FILE" exec -T api curl -sf http://localhost:8080/health > /dev/null 2>&1; then
-                    printf "${GREEN}API is ready${NC}\n"
-                    break
-                fi
-                if [ $i -eq 12 ]; then
-                    printf "${YELLOW}API not ready, skipping auto-sync. Run './start rag_sync' manually.${NC}\n"
-                    break 2
-                fi
-                sleep 5
-            done
-            
-            # Run sync with 3-minute timeout (shows output)
-            printf "${BLUE}Running RAG sync (3 min timeout)...${NC}\n"
-            timeout 180 docker compose -f "$COMPOSE_FILE" exec -T api python -u scripts/rag_sync.py data
-            SYNC_EXIT=$?
-            if [ $SYNC_EXIT -eq 124 ]; then
-                printf "${YELLOW}RAG sync timed out. Run './start rag_sync' to complete.${NC}\n"
-            elif [ $SYNC_EXIT -ne 0 ]; then
-                printf "${YELLOW}RAG sync had issues (exit $SYNC_EXIT).${NC}\n"
-            fi
+            printf "${BLUE}[i] RAG auto-sync runs in background (interval: RAG_SYNC_INTERVAL)${NC}\n"
+            printf "${YELLOW}    Check progress: ./start logs | grep -i 'rag\|sync'${NC}\n"
+            printf "${YELLOW}    Manual sync:    ./start rag_sync${NC}\n"
         fi
         ;;
     
