@@ -13,7 +13,6 @@ Strategy:
   • Count only for low severity
 """
 
-import logging
 import os
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
@@ -24,8 +23,7 @@ load_dotenv()
 
 # Import WHITELIST_IP_QUERY for filtering system IPs
 from app.config import WHITELIST_IP_QUERY
-
-logger = logging.getLogger(__name__)
+from app.utils.logger import es_logger as logger
 
 # Import source config loader
 try:
@@ -35,7 +33,6 @@ except ImportError:
     # Fallback if config module not available
     SOURCE_CONFIG = None
     logger.warning("Source config module not available, using fallback patterns")
-
 
 class ElasticsearchService:
     """Service for querying alerts from Elasticsearch indices"""

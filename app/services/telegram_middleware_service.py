@@ -7,7 +7,6 @@ import threading
 import time
 import requests
 import json
-import logging
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Callable, Tuple
 from collections import defaultdict
@@ -17,9 +16,9 @@ import os
 
 from app.utils.logger import setup_logger
 from app.config import ALERT_TIME_WINDOW, TELEGRAM_API_TIMEOUT, TIMEZONE_OFFSET, DEBUG_TEXT_LENGTH
+from app.utils.logger import telegram_service_logger as logger
 
 logger = setup_logger("telegram_middleware")
-
 
 class TelegramMiddlewareService:
     """

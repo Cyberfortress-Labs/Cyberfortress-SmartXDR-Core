@@ -1,3 +1,4 @@
+from app.utils.logger import prompt_logger as logger
 """
 Prompt Builder Service for SmartXDR
 Loads and constructs system prompts with network context for LLM calls
@@ -6,7 +7,6 @@ Loads and constructs system prompts with network context for LLM calls
 import json
 from pathlib import Path
 from typing import Dict, Any, Optional
-
 
 class PromptBuilder:
     """Builds prompts for Gemini/OpenAI with optional network context injection"""
@@ -341,7 +341,6 @@ QUESTION:
 
 Provide a clear, helpful answer in the same language as the question. If context is limited, use your general knowledge about cybersecurity tools and concepts."""
 
-
 # Convenience function for quick usage
 def get_system_prompt(include_full_context: bool = False, format: str = 'json') -> str:
     """
@@ -356,7 +355,6 @@ def get_system_prompt(include_full_context: bool = False, format: str = 'json') 
     """
     builder = PromptBuilder()
     return builder.build_system_prompt(include_full_context=include_full_context, format=format)
-
 
 if __name__ == "__main__":
     # Test usage

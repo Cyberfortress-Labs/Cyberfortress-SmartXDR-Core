@@ -9,7 +9,6 @@ Features:
 """
 import os
 import smtplib
-import logging
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
@@ -20,11 +19,9 @@ from app.config import TIMEZONE_OFFSET
 
 load_dotenv()
 
-logger = logging.getLogger(__name__)
-
 # Import centralized severity manager
 from app.core.severity import severity_manager
-
+from app.utils.logger import email_logger as logger
 
 class EmailService:
     """Service for sending emails via SMTP"""
@@ -346,10 +343,8 @@ class EmailService:
         """Get color based on risk score - delegates to SeverityManager"""
         return severity_manager.get_risk_color(risk_score)
 
-
 # Singleton instance
 _email_service_instance = None
-
 
 def get_email_service() -> EmailService:
     """Get singleton instance of email service"""

@@ -130,3 +130,9 @@ email_logger = setup_logger("smartxdr.email")
 
 # Daily report
 scheduler_logger = setup_logger("smartxdr.scheduler")
+
+# Prompt builder
+prompt_logger = setup_logger("smartxdr.prompt")
+
+# Telegram service
+telegram_service_logger = setup_logger("smartxdr.telegram.service")

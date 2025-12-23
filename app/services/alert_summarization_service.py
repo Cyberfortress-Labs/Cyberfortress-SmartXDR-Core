@@ -2,7 +2,6 @@
 Alert Summarization Service - Analyze and summarize ML-classified alerts from Elasticsearch
 """
 import json
-import logging
 import io
 import base64
 from typing import List, Dict, Optional, Any
@@ -36,9 +35,9 @@ from app.config import (
     WHITELIST_IP_QUERY
 )
 from app.core.severity import severity_manager
+from app.utils.logger import alert_logger as logger
 
 logger = setup_logger(__name__)
-
 
 class AlertSummarizationService:
     """Service để summarize và analyze ML-classified alerts từ Elasticsearch"""
@@ -755,7 +754,6 @@ Giữ phản hồi dưới 250 từ, cụ thể và có thể hành động."""
         summary += "Review individual alert groups for detailed analysis."
         
         return summary
-
 
 def get_alert_summarization_service() -> AlertSummarizationService:
     """Get singleton instance of Alert Summarization Service"""

@@ -10,7 +10,6 @@ Features:
 import os
 import time
 import threading
-import logging
 from datetime import datetime, timedelta
 from typing import Optional
 from dotenv import load_dotenv
@@ -19,11 +18,9 @@ from app.services.alert_summarization_service import get_alert_summarization_ser
 from app.services.email_service import get_email_service
 from app.services.llm_service import LLMService
 from app.config import TIMEZONE_OFFSET
+from app.utils.logger import scheduler_logger as logger
 
 load_dotenv()
-
-logger = logging.getLogger(__name__)
-
 
 class DailyReportScheduler:
     """Scheduler for automated daily security reports"""
@@ -301,10 +298,8 @@ Keep response under 300 words, actionable and specific."""
             logger.error(f" Failed to send immediate report: {str(e)}")
             return False
 
-
 # Singleton instance
 _scheduler_instance = None
-
 
 def get_daily_report_scheduler() -> DailyReportScheduler:
     """Get singleton instance of daily report scheduler"""
