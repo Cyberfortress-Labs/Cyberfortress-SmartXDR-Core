@@ -8,6 +8,7 @@ import hmac
 import hashlib
 from flask import Blueprint, jsonify, request
 from app.services.telegram_middleware_service import TelegramMiddlewareService
+from app.utils.logger import telegram_route_logger as logger 
 
 telegram_bp = Blueprint('telegram', __name__)
 
@@ -23,7 +24,7 @@ def get_telegram_middleware() -> TelegramMiddlewareService:
         # Pre-fetch bot info on first init
         _middleware_instance.get_bot_info()
         _initialized = True
-        print(f"[Telegram] Middleware initialized, bot: @{_middleware_instance._bot_info.get('username') if _middleware_instance._bot_info else 'unknown'}")
+        logger.info(f"Middleware initialized, bot: @{_middleware_instance._bot_info.get('username') if _middleware_instance._bot_info else 'unknown'}")
         
         # Auto-start polling if webhook is disabled (with file lock to prevent multi-worker conflict)
         webhook_enabled = os.getenv('TELEGRAM_WEBHOOK_ENABLED', 'true').lower() == 'true'
@@ -36,12 +37,12 @@ def get_telegram_middleware() -> TelegramMiddlewareService:
                 # Try to acquire exclusive lock (non-blocking)
                 lock_fd = open(lock_file, 'w')
                 fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                print("[Telegram] Auto-starting polling mode (webhook disabled)...")
+                logger.info("[Telegram] Auto-starting polling mode (webhook disabled)...")
                 _middleware_instance.start_polling(threaded=True)
                 # Keep lock file open to maintain lock
             except (IOError, OSError) as e:
                 # Another worker already has the lock
-                print(f"[Telegram] Polling already running in another worker (lock held)")
+                logger.warning(f"[Telegram] Polling already running in another worker (lock held)")
     return _middleware_instance
 
 
@@ -72,7 +73,7 @@ def telegram_webhook():
         chat_type = message.get("chat", {}).get("type")
         text = message.get("text", "")[:50]
         user = message.get("from", {})
-        print(f"[Webhook] Chat: {chat_id} ({chat_type}) | From: {user.get('username', user.get('first_name', 'unknown'))} | Text: {text}")
+        logger.info(f"Chat: {chat_id} ({chat_type}) | From: {user.get('username', user.get('first_name', 'unknown'))} | Text: {text}")
         
         # Get middleware and process update
         mw = get_telegram_middleware()
@@ -85,7 +86,7 @@ def telegram_webhook():
         
     except Exception as e:
         # Log error but return 200 to prevent Telegram from retrying
-        print(f"Webhook error: {e}")
+        logger.error(f"Webhook error: {e}")
         import traceback
         traceback.print_exc()
         return '', 200

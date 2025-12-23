@@ -113,6 +113,9 @@ openai_logger = setup_logger("smartxdr.openai")
 # Routes
 ai_route_logger = setup_logger("smartxdr.routes.ai")
 rag_route_logger = setup_logger("smartxdr.routes.rag")
+telegram_route_logger = setup_logger("smartxdr.routes.telegram")
+ioc_route_logger = setup_logger("smartxdr.routes.ioc")
+triage_route_logger = setup_logger("smartxdr.routes.triage")
 
 # Middleware & Utils
 auth_logger = setup_logger("smartxdr.auth")

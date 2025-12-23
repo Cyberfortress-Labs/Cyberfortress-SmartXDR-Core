@@ -5,6 +5,7 @@ from flask import Blueprint, request, jsonify
 from app.services.iris_service import IRISService
 from app.services.llm_service import LLMService
 from app.middleware.auth import require_api_key
+from app.utils.logger import ioc_route_logger as logger
 
 ioc_bp = Blueprint('ioc', __name__)
 
@@ -46,9 +47,9 @@ def explain_intelowl():
         raw_results = intelowl_data['raw_data']
         ioc_value = intelowl_data['ioc_value']
         
-        print(f"\n[DEBUG ROUTE] Using IntelOwl data for IOC {ioc_id}")
-        print(f"[DEBUG ROUTE] IntelOwl data keys: {intelowl_data.keys()}")
-        print(f"[DEBUG ROUTE] HTML report length: {len(intelowl_data.get('html_report', ''))}")
+        logger.info(f"\nUsing IntelOwl data for IOC {ioc_id}")
+        logger.info(f"IntelOwl data keys: {intelowl_data.keys()}")
+        logger.info(f"HTML report length: {len(intelowl_data.get('html_report', ''))}")
         
         # AI analysis with IntelOwl
         ai_analysis = llm_svc.explain_intelowl_results(
@@ -57,7 +58,7 @@ def explain_intelowl():
         )
     else:
         # 2. Fallback to MISP
-        print(f"\n[DEBUG ROUTE] No IntelOwl report, trying MISP fallback for IOC {ioc_id}")
+        logger.info(f"\n[DEBUG ROUTE] No IntelOwl report, trying MISP fallback for IOC {ioc_id}")
         
         misp_data = iris_svc.get_ioc_misp_report(case_id, ioc_id)
         
@@ -67,8 +68,8 @@ def explain_intelowl():
             raw_results = misp_data['raw_data']
             ioc_value = misp_data['ioc_value']
             
-            print(f"[DEBUG ROUTE] Using MISP data for IOC {ioc_id}")
-            print(f"[DEBUG ROUTE] MISP raw_data type: {type(raw_results)}")
+            logger.info(f"[DEBUG ROUTE] Using MISP data for IOC {ioc_id}")
+            logger.info(f"[DEBUG ROUTE] MISP raw_data type: {type(raw_results)}")
             
             # AI analysis with MISP
             ai_analysis = llm_svc.explain_misp_results(
@@ -93,14 +94,14 @@ def explain_intelowl():
     
     # 5. Update IOC description với summary (nếu enabled)
     description_updated = False
-    print(f"[DEBUG DESC] update_description={update_description}")
+    logger.info(f"update_description={update_description}")
     if update_description:
         try:
             # Summarize the analysis for description (max 1000 chars)
-            print(f"[DEBUG DESC] Calling summarize_for_ioc_description with text length: {len(comment_text)}")
+            logger.info(f"Calling summarize_for_ioc_description with text length: {len(comment_text)}")
             summary = llm_svc.summarize_for_ioc_description(comment_text, max_length=1000)
-            print(f"[DEBUG DESC] summary returned: {type(summary)}, length: {len(summary) if summary else 0}")
-            print(f"[DEBUG DESC] summary preview: {summary[:200] if summary else 'EMPTY/NONE'}")
+            logger.info(f"summary returned: {type(summary)}, length: {len(summary) if summary else 0}")
+            logger.info(f"summary preview: {summary[:200] if summary else 'EMPTY/NONE'}")
             
             if summary:
                 # 1. Get current IOC data (để lấy description và tags)
@@ -136,19 +137,19 @@ def explain_intelowl():
                         tags_list.append(tag)
                 
                 # Update IOC
-                print(f"[DEBUG] Calling update_ioc with description length: {len(new_desc)}")
-                print(f"[DEBUG] Tags to update: {','.join(tags_list)}")
+                logger.info(f"Calling update_ioc with description length: {len(new_desc)}")
+                logger.info(f"Tags to update: {','.join(tags_list)}")
                 result = iris_svc.update_ioc(
                     case_id=case_id,
                     ioc_id=ioc_id,
                     description=new_desc,
                     tags=",".join(tags_list)
                 )
-                print(f"[DEBUG] update_ioc result: {result}")
+                logger.info(f"update_ioc result: {result}")
                 description_updated = True
-                print(f"[INFO] Updated IOC {ioc_id} description and tags")
+                logger.info(f" Updated IOC {ioc_id} description and tags")
         except Exception as e:
-            print(f"[ERROR] Failed to update IOC metadata: {e}")
+            logger.error(f"Failed to update IOC metadata: {e}")
             import traceback
             traceback.print_exc()
     
@@ -274,7 +275,7 @@ def explain_case_iocs():
                         iris_svc.update_ioc(case_id=case_id, ioc_id=ioc_id, description=new_desc)
                         description_updated = True
                 except Exception as desc_e:
-                    print(f"[WARNING] Failed to update IOC {ioc_id} description: {desc_e}")
+                    logger.error(f"Failed to update IOC {ioc_id} description: {desc_e}")
                 
                 result_entry['status'] = 'success'
                 result_entry['risk_level'] = ai_analysis['risk_level']
@@ -288,7 +289,7 @@ def explain_case_iocs():
                 result_entry['error'] = str(e)
                 failed_count += 1
                 results.append(result_entry)
-                print(f"[ERROR] Failed to process IOC {ioc_id} ({ioc_value}): {e}")
+                logger.error(f"Failed to process IOC {ioc_id} ({ioc_value}): {e}")
         
         return jsonify({
             "status": "success",
