@@ -37,7 +37,7 @@ def clear_screen():
 def print_header(title: str):
     """Print a styled header"""
     print("\n" + "═" * 60)
-    print(f"  {title}")
+    print(f"{title}")
     print("═" * 60)
 
 
@@ -128,25 +128,25 @@ def create_first_admin():
         email = safe_input("  Email: ").strip().lower()
         if email and '@' in email:
             break
-        print("   Please enter a valid email")
+        print(" Please enter a valid email")
     
     # Get username (normalize to lowercase)
     while True:
         username = safe_input("  Username: ").strip().lower()
         if username and len(username) >= 3:
             break
-        print("   Username must be at least 3 characters")
+        print(" Username must be at least 3 characters")
     
     # Get password
     gen_password = generate_password()
     print(f"\n  Generated strong password: {gen_password}")
-    print("  (Press Enter to use this password, or type your own)")
+    print("(Press Enter to use this password, or type your own)")
     
     while True:
         password = get_password_input("  Password: ").strip() or gen_password
         if len(password) >= 8:
             break
-        print("   Password must be at least 8 characters")
+        print("Password must be at least 8 characters")
     
     # Create admin role if needed
     admin_role = Role.query.filter_by(name='admin').first()
@@ -177,8 +177,8 @@ def create_first_admin():
 ║  Password: {password:<45} ║
 ╚══════════════════════════════════════════════════════════╝
     """)
-    print("    Save these credentials securely!")
-    input("\n  Press Enter to continue to login...")
+    print("Save these credentials securely!")
+    input("\nPress Enter to continue to login...")
     return email
 
 
@@ -201,12 +201,12 @@ def login_admin() -> bool:
     # DEBUG: List all users to see what's in the DB
     try:
         users = User.query.all()
-        print(f"  [DEBUG DB] Found {len(users)} users in database:")
+        print(f"[DEBUG DB] Found {len(users)} users in database:")
         for u in users:
             roles = [r.name for r in u.roles]
-            print(f"  - {u.username} ({u.email}) | Roles: {roles} | Active: {u.active}")
+            print(f"- {u.username} ({u.email}) | Roles: {roles} | Active: {u.active}")
     except Exception as e:
-        print(f"  [DEBUG DB] Error listing users: {e}")
+        print(f"[DEBUG DB] Error listing users: {e}")
         
     for attempt in range(max_attempts):
         remaining = max_attempts - attempt
@@ -228,7 +228,7 @@ def login_admin() -> bool:
         ).first()
         
         if not user:
-            print(f"   User '{username_or_email}' not found")
+            print(f" User '{username_or_email}' not found")
             continue
         
         # Verify password
@@ -240,7 +240,7 @@ def login_admin() -> bool:
             # Try Flask-Security verification first (HMAC + Argon2)
             is_valid = verify_and_update_password(password, user)
         except Exception as e:
-            print(f"  [DEBUG] Flask-Security verification error: {e}")
+            print(f"[DEBUG] Flask-Security verification error: {e}")
         
         if not is_valid and user.password and user.password.startswith('$argon2'):
             # Fallback: Direct Argon2 verification for raw hashes
@@ -248,26 +248,26 @@ def login_admin() -> bool:
                 from passlib.hash import argon2
                 is_valid = argon2.verify(password, user.password)
                 if is_valid:
-                    print(f"  [DEBUG] Password verified via direct Argon2")
+                    print(f"[DEBUG] Password verified via direct Argon2")
             except Exception as e:
-                print(f"  [DEBUG] Direct Argon2 verification error: {e}")
+                print(f"[DEBUG] Direct Argon2 verification error: {e}")
             
         if not is_valid:
-            print(f"   Invalid password for user '{user.username}'")
+            print(f" Invalid password for user '{user.username}'")
             # Debug: show password hash info
             if user.password:
-                print(f"  [DEBUG] Password hash length: {len(user.password)}")
-                print(f"  [DEBUG] Hash prefix: {user.password[:30]}...")
+                print(f"[DEBUG] Password hash length: {len(user.password)}")
+                print(f"[DEBUG] Hash prefix: {user.password[:30]}...")
             continue
         
         # Check if user has admin role
         if not any(role.name == 'admin' for role in user.roles):
-            print("   Access denied: Admin role required")
+            print(" Access denied: Admin role required")
             continue
         
         # Check if user is active
         if not user.active:
-            print("   Account is disabled")
+            print(" Account is disabled")
             continue
         
         # Login successful
@@ -292,12 +292,12 @@ def list_users():
         return
     
     print(f"\n  {'ID':<5} {'Username':<15} {'Email':<30} {'Role':<10} {'Active':<8}")
-    print("  " + "-" * 70)
+    print("" + "-" * 70)
     
     for user in users:
         roles = ', '.join([r.name for r in user.roles]) or 'none'
         active = '✓' if user.active else 'x'
-        print(f"  {user.id:<5} {user.username:<15} {user.email:<30} {roles:<10} {active:<8}")
+        print(f"{user.id:<5} {user.username:<15} {user.email:<30} {roles:<10} {active:<8}")
     
     print()
 
@@ -309,21 +309,21 @@ def create_user():
     # Get email (normalize to lowercase)
     email = safe_input("\n  Email: ").strip().lower()
     if not email or '@' not in email:
-        print("   Invalid email")
+        print(" Invalid email")
         return
     
     if User.query.filter_by(email=email).first():
-        print("   Email already exists")
+        print(" Email already exists")
         return
     
     # Get username (normalize to lowercase)
     username = safe_input("  Username: ").strip().lower()
     if not username:
-        print("   Username required")
+        print(" Username required")
         return
     
     if User.query.filter_by(username=username).first():
-        print("   Username already exists")
+        print(" Username already exists")
         return
     
     # Generate or enter password
@@ -369,15 +369,15 @@ def delete_user():
     user = User.query.filter_by(email=email).first()
     
     if not user:
-        print("   User not found")
+        print(" User not found")
         return
     
     if confirm(f"  Delete user '{email}'?"):
         db.session.delete(user)
         db.session.commit()
-        print(f"  User deleted: {email}")
+        print(f"User deleted: {email}")
     else:
-        print("   Cancelled")
+        print(" Cancelled")
 
 
 def reset_password():
@@ -389,7 +389,7 @@ def reset_password():
     user = User.query.filter_by(email=email).first()
     
     if not user:
-        print("   User not found")
+        print(" User not found")
         return
     
     gen_password = generate_password()
@@ -400,7 +400,7 @@ def reset_password():
     db.session.commit()
     
     print(f"\n  Password reset for: {email}")
-    print(f"  New password: {password}")
+    print(f"New password: {password}")
 
 
 def user_management_menu():
@@ -444,13 +444,13 @@ def list_api_keys():
         return
     
     print(f"\n  {'ID':<5} {'Name':<20} {'Prefix':<10} {'Status':<10} {'Rate':<8} {'Uses':<8}")
-    print("  " + "-" * 65)
+    print("" + "-" * 65)
     
     for key in keys:
         status = 'Active' if key.enabled and not key.is_expired else ' Disabled'
         if key.is_expired:
             status = 'Expired'
-        print(f"  {key.id:<5} {key.name:<20} {key.key_prefix:<10} {status:<10} {key.rate_limit:<8} {key.usage_count:<8}")
+        print(f"{key.id:<5} {key.name:<20} {key.key_prefix:<10} {status:<10} {key.rate_limit:<8} {key.usage_count:<8}")
     
     print()
 
@@ -462,11 +462,11 @@ def create_api_key():
     # Get name (normalize to lowercase)
     name = safe_input("\n  Key name: ").strip().lower()
     if not name:
-        print("   Name required")
+        print(" Name required")
         return
     
     if APIKeyModel.query.filter_by(name=name).first():
-        print("   Name already exists")
+        print(" Name already exists")
         return
     
     # Get description
@@ -474,7 +474,7 @@ def create_api_key():
     
     # Get permissions
     print("\n  Permissions (comma-separated, or * for all):")
-    print("  Examples: *, ai:ask, enrich:*, triage:read")
+    print("Examples: *, ai:ask, enrich:*, triage:read")
     perm_input = safe_input("  Permissions [*]: ").strip() or '*'
     permissions = [p.strip() for p in perm_input.split(',')]
     
@@ -487,10 +487,10 @@ def create_api_key():
     
     # Get expiration
     print("\n  Expiration:")
-    print("  1. Never")
-    print("  2. 30 days")
-    print("  3. 90 days")
-    print("  4. 1 year")
+    print("1. Never")
+    print("2. 30 days")
+    print("3. 90 days")
+    print("4. 1 year")
     exp_choice = safe_input("  Select [1]: ").strip() or '1'
     
     expires_at = None
@@ -522,12 +522,12 @@ def create_api_key():
     db.session.commit()
     
     print("\n" + "═" * 60)
-    print("  API Key Created Successfully!")
+    print("API Key Created Successfully!")
     print("═" * 60)
     print(f"\n  Name: {name}")
-    print(f"  Permissions: {permissions}")
-    print(f"  Rate Limit: {rate_limit}/min")
-    print(f"  Expires: {expires_at or 'Never'}")
+    print(f"Permissions: {permissions}")
+    print(f"Rate Limit: {rate_limit}/min")
+    print(f"Expires: {expires_at or 'Never'}")
     print("\n     SAVE THIS KEY (shown only once!):")
     print(f"\n  {api_key}")
     print("\n" + "═" * 60)
@@ -542,7 +542,7 @@ def delete_api_key():
     key = APIKeyModel.query.filter_by(name=name).first()
     
     if not key:
-        print("   Key not found")
+        print(" Key not found")
         return
     
     if confirm(f"  Delete key '{name}'?"):
@@ -550,9 +550,9 @@ def delete_api_key():
         APIKeyUsage.query.filter_by(key_hash=key.key_hash).delete()
         db.session.delete(key)
         db.session.commit()
-        print(f"  Key deleted: {name}")
+        print(f"Key deleted: {name}")
     else:
-        print("   Cancelled")
+        print(" Cancelled")
 
 
 def toggle_api_key():
@@ -564,7 +564,7 @@ def toggle_api_key():
     key = APIKeyModel.query.filter_by(name=name).first()
     
     if not key:
-        print("   Key not found")
+        print(" Key not found")
         return
     
     key.enabled = not key.enabled
@@ -584,7 +584,7 @@ def view_key_usage():
     if name:
         key = APIKeyModel.query.filter_by(name=name).first()
         if not key:
-            print("   Key not found")
+            print(" Key not found")
             return
         
         logs = APIKeyUsage.query.filter_by(key_hash=key.key_hash).order_by(
@@ -600,11 +600,11 @@ def view_key_usage():
         return
     
     print(f"\n  {'Time':<20} {'Endpoint':<30} {'Method':<8} {'Status':<8} {'IP':<15}")
-    print("  " + "-" * 85)
+    print("" + "-" * 85)
     
     for log in logs:
         time_str = log.created_at.strftime('%Y-%m-%d %H:%M') if log.created_at else '-'
-        print(f"  {time_str:<20} {log.endpoint[:28]:<30} {log.method:<8} {log.status_code:<8} {log.client_ip:<15}")
+        print(f"{time_str:<20} {log.endpoint[:28]:<30} {log.method:<8} {log.status_code:<8} {log.client_ip:<15}")
 
 
 def api_key_management_menu():
