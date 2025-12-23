@@ -168,7 +168,7 @@ class RAGSync:
     
     def scan_directory(self) -> Dict[str, FileInfo]:
         """Scan data directory and build file index"""
-        logger.info(f"\n[DETECT] Scanning {self.data_dir}...")
+        logger.info(f"[DETECT] Scanning {self.data_dir}...")
         files = {}
         
         for root, dirs, filenames in os.walk(str(self.data_dir)):
@@ -265,7 +265,7 @@ class RAGSync:
             if current.file_hash != indexed_hash:
                 updated_files.append(path)
         
-        logger.info(f"\n[DETECT] Diff results:")
+        logger.info(f"[DETECT] Diff results:")
         logger.info(f"  New files:     {len(new_files)}")
         logger.info(f"  Updated files: {len(updated_files)}")
         logger.info(f"  Deleted files: {len(deleted_files)}")
@@ -378,7 +378,7 @@ class RAGSync:
         if not files:
             return
         
-        logger.info(f"\n[ACTION] Adding {len(files)} new files...")
+        logger.info(f"[ACTION] Adding {len(files)} new files...")
         
         for path in files:
             try:
@@ -416,7 +416,7 @@ class RAGSync:
         if not files:
             return
         
-        logger.info(f"\n[ACTION] Updating {len(files)} modified files...")
+        logger.info(f"[ACTION] Updating {len(files)} modified files...")
         
         for path in files:
             try:
@@ -444,11 +444,11 @@ class RAGSync:
                             metadatas=[d['metadata'] for d in batch]
                         )
                 
-                logger.info(f"  ✓ Updated: {path[:50]} ({len(new_documents)} chunks)")
+                logger.info(f"  Updated: {path[:50]} ({len(new_documents)} chunks)")
                 self.result.updated += 1
                 
             except Exception as e:
-                logger.error(f"  ✗ Error: {path[:50]} - {e}")
+                logger.error(f"  Error: {path[:50]} - {e}")
                 self.result.errors += 1
     
     def delete_files(self, files: List[str], indexed_files: Dict[str, Dict]):
@@ -456,7 +456,7 @@ class RAGSync:
         if not files:
             return
         
-        logger.info(f"\n[ACTION] Deleting {len(files)} removed files...")
+        logger.info(f"[ACTION] Deleting {len(files)} removed files...")
         
         for path in files:
             try:
@@ -469,11 +469,11 @@ class RAGSync:
                 if not self.dry_run:
                     self.collection.delete(ids=doc_ids)
                 
-                logger.info(f"  ✓ Deleted: {path[:50]} ({len(doc_ids)} chunks)")
+                logger.info(f"  Deleted: {path[:50]} ({len(doc_ids)} chunks)")
                 self.result.deleted += 1
                 
             except Exception as e:
-                logger.error(f"  ✗ Error: {path[:50]} - {e}")
+                logger.error(f"   Error: {path[:50]} - {e}")
                 self.result.errors += 1
     
     def sync(self):
@@ -504,7 +504,7 @@ class RAGSync:
         # Check if anything to do
         total_changes = len(new_files) + len(updated_files) + len(deleted_files)
         if total_changes == 0:
-            logger.info("\n✓ Everything is in sync! No changes needed.")
+            logger.info("Everything is in sync! No changes needed.")
             return self.result
         
         # ACTION: Process changes

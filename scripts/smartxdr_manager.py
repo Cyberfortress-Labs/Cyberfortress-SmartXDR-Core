@@ -128,14 +128,14 @@ def create_first_admin():
         email = safe_input("  Email: ").strip().lower()
         if email and '@' in email:
             break
-        print("  ✗ Please enter a valid email")
+        print("   Please enter a valid email")
     
     # Get username (normalize to lowercase)
     while True:
         username = safe_input("  Username: ").strip().lower()
         if username and len(username) >= 3:
             break
-        print("  ✗ Username must be at least 3 characters")
+        print("   Username must be at least 3 characters")
     
     # Get password
     gen_password = generate_password()
@@ -146,7 +146,7 @@ def create_first_admin():
         password = get_password_input("  Password: ").strip() or gen_password
         if len(password) >= 8:
             break
-        print("  ✗ Password must be at least 8 characters")
+        print("   Password must be at least 8 characters")
     
     # Create admin role if needed
     admin_role = Role.query.filter_by(name='admin').first()
@@ -228,7 +228,7 @@ def login_admin() -> bool:
         ).first()
         
         if not user:
-            print(f"  ✗ User '{username_or_email}' not found")
+            print(f"   User '{username_or_email}' not found")
             continue
         
         # Verify password
@@ -253,7 +253,7 @@ def login_admin() -> bool:
                 print(f"  [DEBUG] Direct Argon2 verification error: {e}")
             
         if not is_valid:
-            print(f"  ✗ Invalid password for user '{user.username}'")
+            print(f"   Invalid password for user '{user.username}'")
             # Debug: show password hash info
             if user.password:
                 print(f"  [DEBUG] Password hash length: {len(user.password)}")
@@ -262,19 +262,19 @@ def login_admin() -> bool:
         
         # Check if user has admin role
         if not any(role.name == 'admin' for role in user.roles):
-            print("  ✗ Access denied: Admin role required")
+            print("   Access denied: Admin role required")
             continue
         
         # Check if user is active
         if not user.active:
-            print("  ✗ Account is disabled")
+            print("   Account is disabled")
             continue
         
         # Login successful
         print(f"\n  Welcome, {user.username}!")
         return True
     
-    print("\n  ✗ Too many failed attempts. Exiting.")
+    print("\n   Too many failed attempts. Exiting.")
     return False
 
 
@@ -296,7 +296,7 @@ def list_users():
     
     for user in users:
         roles = ', '.join([r.name for r in user.roles]) or 'none'
-        active = '✓' if user.active else '✗'
+        active = '✓' if user.active else 'x'
         print(f"  {user.id:<5} {user.username:<15} {user.email:<30} {roles:<10} {active:<8}")
     
     print()
@@ -309,21 +309,21 @@ def create_user():
     # Get email (normalize to lowercase)
     email = safe_input("\n  Email: ").strip().lower()
     if not email or '@' not in email:
-        print("  ✗ Invalid email")
+        print("   Invalid email")
         return
     
     if User.query.filter_by(email=email).first():
-        print("  ✗ Email already exists")
+        print("   Email already exists")
         return
     
     # Get username (normalize to lowercase)
     username = safe_input("  Username: ").strip().lower()
     if not username:
-        print("  ✗ Username required")
+        print("   Username required")
         return
     
     if User.query.filter_by(username=username).first():
-        print("  ✗ Username already exists")
+        print("   Username already exists")
         return
     
     # Generate or enter password
@@ -355,9 +355,9 @@ def create_user():
     user_datastore.add_role_to_user(new_user, role)
     db.session.commit()
     
-    print(f"\n  User created: {email}")
-    print(f"  Password: {password}")
-    print(f"  Role: {role_name}")
+    print(f"\nUser created: {email}")
+    print(f"Password: {password}")
+    print(f"Role: {role_name}")
 
 
 def delete_user():
@@ -369,7 +369,7 @@ def delete_user():
     user = User.query.filter_by(email=email).first()
     
     if not user:
-        print("  ✗ User not found")
+        print("   User not found")
         return
     
     if confirm(f"  Delete user '{email}'?"):
@@ -377,7 +377,7 @@ def delete_user():
         db.session.commit()
         print(f"  User deleted: {email}")
     else:
-        print("  ✗ Cancelled")
+        print("   Cancelled")
 
 
 def reset_password():
@@ -389,7 +389,7 @@ def reset_password():
     user = User.query.filter_by(email=email).first()
     
     if not user:
-        print("  ✗ User not found")
+        print("   User not found")
         return
     
     gen_password = generate_password()
@@ -447,7 +447,7 @@ def list_api_keys():
     print("  " + "-" * 65)
     
     for key in keys:
-        status = 'Active' if key.enabled and not key.is_expired else '✗ Disabled'
+        status = 'Active' if key.enabled and not key.is_expired else ' Disabled'
         if key.is_expired:
             status = 'Expired'
         print(f"  {key.id:<5} {key.name:<20} {key.key_prefix:<10} {status:<10} {key.rate_limit:<8} {key.usage_count:<8}")
@@ -462,11 +462,11 @@ def create_api_key():
     # Get name (normalize to lowercase)
     name = safe_input("\n  Key name: ").strip().lower()
     if not name:
-        print("  ✗ Name required")
+        print("   Name required")
         return
     
     if APIKeyModel.query.filter_by(name=name).first():
-        print("  ✗ Name already exists")
+        print("   Name already exists")
         return
     
     # Get description
@@ -542,7 +542,7 @@ def delete_api_key():
     key = APIKeyModel.query.filter_by(name=name).first()
     
     if not key:
-        print("  ✗ Key not found")
+        print("   Key not found")
         return
     
     if confirm(f"  Delete key '{name}'?"):
@@ -552,7 +552,7 @@ def delete_api_key():
         db.session.commit()
         print(f"  Key deleted: {name}")
     else:
-        print("  ✗ Cancelled")
+        print("   Cancelled")
 
 
 def toggle_api_key():
@@ -564,7 +564,7 @@ def toggle_api_key():
     key = APIKeyModel.query.filter_by(name=name).first()
     
     if not key:
-        print("  ✗ Key not found")
+        print("   Key not found")
         return
     
     key.enabled = not key.enabled
@@ -584,7 +584,7 @@ def view_key_usage():
     if name:
         key = APIKeyModel.query.filter_by(name=name).first()
         if not key:
-            print("  ✗ Key not found")
+            print("   Key not found")
             return
         
         logs = APIKeyUsage.query.filter_by(key_hash=key.key_hash).order_by(
@@ -727,7 +727,7 @@ def main():
         main_menu(app)
         
     except KeyboardInterrupt:
-        print("\n\n  ✗ Cancelled by user")
+        print("\n\n   Cancelled by user")
         sys.exit(0)
     except Exception as e:
         print(f"\n  Error: {e}")

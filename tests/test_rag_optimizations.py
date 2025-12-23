@@ -27,11 +27,11 @@ def test_config_values():
         MAX_CONTEXT_CHARS
     )
     
-    print(f"✓ CROSS_ENCODER_MODEL: {CROSS_ENCODER_MODEL}")
-    print(f"✓ STRICT_THRESHOLD: {STRICT_THRESHOLD}")
-    print(f"✓ FALLBACK_THRESHOLD: {FALLBACK_THRESHOLD}")
-    print(f"✓ MAX_RERANK_CANDIDATES: {MAX_RERANK_CANDIDATES}")
-    print(f"✓ MAX_CONTEXT_CHARS: {MAX_CONTEXT_CHARS}")
+    print(f"CROSS_ENCODER_MODEL: {CROSS_ENCODER_MODEL}")
+    print(f"STRICT_THRESHOLD: {STRICT_THRESHOLD}")
+    print(f"FALLBACK_THRESHOLD: {FALLBACK_THRESHOLD}")
+    print(f"MAX_RERANK_CANDIDATES: {MAX_RERANK_CANDIDATES}")
+    print(f"MAX_CONTEXT_CHARS: {MAX_CONTEXT_CHARS}")
     
     assert STRICT_THRESHOLD == 1.0, f"Expected STRICT_THRESHOLD=1.0, got {STRICT_THRESHOLD}"
     assert FALLBACK_THRESHOLD == 1.4, f"Expected FALLBACK_THRESHOLD=1.4, got {FALLBACK_THRESHOLD}"
@@ -50,15 +50,15 @@ def test_sentence_transformers_import():
         from sentence_transformers import CrossEncoder
         from app.config import CROSS_ENCODER_MODEL
         
-        print(f"✓ CrossEncoder imported successfully")
-        print(f"✓ Model to load: {CROSS_ENCODER_MODEL}")
+        print(f"CrossEncoder imported successfully")
+        print(f"Model to load: {CROSS_ENCODER_MODEL}")
         
         # Try loading the model (this downloads if not cached)
         print("  Loading cross-encoder model (may take a moment on first run)...")
         start = time.time()
         model = CrossEncoder(CROSS_ENCODER_MODEL, max_length=512)
         elapsed = time.time() - start
-        print(f"✓ Model loaded in {elapsed:.2f}s")
+        print(f"Model loaded in {elapsed:.2f}s")
         
         # Test prediction
         test_pairs = [
@@ -66,7 +66,7 @@ def test_sentence_transformers_import():
             ("What is Suricata?", "Python is a programming language.")
         ]
         scores = model.predict(test_pairs)
-        print(f"✓ Test scores: relevant={scores[0]:.3f}, irrelevant={scores[1]:.3f}")
+        print(f"Test scores: relevant={scores[0]:.3f}, irrelevant={scores[1]:.3f}")
         
         assert scores[0] > scores[1], "Relevant pair should score higher than irrelevant"
         
@@ -99,14 +99,14 @@ def test_rag_service_methods():
     
     for method in methods:
         assert hasattr(service, method), f"Missing method: {method}"
-        print(f"✓ Method exists: {method}")
+        print(f"Method exists: {method}")
     
     # Test _text_overlap
     overlap = service._text_overlap(
         "Suricata is an IDS IPS system for network security",
         "Suricata IDS provides network intrusion detection"
     )
-    print(f"✓ _text_overlap returned: {overlap:.3f}")
+    print(f"_text_overlap returned: {overlap:.3f}")
     assert 0 <= overlap <= 1, "Overlap should be between 0 and 1"
     
     print("\n✅ RAG Service methods test PASSED")
@@ -127,8 +127,8 @@ def test_cache_fix():
     cache.set("test_key_1", "response_1", "query 1")
     cache.set("test_key_2", "response_2", "query 2")
     
-    print(f"✓ Added 2 cache entries")
-    print(f"✓ Cache size: {len(cache._local_cache)}")
+    print(f"Added 2 cache entries")
+    print(f"Cache size: {len(cache._local_cache)}")
     
     # Wait for TTL to expire
     print("  Waiting 2 seconds for TTL to expire...")
@@ -137,8 +137,8 @@ def test_cache_fix():
     # This should not crash (was using undefined 'cache_key' before fix)
     try:
         cache.clear_expired()
-        print(f"✓ clear_expired() executed without error")
-        print(f"✓ Cache size after cleanup: {len(cache._local_cache)}")
+        print(f"clear_expired() executed without error")
+        print(f"Cache size after cleanup: {len(cache._local_cache)}")
     except NameError as e:
         print(f"❌ Bug not fixed! Error: {e}")
         return False
@@ -160,7 +160,7 @@ def test_build_context_with_reranking():
     # Get document count first
     stats = service.get_stats()
     doc_count = stats.get('repository', {}).get('total_documents', 0)
-    print(f"✓ Knowledge base has {doc_count} documents")
+    print(f"Knowledge base has {doc_count} documents")
     
     if doc_count == 0:
         print("⚠️ No documents in knowledge base - skipping query test")
@@ -178,19 +178,19 @@ def test_build_context_with_reranking():
     )
     elapsed = time.time() - start
     
-    print(f"✓ Query completed in {elapsed:.2f}s")
-    print(f"✓ Context length: {len(context)} chars")
-    print(f"✓ Sources: {sources[:3]}...")
+    print(f"Query completed in {elapsed:.2f}s")
+    print(f"Context length: {len(context)} chars")
+    print(f"Sources: {sources[:3]}...")
     
     # Check quality indicator is present
     assert "[Context Quality:" in context, "Missing quality indicator"
-    print(f"✓ Quality indicator present in context")
+    print(f"Quality indicator present in context")
     
     # Check context respects MAX_CONTEXT_CHARS
     from app.config import MAX_CONTEXT_CHARS
     # Allow some buffer for truncation message
     assert len(context) <= MAX_CONTEXT_CHARS + 200, f"Context too long: {len(context)}"
-    print(f"✓ Context respects MAX_CONTEXT_CHARS limit")
+    print(f"Context respects MAX_CONTEXT_CHARS limit")
     
     print("\n✅ Build context test PASSED")
     return True
