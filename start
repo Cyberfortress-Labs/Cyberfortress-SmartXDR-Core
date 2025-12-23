@@ -149,7 +149,42 @@ case "$COMMAND" in
     
     manage)
         printf "${BLUE}Opening SmartXDR Manager...${NC}\n"
-        docker compose -f "$COMPOSE_FILE" exec -it api python -u scripts/smartxdr_manager.py
+        
+        # Get the image from running api container (smartxdr-core)
+        IMAGE_NAME=$(docker inspect --format '{{.Config.Image}}' smartxdr-core 2>/dev/null)
+        
+        # Fallback: try docker compose ps for api service
+        if [ -z "$IMAGE_NAME" ]; then
+            IMAGE_NAME=$(docker compose -f "$COMPOSE_FILE" ps api --format "{{.Image}}" 2>/dev/null)
+        fi
+        
+        # Final fallback: use default name based on project directory
+        if [ -z "$IMAGE_NAME" ]; then
+            # Docker Compose generates image name as: {project}_{service}
+            PROJECT_NAME=$(basename "$(pwd)" | tr '[:upper:]' '[:lower:]' | tr '-' '_')
+            IMAGE_NAME="${PROJECT_NAME}-api"
+        fi
+        
+        # Get network name  
+        NETWORK_NAME=$(docker network ls --filter "name=smartxdr" --format "{{.Name}}" | head -1)
+        if [ -z "$NETWORK_NAME" ]; then
+            NETWORK_NAME="smartxdr-network"
+        fi
+        
+        printf "  Using image: ${IMAGE_NAME}\n"
+        printf "  Using network: ${NETWORK_NAME}\n"
+        
+        # Run directly with docker to avoid log interference
+        # SKIP_MODEL_PRELOAD=true prevents CrossEncoder preload logs from cluttering the CLI
+        docker run --rm -it \
+            --network "$NETWORK_NAME" \
+            --env-file .env \
+            -e SKIP_MODEL_PRELOAD=true \
+            -v "$(pwd)/scripts:/app/scripts:ro" \
+            -v "smartxdr-core-data:/app/db/app_data" \
+            -v "huggingface-cache:/home/smartxdr/.cache/huggingface" \
+            --entrypoint python \
+            "$IMAGE_NAME" -u scripts/smartxdr_manager.py
         ;;
     
     health)

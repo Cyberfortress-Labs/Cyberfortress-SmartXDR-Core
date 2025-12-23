@@ -130,8 +130,10 @@ def create_app():
         return {'status': 'healthy', 'service': 'Cyberfortress SmartXDR Core'}, 200
     
     # Preload CrossEncoder model in background thread (avoids first-query latency)
+    # Skip preload if SKIP_MODEL_PRELOAD is set (e.g., when running CLI scripts)
     from app.config import RERANKING_ENABLED
-    if RERANKING_ENABLED:
+    skip_preload = os.environ.get('SKIP_MODEL_PRELOAD', '').lower() in ('true', '1', 'yes')
+    if RERANKING_ENABLED and not skip_preload:
         import threading
         def preload_reranker():
             try:
