@@ -10,19 +10,16 @@ Usage:
     response = client.chat.completions.create(...)
 """
 import os
-import logging
 from openai import OpenAI
 from dotenv import load_dotenv
 from app.config import OPENAI_TIMEOUT, OPENAI_MAX_RETRIES
+from app.utils.logger import openai_logger as logger
 
 # Load environment variables
 load_dotenv()
 
-logger = logging.getLogger('smartxdr.openai')
-
 # Singleton instance
 _openai_client: OpenAI = None
-
 
 def get_openai_client() -> OpenAI:
     """
@@ -49,7 +46,6 @@ def get_openai_client() -> OpenAI:
         logger.info("OpenAI client initialized")
     
     return _openai_client
-
 
 def reset_client():
     """Reset the client (useful for testing or config changes)"""

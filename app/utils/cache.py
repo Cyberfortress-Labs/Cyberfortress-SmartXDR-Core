@@ -6,14 +6,13 @@ import time
 import hashlib
 import re
 import os
-import logging
 import numpy as np
 from typing import Optional, Dict, Any, Tuple
 from dotenv import load_dotenv
 from app.config import *
+from app.utils.logger import cache_logger as logger
 
 # Setup logger
-logger = logging.getLogger('smartxdr.cache')
 
 # Load environment variables
 load_dotenv()
@@ -24,7 +23,6 @@ try:
     LANGCHAIN_AVAILABLE = True
 except ImportError:
     LANGCHAIN_AVAILABLE = False
-
 
 class ResponseCache:
     """Cache API responses with semantic similarity matching using LangChain"""

@@ -7,7 +7,6 @@ import re
 import hashlib
 import time
 import json
-import logging
 from typing import Optional, Dict, Any, List, cast
 from datetime import datetime, timedelta
 from langchain_openai import ChatOpenAI
@@ -31,9 +30,9 @@ from app.config import (
 from app.services.prompt_builder_service import PromptBuilder
 from app.utils.rate_limit import APIUsageTracker
 from app.utils.cache import ResponseCache
+from app.utils.logger import query_logger as logger
 
 # Setup logger
-logger = logging.getLogger('smartxdr.query')
 
 # Load environment variables
 load_dotenv()
@@ -56,7 +55,6 @@ usage_tracker = APIUsageTracker(
     max_daily_cost=MAX_DAILY_COST
 )
 response_cache = ResponseCache(ttl=CACHE_TTL, enabled=CACHE_ENABLED, use_semantic_cache=SEMANTIC_CACHE_ENABLED)
-
 
 def _search_and_build_context(collection, query: str, n_results: int, filter_metadata: Optional[Dict[str, Any]] = None) -> tuple[str, set[str], list[str]]:
     """
@@ -136,7 +134,6 @@ def _search_and_build_context(collection, query: str, n_results: int, filter_met
     
     return context_text, sources, context_list
 
-
 def _build_user_input(context_text: str, query: str) -> str:
     """
     Build user input for API call using PromptBuilder
@@ -149,7 +146,6 @@ def _build_user_input(context_text: str, query: str) -> str:
         context=context_text,
         query=query
     )
-
 
 def _call_openai_api(system_instructions: str, user_input: str, context_text: str, query: str) -> tuple[str, float]:
     """
@@ -208,7 +204,6 @@ def _call_openai_api(system_instructions: str, user_input: str, context_text: st
         logger.debug(f"   - Cache entries: {cache_stats['cache_size']}")
     
     return answer_text, actual_cost
-
 
 def ask(collection, query: str, n_results: int = DEFAULT_RESULTS, filter_metadata: Optional[Dict[str, Any]] = None) -> str:
     """

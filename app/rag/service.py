@@ -4,7 +4,6 @@ RAG Service - Business Logic Layer
 Orchestrates RAG operations, manages embeddings, and integrates with LLM.
 Uses dependency injection for testability and flexibility.
 """
-import logging
 import time
 from typing import Optional, List, Dict, Any, Tuple
 from pathlib import Path
@@ -12,10 +11,7 @@ from pathlib import Path
 from app.rag.repository import RAGRepository
 from app.rag.models import Document, DocumentMetadata, QueryResult
 from app.config import DEBUG_MODE, DEBUG_TEXT_LENGTH, MAX_RERANK_CANDIDATES
-
-
-logger = logging.getLogger('smartxdr.rag.service')
-
+from app.utils.logger import rag_service_logger as logger
 
 class RAGService:
     """

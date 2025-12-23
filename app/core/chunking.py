@@ -4,7 +4,6 @@ Using LangChain text splitters for token-aware, overlap-enabled chunking
 """
 import json
 import os
-import logging
 from typing import Dict, List, Any
 from langchain_text_splitters import (
     RecursiveCharacterTextSplitter,
@@ -12,9 +11,9 @@ from langchain_text_splitters import (
     MarkdownTextSplitter
 )
 from app.config import NETWORK_DIR, MITRE_DIR, MIN_CHUNK_SIZE, MAX_CHUNK_SIZE
+from app.utils.logger import chunking_logger as logger
 
 # Setup logger
-logger = logging.getLogger('smartxdr.chunking')
 
 # Calculate chunk overlap (10-15% of max chunk size for good context continuity)
 CHUNK_OVERLAP = min(200, int(MAX_CHUNK_SIZE * 0.15))
@@ -34,7 +33,6 @@ _recursive_splitter = RecursiveCharacterTextSplitter(
     separators=["\n\n", "\n", ". ", " ", ""],  # Smart boundary detection
     is_separator_regex=False
 )
-
 
 def json_to_natural_text(data: Dict[str, Any], filename: str) -> List[str]:
     """Convert complex JSON to natural language paragraphs for better semantic understanding."""
@@ -250,7 +248,6 @@ These are intentionally installed vulnerabilities for testing detection capabili
     
     return texts
 
-
 def mitre_to_natural_text(technique: Dict[str, Any]) -> str:
     """Convert MITRE ATT&CK technique to natural language for RAG."""
     mitre_id = technique.get("mitre_id", "Unknown")
@@ -300,7 +297,6 @@ def mitre_to_natural_text(technique: Dict[str, Any]) -> str:
     
     return "\n".join(text_parts)
 
-
 def load_topology_context() -> str:
     """Load network topology to create traffic flow context."""
     topology_file = os.path.join(NETWORK_DIR, "topology.json")
@@ -332,7 +328,6 @@ def load_topology_context() -> str:
     except Exception as e:
         logger.warning(f" Cannot load topology: {e}")
         return ""
-
 
 def markdown_to_chunks(content: str, filename: str, max_chunk_size: int = None) -> List[str]:
     """
@@ -386,7 +381,6 @@ def markdown_to_chunks(content: str, filename: str, max_chunk_size: int = None) 
     
     logger.debug(f"Markdown split into {len(chunks)} chunks with overlap={CHUNK_OVERLAP}")
     return chunks
-
 
 def text_to_chunks(content: str, filename: str, max_chunk_size: int = None) -> List[str]:
     """
@@ -443,7 +437,6 @@ def text_to_chunks(content: str, filename: str, max_chunk_size: int = None) -> L
     logger.debug(f"Text split into {len(chunks)} chunks with overlap={CHUNK_OVERLAP}")
     return chunks
 
-
 def playbook_json_to_chunks(data: Dict[str, Any], filename: str) -> List[str]:
     """
     Convert playbook JSON to semantic chunks.
@@ -493,7 +486,6 @@ Steps:
         chunks.append(chunk_text)
     
     return chunks
-
 
 def knowledge_base_json_to_chunks(data: Dict[str, Any], filename: str) -> List[str]:
     """
@@ -553,7 +545,6 @@ Keywords: {title}, {category}, {', '.join(tags[:5]) if tags else ''}"""
         chunks.append(chunk_text)
     
     return chunks
-
 
 def dataflow_to_natural_text(data: Dict[str, Any], filename: str) -> List[str]:
     """
@@ -647,7 +638,6 @@ Keywords: routing, traffic flow, data path, pipeline"""
         chunks.append(routing_chunk)
     
     return chunks
-
 
 def pdf_to_chunks(file_path: str, filename: str, max_chunk_size: int = None) -> List[str]:
     """

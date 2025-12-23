@@ -1,3 +1,4 @@
+from app.utils.logger import pdf_logger as logger
 """
 PDF Processing Module for RAG
 
@@ -10,12 +11,8 @@ Key features:
 - Handle corrupted/encrypted PDFs gracefully
 - Memory-efficient streaming for large files
 """
-import logging
 from pathlib import Path
 from typing import Optional, List, Tuple, Dict, Any
-
-logger = logging.getLogger('smartxdr.core.pdf_processor')
-
 
 def extract_text_from_pdf(file_path: str | Path) -> Optional[str]:
     """
@@ -81,7 +78,6 @@ def extract_text_from_pdf(file_path: str | Path) -> Optional[str]:
     except Exception as e:
         logger.error(f"Error extracting text from PDF {file_path}: {e}")
         return None
-
 
 def extract_text_with_page_info(file_path: str | Path) -> Optional[Tuple[str, List[Dict[str, Any]]]]:
     """
@@ -157,7 +153,6 @@ def extract_text_with_page_info(file_path: str | Path) -> Optional[Tuple[str, Li
         logger.error(f"Error extracting text with page info from PDF {file_path}: {e}")
         return None
 
-
 def get_page_for_position(char_position: int, page_info: List[Dict[str, Any]]) -> Optional[int]:
     """
     Get the page number for a character position.
@@ -173,7 +168,6 @@ def get_page_for_position(char_position: int, page_info: List[Dict[str, Any]]) -
         if info["start_char"] <= char_position < info["end_char"]:
             return info["page"]
     return None
-
 
 def get_pdf_metadata(file_path: str | Path) -> Optional[Dict[str, Any]]:
     """

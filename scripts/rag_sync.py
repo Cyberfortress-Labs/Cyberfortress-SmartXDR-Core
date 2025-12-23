@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import Dict, List, Set, Tuple, Optional
 from datetime import datetime
 from dataclasses import dataclass
-
+import fnmatch
 # Force unbuffered output for real-time display in Docker
 sys.stdout.reconfigure(line_buffering=True) if hasattr(sys.stdout, 'reconfigure') else None
 
@@ -43,6 +43,7 @@ sys.stdout.reconfigure(line_buffering=True) if hasattr(sys.stdout, 'reconfigure'
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.config import CHROMA_DB_PATH, BATCH_SIZE as CONFIG_BATCH_SIZE, MAX_CHUNK_SIZE
+from app.utils.logger import setup_logger
 from app.core.chunking import (
     json_to_natural_text, 
     mitre_to_natural_text,
@@ -52,6 +53,9 @@ from app.core.chunking import (
     pdf_to_chunks
 )
 import json
+
+# Setup logger
+logger = setup_logger("rag_sync")
 
 
 @dataclass
@@ -85,8 +89,8 @@ SKIP_FILES = set(f.strip() for f in _skip_files_str.split(',') if f.strip())
 
 
 def log(msg: str):
-    """Print with immediate flush for Docker output"""
-    log(msg, flush=True)
+    """Log message using app logger"""
+    logger.info(msg)
 
 
 class RAGSync:

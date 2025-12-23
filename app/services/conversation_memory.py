@@ -11,11 +11,11 @@ import os
 import uuid
 import time
 import json
-import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 from app.config import *
+from app.utils.logger import conversation_logger as logger
 
 # LangChain imports for conversation memory
 try:
@@ -28,10 +28,6 @@ except ImportError:
     HumanMessage = None
     AIMessage = None
     BaseMessage = None
-
-logger = logging.getLogger('smartxdr.conversation')
-
-
 
 @dataclass
 class Message:
@@ -57,7 +53,6 @@ class Message:
             timestamp=data.get("timestamp", time.time()),
             metadata=data.get("metadata", {})
         )
-
 
 class ConversationMemory:
     """
@@ -863,7 +858,6 @@ Output only the summary."""
             "session_ttl_seconds": self.session_ttl,
             "default_history_limit": self.default_history_limit
         }
-
 
 # Singleton instance
 def get_conversation_memory() -> ConversationMemory:

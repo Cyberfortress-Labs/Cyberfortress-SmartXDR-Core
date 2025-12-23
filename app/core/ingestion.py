@@ -5,7 +5,6 @@ import json
 import os
 import hashlib
 import glob
-import logging
 from app.config import (
     ASSETS_DIR, ECOSYSTEM_DIR, NETWORK_DIR, MITRE_DIR,
     PLAYBOOKS_DIR, KNOWLEDGE_BASE_DIR, POLICIES_DIR
@@ -14,16 +13,10 @@ from app.core.chunking import (
     json_to_natural_text, load_topology_context, mitre_to_natural_text,
     markdown_to_chunks, text_to_chunks, playbook_json_to_chunks, knowledge_base_json_to_chunks
 )
-
-# Setup logger
-logger = logging.getLogger('smartxdr.ingestion')
-
-
-def get_file_hash(filepath):
+from app.utils.logger import ingestion_logger as logger
     """Calculate SHA256 hash to detect file changes."""
     with open(filepath, "rb") as f:
         return hashlib.sha256(f.read()).hexdigest()
-
 
 def ingest_data(collection):
     """

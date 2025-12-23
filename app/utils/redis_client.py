@@ -5,11 +5,9 @@ Provides a singleton Redis client for the application.
 Centralizes connection logic and configuration.
 """
 import os
-import logging
 import redis
+from app.utils.logger import redis_logger as logger
 from typing import Optional
-
-logger = logging.getLogger('smartxdr.redis')
 
 class RedisClient:
     _instance = None

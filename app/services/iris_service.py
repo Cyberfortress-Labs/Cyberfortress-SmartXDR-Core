@@ -4,16 +4,14 @@ IRIS API Service - Integration với DFIR-IRIS Case Management
 import os
 import re
 import json
-import logging
 import requests
+from app.utils.logger import iris_logger as logger
 from typing import Optional, Dict, Any
 from dotenv import load_dotenv
 
 # Setup logger
-logger = logging.getLogger('smartxdr.iris')
 
 load_dotenv()
-
 
 class IRISService:
     """

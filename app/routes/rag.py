@@ -6,7 +6,6 @@ Provides endpoints for:
 - RAG query (POST /api/rag/query)
 - Statistics (GET /api/rag/stats)
 """
-import logging
 from typing import Optional, List
 from flask import Blueprint, request, jsonify
 from pydantic import ValidationError
@@ -16,16 +15,13 @@ from app.rag import schemas
 from app.middleware.auth import require_api_key
 from app.utils.rate_limit import rate_limit
 from app.config import DEBUG_MODE
-
-
-logger = logging.getLogger('smartxdr.rag.routes')
+from app.utils.logger import rag_route_logger as logger
 
 # Create Blueprint
 rag_bp = Blueprint('rag', __name__, url_prefix='/api/rag')
 
 # Initialize RAG Service (singleton)
 rag_service = RAGService()
-
 
 # ==================== Document Management Endpoints ====================
 
@@ -88,7 +84,6 @@ def create_document():
             "status": "error",
             "error": str(e)
         }), 500
-
 
 @rag_bp.route('/documents/batch', methods=['POST'])
 @require_api_key
@@ -157,7 +152,6 @@ def create_documents_batch():
             "error": str(e)
         }), 500
 
-
 @rag_bp.route('/documents', methods=['GET'])
 @require_api_key
 @rate_limit(max_calls=60, window=60)  # 60 requests per minute
@@ -223,7 +217,6 @@ def list_documents():
             "error": str(e)
         }), 500
 
-
 @rag_bp.route('/documents/<document_id>', methods=['GET'])
 @require_api_key
 @rate_limit(max_calls=60, window=60)
@@ -258,7 +251,6 @@ def get_document(document_id: str):
             "status": "error",
             "error": str(e)
         }), 500
-
 
 @rag_bp.route('/documents/<document_id>', methods=['PUT'])
 @require_api_key
@@ -310,7 +302,6 @@ def update_document(document_id: str):
             "error": str(e)
         }), 500
 
-
 @rag_bp.route('/documents/<document_id>', methods=['DELETE'])
 @require_api_key
 @rate_limit(max_calls=30, window=60)
@@ -346,7 +337,6 @@ def delete_document(document_id: str):
             "status": "error",
             "error": str(e)
         }), 500
-
 
 # ==================== RAG Query Endpoint ====================
 
@@ -422,7 +412,6 @@ def rag_query():
             "error": str(e)
         }), 500
 
-
 # ==================== Statistics & Management ====================
 
 @rag_bp.route('/stats', methods=['GET'])
@@ -465,7 +454,6 @@ def get_stats():
             "status": "error",
             "error": str(e)
         }), 500
-
 
 @rag_bp.route('/health', methods=['GET'])
 def health_check():

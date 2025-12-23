@@ -3,15 +3,11 @@ RAG Monitoring & Logging Utilities
 
 Provides comprehensive logging and metrics tracking for RAG operations.
 """
-import logging
 import time
+from app.utils.logger import rag_monitoring_logger as logger
 from typing import Dict, Any, Optional
 from functools import wraps
 from datetime import datetime
-
-
-logger = logging.getLogger('smartxdr.rag.monitoring')
-
 
 class RAGMetricsTracker:
     """Track RAG operation metrics"""
@@ -112,15 +108,12 @@ class RAGMetricsTracker:
         self.__init__()
         logger.warning("Metrics reset")
 
-
 # Global metrics tracker instance
 _metrics_tracker = RAGMetricsTracker()
-
 
 def get_metrics_tracker() -> RAGMetricsTracker:
     """Get global metrics tracker instance"""
     return _metrics_tracker
-
 
 def log_operation(operation_name: str):
     """
@@ -153,7 +146,6 @@ def log_operation(operation_name: str):
         
         return wrapper
     return decorator
-
 
 def log_query(func):
     """
@@ -203,7 +195,6 @@ def log_query(func):
             raise
     
     return wrapper
-
 
 def setup_rag_logging(log_level: str = "INFO", log_file: Optional[str] = None):
     """

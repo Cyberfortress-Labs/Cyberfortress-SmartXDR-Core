@@ -87,15 +87,46 @@ def get_logger(name: str = "smartxdr") -> logging.Logger:
 # ============================================================================
 
 # Main application logger
-app_logger = setup_logger("smartxdr")
+app_logger = setup_logger("smartxdr.app")
 
-# Service-specific loggers
-llm_logger = setup_logger("LLM Service")
-rag_logger = setup_logger("RAG Service")
-rag_sync_logger = setup_logger("RAG-Sync")
-telegram_logger = setup_logger("Telegram")
-iris_logger = setup_logger("IRIS")
-enrich_logger = setup_logger("Enrich")
-alert_logger = setup_logger("Alert")
-cache_logger = setup_logger("Cache")
-auth_logger = setup_logger("Auth")
+# Services
+llm_logger = setup_logger("smartxdr.llm")
+rag_service_logger = setup_logger("smartxdr.rag.service")
+rag_sync_logger = setup_logger("smartxdr.rag.sync")
+telegram_logger = setup_logger("smartxdr.telegram")
+iris_logger = setup_logger("smartxdr.iris")
+enrich_logger = setup_logger("smartxdr.enrich")
+alert_logger = setup_logger("smartxdr.alert")
+
+# RAG module
+rag_repository_logger = setup_logger("smartxdr.rag.repository")
+rag_monitoring_logger = setup_logger("smartxdr.rag.monitoring")
+
+# Core module  
+database_logger = setup_logger("smartxdr.database")
+chunking_logger = setup_logger("smartxdr.chunking")
+ingestion_logger = setup_logger("smartxdr.ingestion")
+query_logger = setup_logger("smartxdr.query")
+pdf_logger = setup_logger("smartxdr.pdf")
+openai_logger = setup_logger("smartxdr.openai")
+
+# Routes
+ai_route_logger = setup_logger("smartxdr.routes.ai")
+rag_route_logger = setup_logger("smartxdr.routes.rag")
+
+# Middleware & Utils
+auth_logger = setup_logger("smartxdr.auth")
+cache_logger = setup_logger("smartxdr.cache")
+redis_logger = setup_logger("smartxdr.redis")
+
+# Conversation & Memory
+conversation_logger = setup_logger("smartxdr.conversation")
+
+# Elasticsearch
+es_logger = setup_logger("smartxdr.elasticsearch")
+
+# Email
+email_logger = setup_logger("smartxdr.email")
+
+# Daily report
+scheduler_logger = setup_logger("smartxdr.scheduler")

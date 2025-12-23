@@ -18,20 +18,16 @@ import sys
 import time
 import signal
 import subprocess
-import logging
 from pathlib import Path
 from datetime import datetime
 
 # Add parent to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='[%(asctime)s] [RAG-Scheduler] %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-logger = logging.getLogger('rag_sync_scheduler')
+from app.utils.logger import setup_logger
+
+# Setup logger
+logger = setup_logger("RAG-Scheduler")
 
 # Configuration
 DEFAULT_INTERVAL = 60  # 60 minutes = 1 hour

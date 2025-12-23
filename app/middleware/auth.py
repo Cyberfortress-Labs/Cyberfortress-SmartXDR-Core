@@ -8,12 +8,10 @@ import json
 from flask import request, jsonify, g
 from typing import Optional, Callable
 from datetime import datetime
-import logging
 
 from app.models.db_models import db, APIKeyModel
 from app.utils.cryptography import verify_api_key
-
-logger = logging.getLogger('smartxdr.auth')
+from app.utils.logger import auth_logger as logger
 
 
 class APIKeyManager:

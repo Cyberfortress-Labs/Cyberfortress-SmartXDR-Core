@@ -1,3 +1,4 @@
+from app.utils.logger import enrich_logger as logger
 """
 IOC Enrichment Service - Orchestrates IOC analysis and description updates
 
@@ -7,11 +8,7 @@ This service coordinates:
 3. Adding comments to IOCs
 4. Updating IOC descriptions with summaries
 """
-import logging
 from typing import Optional, Dict, Any
-
-logger = logging.getLogger('smartxdr.enrich')
-
 
 class EnrichService:
     """
@@ -224,7 +221,6 @@ class EnrichService:
             results["error"] = str(e)
         
         return results
-
 
 # Singleton instance
 _enrich_service = None

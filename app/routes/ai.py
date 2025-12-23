@@ -2,15 +2,14 @@
 AI/LLM API Routes - RAG Query Endpoint with Conversation Memory
 """
 import traceback
-import logging
 from flask import Blueprint, request, jsonify
 from app import get_collection
 from app.services.llm_service import LLMService
 from app.middleware.auth import require_api_key
 from app.config import *
+from app.utils.logger import ai_route_logger as logger
 
 # Get logger
-logger = logging.getLogger('smartxdr.ai')
 
 ai_bp = Blueprint('ai', __name__)
 
@@ -21,7 +20,6 @@ try:
 except Exception as e:
     logger.error(f"Failed to initialize LLM Service: {e}", exc_info=True)
     llm_service = None
-
 
 @ai_bp.route('/ask', methods=['POST'])
 @require_api_key('ai:ask')
@@ -176,7 +174,6 @@ def ask_llm():
             'message': f'Internal server error: {str(e)}'
         }), 500
 
-
 @ai_bp.route('/sessions/<session_id>/history', methods=['GET'])
 @require_api_key('ai:ask')
 def get_session_history(session_id: str):
@@ -216,7 +213,6 @@ def get_session_history(session_id: str):
             'message': f'Failed to get history: {str(e)}'
         }), 500
 
-
 @ai_bp.route('/sessions/<session_id>', methods=['DELETE'])
 @require_api_key('ai:admin')
 def clear_session(session_id: str):
@@ -253,7 +249,6 @@ def clear_session(session_id: str):
             'message': f'Failed to clear session: {str(e)}'
         }), 500
 
-
 @ai_bp.route('/sessions/stats', methods=['GET'])
 @require_api_key('ai:stats')
 def get_conversation_stats():
@@ -287,7 +282,6 @@ def get_conversation_stats():
             'status': 'error',
             'message': f'Failed to get stats: {str(e)}'
         }), 500
-
 
 @ai_bp.route('/stats', methods=['GET'])
 @require_api_key('ai:stats')
@@ -326,7 +320,6 @@ def get_stats():
             'status': 'error',
             'message': f'Failed to get stats: {str(e)}'
         }), 500
-
 
 @ai_bp.route('/cache/clear', methods=['POST'])
 @require_api_key('ai:admin')

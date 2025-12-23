@@ -5,19 +5,16 @@ import os
 import re
 import json
 import hashlib
-import logging
 from pathlib import Path
 from typing import Optional, Dict, Any
 from openai import APIError, APIConnectionError, RateLimitError
 from dotenv import load_dotenv
 from app.config import *
 from app.core.openai_client import get_openai_client
+from app.utils.logger import llm_logger as logger
 
 # Import analyzer registry
 from app.services.analyzers import get_handler, get_all_handlers, get_registered_analyzer_names
-
-# Setup module-level logger
-logger = logging.getLogger('smartxdr.llm')
 
 load_dotenv()
 
@@ -43,9 +40,6 @@ class LLMService:
     def __init__(self):
         if self._initialized:
             return
-        
-        import logging
-        logger = logging.getLogger('smartxdr.llm')
         
         try:
             # Use shared OpenAI client
@@ -245,7 +239,7 @@ class LLMService:
         if DEBUG_MODE:
             logger.debug(f"Question: {query}")
             if session_id:
-                print(f"[LLM Service] Session: {session_id[:DEBUG_TEXT_LENGTH]}...")
+                logger.info(f"Session: {session_id[:DEBUG_TEXT_LENGTH]}...")
         
         # Check rate limit
         if not self.usage_tracker.check_rate_limit():
@@ -280,12 +274,12 @@ class LLMService:
                     is_summary = "Previous conversation summary:" in conversation_history_text
                     is_langchain = "Previous conversation:" in conversation_history_text
                     format_type = "LANGCHAIN" if is_langchain else ("SUMMARY" if is_summary else "RAW")
-                    print(f"[LLM Service] History: {format_type} ({len(conversation_history_text)} chars)")
-                    print(f"[LLM Service] Content preview: {conversation_history_text[:150]}...")
+                    logger.info(f"[LLM Service] History: {format_type} ({len(conversation_history_text)} chars)")
+                    logger.info(f"[LLM Service] Content preview: {conversation_history_text[:150]}...")
                     
             except Exception as e:
                 if DEBUG_MODE:
-                    print(f"[LLM Service] Conversation memory error: {e}")
+                    logger.info(f"[LLM Service] Conversation memory error: {e}")
                 # Continue without conversation memory
         
         # Check cache (semantic + exact match)
@@ -296,7 +290,7 @@ class LLMService:
             
             if cached_response:
                 if DEBUG_MODE:
-                    print(f"[LLM Service] CACHE HIT for: {query[:DEBUG_TEXT_LENGTH]}...")
+                    logger.info(f"[LLM Service] CACHE HIT for: {query[:DEBUG_TEXT_LENGTH]}...")
                 # Get sources from RAG for cached response
                 query_result = rag_service.query(query, top_k, filters)
                 
@@ -329,7 +323,7 @@ class LLMService:
         
         if skip_rag:
             if DEBUG_MODE:
-                print(f"[LLM Service] Skipping RAG for simple query: {query[:50]}")
+                logger.info(f"[LLM Service] Skipping RAG for simple query: {query[:50]}")
             context_text = ""
             sources = set()
         else:
@@ -339,7 +333,7 @@ class LLMService:
                 if context_entities:
                     rag_query = f"{query} (context: {context_entities})"
                     if DEBUG_MODE:
-                        print(f"[LLM Service] Enhanced RAG query: {rag_query[:DEBUG_TEXT_LENGTH]}...")
+                        logger.info(f"[LLM Service] Enhanced RAG query: {rag_query[:DEBUG_TEXT_LENGTH]}...")
             
             context_text, sources = rag_service.build_context_from_query(
                 query_text=rag_query,
@@ -409,7 +403,7 @@ class LLMService:
                     )
                 except Exception as e:
                     if DEBUG_MODE:
-                        print(f"[LLM Service] Failed to store in conversation memory: {e}")
+                        logger.info(f"[LLM Service] Failed to store in conversation memory: {e}")
             
             result = {
                 "status": "success",
@@ -606,7 +600,7 @@ class LLMService:
         # If query subject is NOT in history, this is a topic change - skip context
         if query_subjects and not any(subj in history_text.lower() for subj in query_subjects):
             if DEBUG_MODE:
-                print(f"[LLM Service] Topic change detected, skipping history context")
+                logger.info(f"[LLM Service] Topic change detected, skipping history context")
             return ""
         
         # Filter entities that are relevant to current query
@@ -708,13 +702,13 @@ class LLMService:
             self._device_keywords_mtime = current_mtime
             
             if DEBUG_MODE:
-                print(f"[LLM Service] Loaded {len(keywords)} device keywords from JSON")
+                logger.info(f"[LLM Service] Loaded {len(keywords)} device keywords from JSON")
             
             return self._device_keywords_cache
             
         except Exception as e:
             if DEBUG_MODE:
-                print(f"[LLM Service] Failed to load device keywords: {e}")
+                logger.info(f"[LLM Service] Failed to load device keywords: {e}")
             # Fallback to minimal set if JSON fails
             return ['siem', 'firewall', 'server', 'attacker', 'wazuh', 'elastic']
     
@@ -751,7 +745,7 @@ class LLMService:
                 return entities
         except Exception as e:
             if DEBUG_MODE:
-                print(f"[LLM Service] LLM entity extraction failed: {e}, using fallback")
+                logger.info(f"[LLM Service] LLM entity extraction failed: {e}, using fallback")
         
         # Fallback: simple keyword matching
         return self._simple_entity_extraction(history_text)
@@ -788,7 +782,7 @@ class LLMService:
             entities = ' '.join(entities.split()[:5])
             
             if DEBUG_MODE and entities:
-                print(f"[LLM Service] Extracted entities: {entities}")
+                logger.info(f"[LLM Service] Extracted entities: {entities}")
             
             return entities
             
@@ -858,7 +852,7 @@ class LLMService:
             output_tokens = getattr(usage, 'output_tokens', 0)
             
             if DEBUG_MODE:
-                print(f"[LLM Service] Tokens: {input_tokens} in, {output_tokens} out")
+                logger.info(f"[LLM Service] Tokens: {input_tokens} in, {output_tokens} out")
             
             actual_cost = (input_tokens / 1_000_000) * INPUT_PRICE_PER_1M + \
                          (output_tokens / 1_000_000) * OUTPUT_PRICE_PER_1M

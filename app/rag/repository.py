@@ -4,7 +4,6 @@ RAG Repository - Data Access Layer for ChromaDB
 Handles all direct interactions with ChromaDB vector database.
 Supports dependency injection for easy testing and future database swapping.
 """
-import logging
 import hashlib
 from datetime import datetime
 from typing import Optional, List, Dict, Any, Tuple
@@ -15,10 +14,7 @@ from chromadb.config import Settings
 from app.rag.models import Document, DocumentMetadata, QueryResult
 from app.config import DEBUG_MODE
 from app.core.embeddings import OpenAIEmbeddingFunction
-
-
-logger = logging.getLogger('smartxdr.rag.repository')
-
+from app.utils.logger import rag_repository_logger as logger
 
 class RAGRepository:
     """

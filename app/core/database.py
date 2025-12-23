@@ -4,11 +4,8 @@ ChromaDB initialization and collection management
 Uses RAGRepository as the single source of truth for ChromaDB client initialization.
 This module provides backward compatibility for legacy code that expects a raw collection.
 """
-import logging
 from app.config import DB_PATH, COLLECTION_NAME
-
-logger = logging.getLogger('smartxdr.database')
-
+from app.utils.logger import database_logger as logger
 
 def initialize_database():
     """
