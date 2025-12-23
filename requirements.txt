@@ -54,6 +54,10 @@ langchain-chroma>=1.1.0
 langchain-text-splitters>=1.0.0
 langchain-community>=0.4.1
 
+# PyTorch CPU-only (prevent CUDA downloads - saves ~2-3GB)
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+
 # Cross-Encoder Re-ranking (optional, for better RAG relevance)
 sentence-transformers>=2.2.0
 
