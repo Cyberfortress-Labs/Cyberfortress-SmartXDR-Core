@@ -2,7 +2,7 @@
 
 [![Version](https://img.shields.io/badge/version-1.0.0--RC-blue)](https://github.com/Cyberfortress-Labs/Cyberfortress-SmartXDR-Core/releases)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
-[![Docker](https://img.shields.io/badge/docker-ready-blue)](https://hub.docker.com/r/wanthinnn/smartxdr-core)
+[![Docker](https://img.shields.io/badge/docker-ready-blue)](https://hub.docker.com/r/wanthinnn/smartxdr-core) 
 
 **AI-Powered Extended Detection and Response Platform**
 
