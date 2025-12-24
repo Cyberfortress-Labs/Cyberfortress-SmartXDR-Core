@@ -79,3 +79,4 @@ Dockerfile*
 .env.example
 start
 Makefile
+scripts/
