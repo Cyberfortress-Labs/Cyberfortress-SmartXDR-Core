@@ -282,10 +282,21 @@ class LLMService:
                     logger.info(f"[LLM Service] Conversation memory error: {e}")
                 # Continue without conversation memory
         
-        # Check cache (semantic + exact match)
+        # Check cache (hybrid: exact match first, then semantic match)
         # Cache works even with session_id - helps with repeated questions
+        # Include last message in cache key to differentiate conversation context
         if use_cache:
-            cache_key = self.response_cache.get_cache_key(query, "")
+            # Extract last assistant message for cache key differentiation
+            last_message = ""
+            if conversation_history_text:
+                # Find last "Assistant:" line in history
+                lines = conversation_history_text.split('\n')
+                for line in reversed(lines):
+                    if line.strip().startswith('Assistant:'):
+                        last_message = line[:100]  # Use first 100 chars
+                        break
+            
+            cache_key = self.response_cache.get_cache_key(query, "", last_message)
             cached_response = self.response_cache.get(cache_key, query)
             
             if cached_response:
@@ -382,7 +393,15 @@ class LLMService:
             # Works alongside conversation memory - cache speeds up identical queries,
             # while conversation memory maintains context continuity
             if use_cache:
-                cache_key = self.response_cache.get_cache_key(query, "")
+                # Use same last_message extraction as cache GET for consistency
+                last_message_for_cache = ""
+                if conversation_history_text:
+                    lines = conversation_history_text.split('\n')
+                    for line in reversed(lines):
+                        if line.strip().startswith('Assistant:'):
+                            last_message_for_cache = line[:100]
+                            break
+                cache_key = self.response_cache.get_cache_key(query, "", last_message_for_cache)
                 self.response_cache.set(cache_key, answer, query)
             
             # Store in conversation memory if session_id provided
