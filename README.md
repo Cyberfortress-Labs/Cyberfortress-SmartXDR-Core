@@ -98,7 +98,7 @@ Services:
 - Telegram Bot Token (optional, for Telegram integration)
 - Cloudflare Tunnel (optional, for external webhook access)
 
-> **Note**: On Windows, the `./start` script must be executed in Git Bash or MinGW64. It will not run in Command Prompt or PowerShell.
+> **Note**: On Windows, the `./start` script must be executed in Git Bash or MinGW64. It will not run in Command Prompt or PowerShell. Or you can use WSL2 (Windows Subsystem for Linux 2) to run the script.
 
 
 ## Deployment Modes
