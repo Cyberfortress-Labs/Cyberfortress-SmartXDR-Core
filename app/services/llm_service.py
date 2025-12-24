@@ -378,8 +378,10 @@ class LLMService:
                 if sources:
                     answer += f"\n\nSources: {', '.join(sorted(sources))}"
             
-            # Cache the response (only if use_cache=True and no session)
-            if use_cache and not session_id:
+            # Cache the response for faster repeated queries
+            # Works alongside conversation memory - cache speeds up identical queries,
+            # while conversation memory maintains context continuity
+            if use_cache:
                 cache_key = self.response_cache.get_cache_key(query, "")
                 self.response_cache.set(cache_key, answer, query)
             
