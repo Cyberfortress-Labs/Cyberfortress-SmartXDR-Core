@@ -1,5 +1,9 @@
 # Cyberfortress SmartXDR Core
 
+![Version](https://img.shields.io/badge/version-1.0.0--RC-blue)
+![License](https://img.shields.io/badge/license-AGPL--3.0-blue)
+![Docker](https://img.shields.io/badge/docker-ready-blue)
+
 **AI-Powered Extended Detection and Response Platform**
 
 SmartXDR Core is an intelligent security operations platform that leverages Large Language Models (LLM) and Retrieval-Augmented Generation (RAG) to enhance threat detection, analysis, and response capabilities.
@@ -73,15 +77,16 @@ SmartXDR Core
 ├── db/chroma_conv/       # Vector database (conversation history)
 ├── nginx/                # Reverse proxy with SSL/TLS
 ├── cloudflared/          # Cloudflare Tunnel configuration
+├── data/                 # RAG auto-sync directory
 └── tests/                # Unit and integration tests
 
 Services:
-├── nginx         - HTTPS reverse proxy (ports 8080, 8443)
-├── api           - SmartXDR Core API (Flask + Gunicorn)
-├── chromadb      - Vector database for RAG
-├── chromadb-conv - Vector database for conversations
-├── redis         - Cache for conversation memory
-└── cloudflared   - Cloudflare Tunnel (optional)
+├── nginx          - HTTPS reverse proxy (ports 8080, 8443)
+├── api            - SmartXDR Core API (Flask + Gunicorn)
+├── chromadb-data  - Vector database for RAG (port 8000)
+├── chromadb-conv  - Vector database for conversations (port 8001)
+├── redis          - Cache for conversation memory (port 6379)
+└── cloudflared    - Cloudflare Tunnel (optional)
 ```
 
 ## Requirements
@@ -92,6 +97,9 @@ Services:
 - IRIS instance (optional, for IOC enrichment)
 - Telegram Bot Token (optional, for Telegram integration)
 - Cloudflare Tunnel (optional, for external webhook access)
+
+> **Note**: On Windows, the `./start` script must be executed in Git Bash or MinGW64. It will not run in Command Prompt or PowerShell.
+
 
 ## Deployment Modes
 
@@ -243,6 +251,12 @@ curl -X POST https://localhost:8443/api/ai/ask \
 | `NGINX_HTTP_PORT`        | HTTP port                          | No       | 8080    |
 | `CHROMA_PORT`            | ChromaDB port                      | No       | 8000    |
 | `REDIS_PORT`             | Redis port                         | No       | 6379    |
+| `SMARTXDR_URL`           | External display URL               | No       | -       |
+| `CROSS_ENCODER_MODEL`    | Re-ranking model name              | No       | ms-marco-MiniLM-L-6-v2 |
+| `RERANKING_ENABLED`      | Enable re-ranking                  | No       | true    |
+| `RAG_SYNC_ENABLED`       | Enable auto RAG sync               | No       | true    |
+| `RAG_SYNC_INTERVAL`      | Sync interval (minutes)            | No       | 60      |
+| `RAG_SYNC_SKIP_FILES`    | Files to skip during sync          | No       | README.md |
 
 ### Endpoint Configuration
 
@@ -580,11 +594,12 @@ The `./start` script provides a convenient interface for all operations:
 
 - **HTTP**: http://localhost:8080
 - **HTTPS**: https://localhost:8443 (self-signed cert)
-- **ChromaDB**: http://localhost:8000
+- **ChromaDB Data**: http://localhost:8000 (RAG knowledge base)
+- **ChromaDB Conv**: http://localhost:8001 (conversation history)
 - **Redis**: localhost:6379
 
 ## License
 
-This project is licensed under the Open Software License 3.0 (OSL-3.0).
+This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0).
 
 See [LICENSE](LICENSE) for details.
