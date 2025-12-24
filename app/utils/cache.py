@@ -46,7 +46,7 @@ class ResponseCache:
         self._redis_available = False
         self._init_redis()
         
-        self.similarity_threshold = 0.85  # 85% similarity = cache hit
+        self.similarity_threshold = 0.96
         
         # Initialize LangChain embeddings if semantic cache is enabled
         if self.use_semantic_cache:
@@ -169,20 +169,116 @@ class ResponseCache:
             return best_match_key, best_similarity
         return None, 0.0
     
-    def get_cache_key(self, query: str, context_hash: str) -> str:
+    # ==================== Instruction Modifier Detection ====================
+    # Used to differentiate cache keys based on user's intent/instruction style
+    # Categories: output_length, output_format, language, analysis_depth
+    
+    _INSTRUCTION_MODIFIERS = {
+        # Output length modifiers
+        'brief': [
+            'ngắn gọn', 'brief', 'tóm tắt', 'summary', 'tl;dr', 'short', 'vắn tắt',
+            'ngắn', 'gọn', 'súc tích', 'concise', 'quick', 'nhanh', 'compact',
+            '1 câu', 'một câu', 'one sentence', 'in short', 'shortly'
+        ],
+        'detailed': [
+            'chi tiết', 'detailed', 'giải thích', 'explain', 'elaborate', 'cụ thể',
+            'rõ ràng', 'đầy đủ', 'comprehensive', 'thorough', 'in-depth', 'deep dive',
+            'phân tích', 'analyze', 'mở rộng', 'expand', 'more details', 'thêm chi tiết',
+            'kỹ hơn', 'sâu hơn', 'deeper', 'extensively', 'full explanation'
+        ],
+        
+        # Output format modifiers
+        'list': [
+            'liệt kê', 'list', 'bullet', 'enumerate', 'danh sách', 'các bước',
+            'steps', 'từng bước', 'step by step', 'từng mục', 'item by item'
+        ],
+        'table': [
+            'bảng', 'table', 'so sánh', 'compare', 'comparison', 'matrix',
+            'tabular', 'columns', 'rows'
+        ],
+        'code': [
+            'code', 'mã', 'script', 'command', 'lệnh', 'syntax', 'example code',
+            'ví dụ code', 'sample', 'snippet'
+        ],
+        
+        # Language/tone modifiers  
+        'technical': [
+            'kỹ thuật', 'technical', 'chuyên môn', 'professional', 'expert level',
+            'advanced', 'nâng cao', 'chuyên sâu'
+        ],
+        'simple': [
+            'đơn giản', 'simple', 'dễ hiểu', 'easy', 'beginner', 'cơ bản',
+            'basic', 'layman', 'eli5', 'explain like', 'cho người mới'
+        ],
+        
+        # Analysis type modifiers
+        'pros_cons': [
+            'ưu nhược', 'pros cons', 'advantages disadvantages', 'lợi hại',
+            'tốt xấu', 'good bad', 'benefits drawbacks'
+        ],
+        'how_to': [
+            'làm thế nào', 'how to', 'cách', 'hướng dẫn', 'tutorial', 'guide',
+            'instructions', 'setup', 'configure', 'cài đặt'
+        ],
+        'why': [
+            'tại sao', 'why', 'lý do', 'reason', 'nguyên nhân', 'cause', 'purpose'
+        ]
+    }
+    
+    def _detect_instruction_modifier(self, query: str) -> str:
         """
-        Generate cache key from normalized query and context
+        Detect instruction modifiers from query to differentiate cache keys.
+        
+        Uses multi-category detection to capture user intent more precisely.
+        Returns a composite string of all detected modifiers.
+        
+        Returns:
+            Composite modifier string (e.g., 'detailed+list+technical' or 'normal')
+        """
+        query_lower = query.lower()
+        detected_modifiers = []
+        
+        # Check each category
+        for modifier_type, keywords in self._INSTRUCTION_MODIFIERS.items():
+            for keyword in keywords:
+                if keyword in query_lower:
+                    detected_modifiers.append(modifier_type)
+                    break  # Only add each modifier type once
+        
+        # Return composite modifier or 'normal' if none detected
+        if detected_modifiers:
+            # Sort for consistent ordering
+            return '+'.join(sorted(detected_modifiers))
+        
+        return 'normal'
+    
+    def get_cache_key(self, query: str, context_hash: str, last_message: str = "") -> str:
+        """
+        Generate cache key using hybrid strategy:
+        CacheKey = Hash(NormalizedQuery + InstructionModifier + LastMessage + ContextHash)
         
         Args:
             query: User's query string
-            context_hash: Hash of the context used
+            context_hash: Hash of the context used (can be empty)
+            last_message: Last message from conversation history (optional)
             
         Returns:
             SHA256 hash as cache key
         """
         normalized_query = self._normalize_query(query)
-        combined = f"{normalized_query}:{context_hash}"
-        return hashlib.sha256(combined.encode()).hexdigest()
+        instruction_modifier = self._detect_instruction_modifier(query)
+        
+        # Include last message hash if provided (for conversation context)
+        last_msg_hash = hashlib.md5(last_message.encode()).hexdigest()[:8] if last_message else ""
+        
+        # Combine all components for cache key
+        combined = f"{normalized_query}:{instruction_modifier}:{last_msg_hash}:{context_hash}"
+        cache_key = hashlib.sha256(combined.encode()).hexdigest()
+        
+        if DEBUG_MODE:
+            logger.debug(f"Cache key generated: query='{query[:50]}...', modifier={instruction_modifier}, key={cache_key[:16]}...")
+        
+        return cache_key
     
     def get(self, cache_key: str, query: Optional[str] = None) -> Optional[str]:
         """
@@ -209,15 +305,22 @@ class ResponseCache:
                     import json
                     cached_data = json.loads(redis_data)
                     
-                    # Promote to L1
+                    # Promote to L1 with embedding regeneration for semantic search
+                    # Redis doesn't store embeddings to save space, so regenerate here
+                    if self.use_semantic_cache and 'original_query' in cached_data:
+                        query_embedding = self._get_embedding(cached_data['original_query'])
+                        if query_embedding:
+                            cached_data['query_embedding'] = query_embedding
+                    
                     self._local_cache[cache_key] = cached_data
                     
-                    logger.debug("Cache hit (L2 Redis)")
+                    logger.debug("Cache hit (L2 Redis, promoted to L1 with embedding)")
                     return cached_data['response']
             except Exception as e:
                 logger.warning(f"Redis cache error: {e}")
         
-        # Step 3: Semantic Search (Only if exact match failed)
+        # Step 3: Semantic Search (Only if exact match failed AND semantic cache enabled)
+        # Uses high threshold (0.95) for stricter matching
         if self.use_semantic_cache and query:
             query_embedding = self._get_embedding(query)
             if query_embedding:
@@ -226,12 +329,15 @@ class ResponseCache:
                     # Retrieve from L1 (since we only scan L1 for now)
                     cached_data = self._local_cache[similar_key]
                     if time.time() - cached_data['timestamp'] < self.ttl:
-                        # SAFETY CHECK: Reject if entities or action verbs conflict
+                        # SAFETY CHECK 1: Reject if entities or action verbs conflict
                         cached_query = cached_data.get('original_query', '')
                         if self._has_entity_or_action_conflict(query, cached_query):
-                            logger.warning(f"Semantic cache REJECTED: conflict detected between '{query[:DEBUG_TEXT_LENGTH]}' and '{cached_query[:DEBUG_TEXT_LENGTH]}'")
+                            logger.warning(f"Semantic cache REJECTED: conflict detected")
+                        # SAFETY CHECK 2: Reject if instruction modifier differs
+                        elif self._detect_instruction_modifier(query) != self._detect_instruction_modifier(cached_query):
+                            logger.info(f"Semantic cache REJECTED: instruction modifier mismatch (query='{self._detect_instruction_modifier(query)}' vs cached='{self._detect_instruction_modifier(cached_query)}')")
                         else:
-                            logger.debug(f"Cache hit (semantic match {similarity:.1%})")
+                            logger.info(f"Cache hit (semantic match {similarity:.1%})")
                             return cached_data['response']
         
         return None
