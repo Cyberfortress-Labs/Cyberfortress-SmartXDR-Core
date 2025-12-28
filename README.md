@@ -101,59 +101,14 @@ Services:
 > **Note**: On Windows, the `./start` script must be executed in Git Bash or MinGW64. It will not run in Command Prompt or PowerShell. Or you can use WSL2 (Windows Subsystem for Linux 2) to run the script.
 
 
-## Deployment Modes
-
-SmartXDR supports two deployment modes with distinct image sourcing strategies:
-
-### Development Mode (Local Build)
-
-**Image Source**: Built locally from source code
-
-```bash
-./start --dev build    # Build images from local source
-./start --dev start    # Start services
-```
-
-Or simply (development is default):
-```bash
-./start build
-./start up
-```
-
-**Characteristics:**
-- Images are **compiled from source code** on your machine
-- Full control over code modifications and debugging
-- Requires build time (~5-10 minutes initial build)
-- Uses `docker-compose.yml` configuration
-- Ideal for: Development, testing, code contributions
-- **No Docker Hub account required**
-
-### Production Mode (Registry Pull)
-
-**Image Source**: Pre-built images from Docker Hub
-
-```bash
-./start --prod pull    # Pull pre-built images from registry
-./start --prod start   # Start services
-```
-
-**Characteristics:**
-- Images are **pulled from Docker Hub** (`wanthinnn/smartxdr-core:latest`, `smartxdr-nginx:latest`)
-- Zero build time - instant deployment
-- Optimized images with production settings
-- Uses `docker-compose.prod.yml` configuration
-- Higher resource limits (4GB RAM vs 2GB)
-- Ideal for: Production deployments, quick setups, stable releases
-
-> **Key Difference**: Dev mode builds images locally using Dockerfile, while Prod mode downloads pre-built images from container registry.
 
 ## Quick Start
 
 ### 1. Clone Repository
 
 ```bash
-git clone https://github.com/cyberfortress/smartxdr-core.git
-cd smartxdr-core
+git clone https://github.com/Cyberfortress-Labs/Cyberfortress-SmartXDR-Core.git
+cd Cyberfortress-SmartXDR-Core
 ```
 
 ### 2. Initial Setup
@@ -168,14 +123,13 @@ nano .env
 
 Required environment variables:
 
-| Variable                 | Description                   | Required |
-| ------------------------ | ----------------------------- | -------- |
-| `OPENAI_API_KEY`         | OpenAI API key for LLM        | Yes      |
-| `SECRET_KEY`             | Flask secret key              | Yes      |
-| `SECURITY_PASSWORD_SALT` | Salt for password hashing     | Yes      |
-| `TELEGRAM_BOT_TOKEN`     | Telegram bot token            | No       |
-| `ELASTICSEARCH_HOSTS`    | Elasticsearch URL             | No       |
-| `IRIS_API_URL`           | IRIS instance URL             | No       |
+| Variable                 | Description               | Required |
+| ------------------------ | ------------------------- | -------- |
+| `OPENAI_API_KEY`         | OpenAI API key for LLM    | Yes      |
+| `SECRET_KEY`             | Flask secret key          | Yes      |
+| `SECURITY_PASSWORD_SALT` | Salt for password hashing | Yes      |
+
+> **Tip**: See [Configuration](#configuration) section for the complete list of environment variables.
 
 ### 3. Build and Start Services
 
@@ -224,39 +178,158 @@ curl -X POST https://localhost:8443/api/ai/ask \
   -k
 ```
 
+
+## Deployment Modes
+
+SmartXDR supports two deployment modes with distinct image sourcing strategies:
+
+### Development Mode (Local Build)
+
+**Image Source**: Built locally from source code
+
+```bash
+./start --dev build    # Build images from local source
+./start --dev start    # Start services
+```
+
+Or simply (development is default):
+```bash
+./start build
+./start up
+```
+
+**Characteristics:**
+- Images are **compiled from source code** on your machine
+- Full control over code modifications and debugging
+- Requires build time (~5-10 minutes initial build)
+- Uses `docker-compose.yml` configuration
+- Ideal for: Development, testing, code contributions
+- **No Docker Hub account required**
+
+### Production Mode (Registry Pull)
+
+**Image Source**: Pre-built images from Docker Hub
+
+```bash
+./start --prod pull    # Pull pre-built images from registry
+./start --prod start   # Start services
+```
+
+**Characteristics:**
+- Images are **pulled from Docker Hub** (`wanthinnn/smartxdr-core:latest`, `smartxdr-nginx:latest`)
+- Zero build time - instant deployment
+- Optimized images with production settings
+- Uses `docker-compose.prod.yml` configuration
+- Higher resource limits (4GB RAM vs 2GB)
+- Ideal for: Production deployments, quick setups, stable releases
+
+> **Key Difference**: Dev mode builds images locally using Dockerfile, while Prod mode downloads pre-built images from container registry.
+
 ## Configuration
 
 ### Environment Variables
 
-| Variable                 | Description                        | Required | Default |
-| ------------------------ | ---------------------------------- | -------- | ------- |
-| `OPENAI_API_KEY`         | OpenAI API key for LLM             | Yes      | -       |
-| `SECRET_KEY`             | Flask secret key for sessions      | Yes      | -       |
-| `SECURITY_PASSWORD_SALT` | Salt for password hashing          | Yes      | -       |
-| `DEBUG`                  | Enable debug mode                  | No       | false   |
-| `DEBUG_LLM`              | Enable LLM debug logs              | No       | false   |
-| `DEBUG_ANONYMIZATION`    | Show anonymization process         | No       | false   |
-| `ELASTICSEARCH_HOSTS`    | Elasticsearch URL                  | No       | -       |
-| `ELASTICSEARCH_USERNAME` | Elasticsearch username             | No       | -       |
-| `ELASTICSEARCH_PASSWORD` | Elasticsearch password             | No       | -       |
-| `ELASTICSEARCH_CA_CERT`  | Path to CA certificate             | No       | -       |
-| `IRIS_API_URL`           | IRIS instance URL                  | No       | -       |
-| `IRIS_API_KEY`           | IRIS API key                       | No       | -       |
-| `IRIS_VERIFY_SSL`        | Verify IRIS SSL certificate        | No       | false   |
-| `TELEGRAM_BOT_TOKEN`     | Telegram bot token                 | No       | -       |
-| `TELEGRAM_BOT_ENABLED`   | Enable Telegram bot                | No       | true    |
-| `TELEGRAM_WEBHOOK_ENABLED` | Use webhook mode (vs polling)    | No       | true    |
-| `API_AUTH_ENABLED`       | Enable API authentication          | No       | true    |
-| `NGINX_HTTPS_PORT`       | HTTPS port                         | No       | 8443    |
-| `NGINX_HTTP_PORT`        | HTTP port                          | No       | 8080    |
-| `CHROMA_PORT`            | ChromaDB port                      | No       | 8000    |
-| `REDIS_PORT`             | Redis port                         | No       | 6379    |
-| `SMARTXDR_URL`           | External display URL               | No       | -       |
-| `CROSS_ENCODER_MODEL`    | Re-ranking model name              | No       | ms-marco-MiniLM-L-6-v2 |
-| `RERANKING_ENABLED`      | Enable re-ranking                  | No       | true    |
-| `RAG_SYNC_ENABLED`       | Enable auto RAG sync               | No       | true    |
-| `RAG_SYNC_INTERVAL`      | Sync interval (minutes)            | No       | 60      |
-| `RAG_SYNC_SKIP_FILES`    | Files to skip during sync          | No       | README.md |
+#### Core Settings (Required)
+
+| Variable                 | Description                   | Default |
+| ------------------------ | ----------------------------- | ------- |
+| `OPENAI_API_KEY`         | OpenAI API key for LLM        | -       |
+| `SECRET_KEY`             | Flask secret key for sessions | -       |
+| `SECURITY_PASSWORD_SALT` | Salt for password hashing     | -       |
+
+#### Service Ports
+
+| Variable                    | Description                | Default |
+| --------------------------- | -------------------------- | ------- |
+| `NGINX_HTTPS_PORT`          | HTTPS port                 | 443     |
+| `NGINX_HTTP_PORT`           | HTTP port                  | 80      |
+| `CHROMA_DATA_EXTERNAL_PORT` | ChromaDB RAG port          | 8000    |
+| `CHROMA_CONV_EXTERNAL_PORT` | ChromaDB conversation port | 8001    |
+| `REDIS_PORT`                | Redis port                 | 6379    |
+
+#### LLM & AI Models
+
+| Variable              | Description                 | Default                |
+| --------------------- | --------------------------- | ---------------------- |
+| `CHAT_MODEL`          | Chat completion model       | gpt-4o-mini            |
+| `SUMMARY_MODEL`       | Summarization model         | gpt-4o-mini            |
+| `EMBEDDING_MODEL`     | Embedding model             | text-embedding-3-small |
+| `CROSS_ENCODER_MODEL` | Re-ranking model            | ms-marco-MiniLM-L-6-v2 |
+| `RERANKING_ENABLED`   | Enable re-ranking           | true                   |
+| `PRELOAD_RERANKER`    | Preload reranker on startup | true                   |
+
+#### Elasticsearch Integration
+
+| Variable                 | Description                     | Default |
+| ------------------------ | ------------------------------- | ------- |
+| `ELASTICSEARCH_ENABLED`  | Enable Elasticsearch connection | false   |
+| `ELASTICSEARCH_HOSTS`    | Elasticsearch URL               | -       |
+| `ELASTICSEARCH_USERNAME` | Elasticsearch username          | -       |
+| `ELASTICSEARCH_PASSWORD` | Elasticsearch password          | -       |
+| `ELASTICSEARCH_CA_CERT`  | Path to CA certificate          | -       |
+| `WHITELIST_IP_QUERY`     | IPs to exclude from queries     | -       |
+
+#### IRIS Integration
+
+| Variable       | Description                 | Default |
+| -------------- | --------------------------- | ------- |
+| `IRIS_URL`     | IRIS instance URL           | -       |
+| `IRIS_API_KEY` | IRIS API key                | -       |
+| `IRIS_CA_CERT` | Path to IRIS CA certificate | -       |
+
+#### Telegram Bot
+
+| Variable                   | Description                      | Default |
+| -------------------------- | -------------------------------- | ------- |
+| `TELEGRAM_BOT_ENABLED`     | Enable Telegram bot              | true    |
+| `TELEGRAM_BOT_TOKEN`       | Telegram bot token               | -       |
+| `TELEGRAM_WEBHOOK_ENABLED` | Use webhook mode (vs polling)    | true    |
+| `TELEGRAM_ALLOWED_CHATS`   | Comma-separated allowed chat IDs | -       |
+| `TELEGRAM_POLLING_TIMEOUT` | Polling timeout (seconds)        | 30      |
+
+#### API & Security
+
+| Variable                  | Description                          | Default |
+| ------------------------- | ------------------------------------ | ------- |
+| `API_AUTH_ENABLED`        | Enable API authentication            | true    |
+| `API_IP_WHITELIST`        | Allowed IPs (comma-separated)        | -       |
+| `SMARTXDR_MASTER_API_KEY` | Master API key for internal services | -       |
+
+#### RAG Auto-Sync
+
+| Variable              | Description               | Default   |
+| --------------------- | ------------------------- | --------- |
+| `RAG_SYNC_ENABLED`    | Enable auto RAG sync      | true      |
+| `RAG_SYNC_INTERVAL`   | Sync interval (minutes)   | 60        |
+| `RAG_SYNC_SKIP_FILES` | Files to skip during sync | README.md |
+
+#### Email & Reports
+
+| Variable            | Description                        | Default |
+| ------------------- | ---------------------------------- | ------- |
+| `FROM_EMAIL`        | Sender email address               | -       |
+| `SMTP_SERVER`       | SMTP server hostname               | -       |
+| `SMTP_PORT`         | SMTP server port                   | 587     |
+| `EMAIL_PASSWORD`    | SMTP password/app password         | -       |
+| `TO_EMAILS`         | Recipient emails (comma-separated) | -       |
+| `DAILY_REPORT_TIME` | Daily report time (HH:MM)          | 07:00   |
+| `ALERT_TIME_WINDOW` | ML alert grouping window           | 7d      |
+| `TIMEZONE_OFFSET`   | Timezone offset from UTC           | 7       |
+
+#### Other Settings
+
+| Variable       | Description           | Default |
+| -------------- | --------------------- | ------- |
+| `SMARTXDR_URL` | External display URL  | -       |
+| `DEBUG`        | Enable debug mode     | false   |
+| `DEBUG_LLM`    | Enable LLM debug logs | false   |
+
+#### Docker Hub (Production Mode)
+
+| Variable              | Description                             | Default |
+| --------------------- | --------------------------------------- | ------- |
+| `DOCKER_HUB_USERNAME` | Docker Hub username (for private repos) | -       |
+| `DOCKER_HUB_TOKEN`    | Docker Hub access token                 | -       |
 
 ### Endpoint Configuration
 
@@ -291,28 +364,28 @@ Then restart services:
 
 ### AI / LLM Endpoints
 
-| Method | Endpoint                        | Permission | Description                  |
-| ------ | ------------------------------- | ---------- | ---------------------------- |
-| POST   | `/api/ai/ask`                   | ai:ask     | Query LLM with RAG           |
-| GET    | `/api/ai/sessions/<id>/history` | ai:ask     | Get conversation history     |
-| DELETE | `/api/ai/sessions/<id>`         | ai:ask     | Delete conversation session  |
-| GET    | `/api/ai/sessions/stats`        | ai:stats   | Get session statistics       |
-| GET    | `/api/ai/stats`                 | ai:stats   | Get usage statistics         |
-| POST   | `/api/ai/cache/clear`           | ai:admin   | Clear response cache         |
+| Method | Endpoint                        | Permission | Description                 |
+| ------ | ------------------------------- | ---------- | --------------------------- |
+| POST   | `/api/ai/ask`                   | ai:ask     | Query LLM with RAG          |
+| GET    | `/api/ai/sessions/<id>/history` | ai:ask     | Get conversation history    |
+| DELETE | `/api/ai/sessions/<id>`         | ai:ask     | Delete conversation session |
+| GET    | `/api/ai/sessions/stats`        | ai:stats   | Get session statistics      |
+| GET    | `/api/ai/stats`                 | ai:stats   | Get usage statistics        |
+| POST   | `/api/ai/cache/clear`           | ai:admin   | Clear response cache        |
 
 ### RAG Knowledge Base
 
-| Method | Endpoint                  | Permission | Description           |
-| ------ | ------------------------- | ---------- | --------------------- |
-| POST   | `/api/rag/documents`      | rag:write  | Create document       |
-| POST   | `/api/rag/documents/batch`| rag:write  | Batch create documents|
-| GET    | `/api/rag/documents`      | rag:read   | List documents        |
-| GET    | `/api/rag/documents/<id>` | rag:write  | Get document          |
-| PUT    | `/api/rag/documents/<id>` | rag:write  | Update document       |
-| DELETE | `/api/rag/documents/<id>` | rag:write  | Delete document       |
-| POST   | `/api/rag/query`          | rag:query  | RAG query             |
-| GET    | `/api/rag/stats`          | rag:read   | Get statistics        |
-| GET    | `/api/rag/health`         | public     | Health check          |
+| Method | Endpoint                   | Permission | Description            |
+| ------ | -------------------------- | ---------- | ---------------------- |
+| POST   | `/api/rag/documents`       | rag:write  | Create document        |
+| POST   | `/api/rag/documents/batch` | rag:write  | Batch create documents |
+| GET    | `/api/rag/documents`       | rag:read   | List documents         |
+| GET    | `/api/rag/documents/<id>`  | rag:write  | Get document           |
+| PUT    | `/api/rag/documents/<id>`  | rag:write  | Update document        |
+| DELETE | `/api/rag/documents/<id>`  | rag:write  | Delete document        |
+| POST   | `/api/rag/query`           | rag:query  | RAG query              |
+| GET    | `/api/rag/stats`           | rag:read   | Get statistics         |
+| GET    | `/api/rag/health`          | public     | Health check           |
 
 ### IOC Enrichment
 
@@ -324,31 +397,31 @@ Then restart services:
 
 ### Triage and Alerts
 
-| Method | Endpoint                        | Permission       | Description                |
-| ------ | ------------------------------- | ---------------- | -------------------------- |
-| POST   | `/api/triage/summarize-alerts`  | triage:summarize | Summarize ML alerts        |
-| GET/POST| `/api/triage/alerts/summary`   | triage:read      | Get alert summary          |
-| GET    | `/api/triage/alerts/raw`        | triage:read      | Get raw alert data         |
-| GET    | `/api/triage/sources`           | triage:read      | List available log sources |
-| GET    | `/api/triage/alerts/statistics` | triage:read      | Get alert statistics       |
-| GET    | `/api/triage/ml/predictions`    | triage:read      | Get ML predictions         |
-| POST   | `/api/triage/send-report-email` | triage:email     | Send report via email      |
-| POST   | `/api/triage/daily-report/trigger`| triage:admin   | Manually trigger report    |
-| GET    | `/api/triage/health`            | public           | Health check               |
+| Method   | Endpoint                           | Permission       | Description                |
+| -------- | ---------------------------------- | ---------------- | -------------------------- |
+| POST     | `/api/triage/summarize-alerts`     | triage:summarize | Summarize ML alerts        |
+| GET/POST | `/api/triage/alerts/summary`       | triage:read      | Get alert summary          |
+| GET      | `/api/triage/alerts/raw`           | triage:read      | Get raw alert data         |
+| GET      | `/api/triage/sources`              | triage:read      | List available log sources |
+| GET      | `/api/triage/alerts/statistics`    | triage:read      | Get alert statistics       |
+| GET      | `/api/triage/ml/predictions`       | triage:read      | Get ML predictions         |
+| POST     | `/api/triage/send-report-email`    | triage:email     | Send report via email      |
+| POST     | `/api/triage/daily-report/trigger` | triage:admin     | Manually trigger report    |
+| GET      | `/api/triage/health`               | public           | Health check               |
 
 ### Telegram Bot
 
-| Method | Endpoint                   | Permission      | Description              |
-| ------ | -------------------------- | --------------- | ------------------------ |
-| POST   | `/api/telegram/webhook`    | public          | Telegram webhook         |
-| POST   | `/api/telegram/webhook/set`| telegram:admin  | Set webhook URL          |
-| POST   | `/api/telegram/webhook/delete`| telegram:admin | Delete webhook        |
-| GET    | `/api/telegram/webhook/info`| telegram:read  | Get webhook info         |
-| GET    | `/api/telegram/status`     | telegram:read   | Get bot status           |
-| POST   | `/api/telegram/start`      | telegram:admin  | Start bot (polling)      |
-| POST   | `/api/telegram/stop`       | telegram:admin  | Stop bot                 |
-| GET    | `/api/telegram/config`     | telegram:read   | Get bot config           |
-| GET    | `/api/telegram/test`       | telegram:read   | Test bot connection      |
+| Method | Endpoint                       | Permission     | Description         |
+| ------ | ------------------------------ | -------------- | ------------------- |
+| POST   | `/api/telegram/webhook`        | public         | Telegram webhook    |
+| POST   | `/api/telegram/webhook/set`    | telegram:admin | Set webhook URL     |
+| POST   | `/api/telegram/webhook/delete` | telegram:admin | Delete webhook      |
+| GET    | `/api/telegram/webhook/info`   | telegram:read  | Get webhook info    |
+| GET    | `/api/telegram/status`         | telegram:read  | Get bot status      |
+| POST   | `/api/telegram/start`          | telegram:admin | Start bot (polling) |
+| POST   | `/api/telegram/stop`           | telegram:admin | Stop bot            |
+| GET    | `/api/telegram/config`         | telegram:read  | Get bot config      |
+| GET    | `/api/telegram/test`           | telegram:read  | Test bot connection |
 
 ### Authentication
 
@@ -547,6 +620,7 @@ The `./start` script provides a convenient interface for all operations:
 
 # RAG & Data
 ./start quick_rag [path]      # Ingest documents to RAG
+./start rag_sync              # Auto-sync data/ directory to RAG
 ./start sync_rag              # Show RAG sync instructions
 ./start backup                # Backup data and embeddings
 
@@ -564,16 +638,16 @@ The `./start` script provides a convenient interface for all operations:
 
 ### Deployment Mode Comparison
 
-| Feature | Development Mode | Production Mode |
-|---------|-----------------|------------------|
-| **Command** | `./start --dev <cmd>` or `./start <cmd>` | `./start --prod <cmd>` |
-| **Docker Compose** | `docker-compose.yml` | `docker-compose.prod.yml` |
-| **Images** | Built from source | Pulled from Docker Hub |
-| **Build Time** | ~5-10 minutes | None (pre-built) |
-| **Startup Time** | Slower | Faster |
-| **Code Changes** | Applied immediately | Requires new image release |
-| **Resource Limits** | Lower (2GB RAM) | Higher (4GB RAM) |
-| **Use Case** | Development, testing | Production deployments |
+| Feature             | Development Mode                         | Production Mode            |
+| ------------------- | ---------------------------------------- | -------------------------- |
+| **Command**         | `./start --dev <cmd>` or `./start <cmd>` | `./start --prod <cmd>`     |
+| **Docker Compose**  | `docker-compose.yml`                     | `docker-compose.prod.yml`  |
+| **Images**          | Built from source                        | Pulled from Docker Hub     |
+| **Build Time**      | ~5-10 minutes                            | None (pre-built)           |
+| **Startup Time**    | Slower                                   | Faster                     |
+| **Code Changes**    | Applied immediately                      | Requires new image release |
+| **Resource Limits** | Lower (3GB RAM)                          | Higher (4GB RAM)           |
+| **Use Case**        | Development, testing                     | Production deployments     |
 
 **Examples:**
 
