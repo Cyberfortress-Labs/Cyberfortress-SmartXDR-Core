@@ -1,0 +1,2 @@
+**THESE CERTS ARE FOR TESTING PURPOSES ONLY. DO NOT USE THEM IN YOUR PRODUCTION!!!**
+**If you need certificates for production use, please create your own or use a trusted certificate authority and place them in this directory.**
