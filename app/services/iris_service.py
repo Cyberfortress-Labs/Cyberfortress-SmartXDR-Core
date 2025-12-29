@@ -495,10 +495,13 @@ class IRISService:
             try:
                 comments = self.get_ioc_comments(case_id, ioc_id)
                 
-                # Find SmartXDR comments (contains "[SmartXDR AI Analysis]")
+                # Find SmartXDR comments using regex pattern to match all variants:
+                # [SmartXDR AI Analysis], [SmartXDR AI Analysis - IntelOwl], 
+                # [SmartXDR AI Analysis - VirusTotal], etc.
+                smartxdr_pattern = re.compile(r'\[SmartXDR AI Analysis.*?\]', re.IGNORECASE)
                 smartxdr_comments = [
                     c for c in comments
-                    if '[SmartXDR AI Analysis]' in c.get('comment_text', '')
+                    if smartxdr_pattern.search(c.get('comment_text', ''))
                 ]
                 
                 if smartxdr_comments:
