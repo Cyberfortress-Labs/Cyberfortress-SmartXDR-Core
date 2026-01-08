@@ -217,8 +217,11 @@ jobs:
         with:
           generate_release_notes: true
           body: |
-            ## SmartXDR ${{ github.ref_name }}
+            ## SmartXDR Core ${{ github.ref_name }}
             
+            ### What's Changed
+            ${{ steps.changelog.outputs.changelog }}
+
             ### Docker Images
             - `docker pull wanthinnn/smartxdr-core:${{ github.ref_name }}`
             - `docker pull wanthinnn/smartxdr-nginx:${{ github.ref_name }}`
